@@ -11,6 +11,7 @@ import {
   writeStorage
 } from "../utils/storefront";
 import { couponRules, validateCoupon } from "../../../shared/coupons";
+import { validateCheckoutCoupon } from "../api/couponApi";
 import { createStorefrontOrder } from "../api/orderApi";
 
 export default function CheckoutPage({ context }) {
@@ -45,6 +46,7 @@ export default function CheckoutPage({ context }) {
   const [couponCode, setCouponCode] = useState(() => readStorage("avyonaPendingCoupon", ""));
   const [appliedCoupon, setAppliedCoupon] = useState(null);
   const [couponMessage, setCouponMessage] = useState("");
+  const [isApplyingCoupon, setIsApplyingCoupon] = useState(false);
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
   const [pointsInput, setPointsInput] = useState("");
   const [appliedPoints, setAppliedPoints] = useState(0);
@@ -140,20 +142,50 @@ export default function CheckoutPage({ context }) {
     setCouponMessage(result.message);
   }, [appliedCoupon, availableCoupons, context.cart, couponCode, couponMessage, subtotal]);
 
-  const applyCoupon = (event) => {
+  const applyCoupon = async (event) => {
     event.preventDefault();
-    const result = validateCoupon(couponCode, { items: context.cart, subtotal, coupons: availableCoupons });
-    setCouponMessage(result.message);
+    setIsApplyingCoupon(true);
 
-    if (!result.valid) {
-      setAppliedCoupon(null);
-      return;
+    try {
+      const response = await validateCheckoutCoupon({
+        code: couponCode,
+        subtotal,
+        items: context.cart.map((item) => ({
+          productId: item.id,
+          slug: item.slug,
+          name: item.name,
+          category: item.category,
+          categorySlug: item.categorySlug,
+          price: item.price,
+          quantity: item.quantity || 1
+        })),
+        hasOtherOffers: Number(appliedPoints || 0) > 0
+      });
+      const result = response.data || {};
+      const coupon = result.coupon;
+
+      setCouponMessage(response.message || `${coupon.code} applied successfully.`);
+      setAppliedCoupon(coupon);
+      setCouponCode(coupon.code);
+      writeStorage("avyonaPendingCoupon", coupon.code);
+      context.notify(response.message || `${coupon.code} applied successfully.`);
+    } catch (error) {
+      const fallback = validateCoupon(couponCode, { items: context.cart, subtotal, coupons: availableCoupons });
+      setCouponMessage(error.data?.message || fallback.message);
+
+      if (!fallback.valid) {
+        setAppliedCoupon(null);
+        setIsApplyingCoupon(false);
+        return;
+      }
+
+      setAppliedCoupon(fallback.coupon);
+      setCouponCode(fallback.coupon.code);
+      writeStorage("avyonaPendingCoupon", fallback.coupon.code);
+      context.notify(fallback.message);
+    } finally {
+      setIsApplyingCoupon(false);
     }
-
-    setAppliedCoupon(result.coupon);
-    setCouponCode(result.coupon.code);
-    writeStorage("avyonaPendingCoupon", result.coupon.code);
-    context.notify(result.message);
   };
 
   const removeCoupon = () => {
@@ -466,7 +498,7 @@ export default function CheckoutPage({ context }) {
                           {appliedCoupon ? (
                             <button type="button" onClick={removeCoupon}>Remove</button>
                           ) : (
-                            <button type="submit" disabled={!context.cart.length}>Apply</button>
+                            <button type="submit" disabled={!context.cart.length || isApplyingCoupon}>{isApplyingCoupon ? "Applying..." : "Apply"}</button>
                           )}
                         </div>
                       </label>

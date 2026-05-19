@@ -1576,6 +1576,14 @@ main.container { padding: 32px 0 72px; }
   transform: translateY(-1px);
 }
 
+.offer-copy-message {
+  margin: 8px 0 0;
+  color: #dcfce7;
+  font-size: 0.82rem;
+  font-weight: 800;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.22);
+}
+
 .summer-banner {
   background-image:
     linear-gradient(135deg, rgba(33, 141, 90, 0.2), rgba(121, 199, 160, 0.06));

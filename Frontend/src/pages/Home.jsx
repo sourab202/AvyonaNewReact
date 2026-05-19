@@ -1,14 +1,14 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import ProductCard from "../components/product/ProductCard";
+import { fetchHomepageOffers } from "../api/couponApi";
 import { flattenCategoryTree, fallbackCategoryTree } from "../data/category-data";
 import {
   arrivalProducts,
   blogEntries,
   featuredBrands,
   featuredProducts,
-  frameProducts,
-  offerConfigs
+  frameProducts
 } from "../data/storefront-content";
 import { copyText } from "../utils/storefront";
 
@@ -150,6 +150,21 @@ function isExternalLink(value) {
   return /^https?:\/\//i.test(String(value || ""));
 }
 
+function normalizeHomepageOffer(coupon) {
+  const code = String(coupon.code || "").trim();
+  return {
+    key: String(coupon.id || code),
+    code,
+    badgeText: coupon.badgeText || coupon.offerBadgeText || coupon.title || code,
+    title: coupon.title || coupon.offerCardTitle || coupon.title || "Limited offer",
+    description: coupon.description || coupon.offerCardDescription || `${code} is available on eligible products.`,
+    image: coupon.backgroundImageUrl || coupon.image || "",
+    buttonText: coupon.buttonText || "Explore",
+    buttonLink: coupon.buttonLink || "/offers",
+    sortOrder: Number(coupon.sortOrder ?? coupon.homepageSortOrder ?? 0)
+  };
+}
+
 function isSafeHeroLink(value) {
   const link = String(value || "").trim();
   return !link || link.startsWith("/") || isExternalLink(link);
@@ -175,6 +190,8 @@ export default function Home({ context }) {
   const [isHeroPaused, setIsHeroPaused] = useState(false);
   const [isMobileHeroViewport, setIsMobileHeroViewport] = useState(false);
   const [failedBannerMedia, setFailedBannerMedia] = useState({});
+  const [homepageOffers, setHomepageOffers] = useState([]);
+  const [copiedHomepageOfferCode, setCopiedHomepageOfferCode] = useState("");
   const homepageSettings = context.siteSettings?.homepage || {};
   const browseCategoriesSettings = getBrowseCategoriesSettings(homepageSettings);
   const ourProductsSettings = getHomepageSectionSettings(homepageSettings, "ourProductsSettings", {
@@ -218,6 +235,7 @@ export default function Home({ context }) {
     sortOrder: 90
   });
   const mainCategories = getHomepageBrowseCategories(siteCategories, homepageSettings);
+  const displayOffers = homepageOffers;
   const activeTopCategories = flattenCategoryTree(siteCategories)
     .filter((category) => !category.parentId && category.status === "active")
     .sort((left, right) => Number(left.sortOrder || 0) - Number(right.sortOrder || 0));
@@ -276,6 +294,24 @@ export default function Home({ context }) {
     updateViewport();
     mediaQuery.addEventListener?.("change", updateViewport);
     return () => mediaQuery.removeEventListener?.("change", updateViewport);
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    fetchHomepageOffers()
+      .then((response) => {
+        if (!isMounted) return;
+        const rows = Array.isArray(response.data) ? response.data : [];
+        setHomepageOffers(rows.map(normalizeHomepageOffer));
+      })
+      .catch(() => {
+        if (isMounted) setHomepageOffers([]);
+      });
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const findProductByIdentifier = (identifier) => {
@@ -520,29 +556,45 @@ export default function Home({ context }) {
         </section>
       ) : null}
 
+      {displayOffers.length ? (
       <section className="section-block limited-offers-section" style={{ order: 50 }}>
         <div className="offers-showcase">
           <div className="section-heading section-heading-centered offer-heading"><div><h2 className="section-title-large section-title-accent">Limited Time Offers</h2></div></div>
           <div className="offer-banner-section">
-            {Object.entries(offerConfigs).map(([key, offer]) => (
-              <article key={key} className={`offer-banner promo-banner offer-banner-${key}`}>
+            {displayOffers.map((offer) => (
+              <article key={offer.key} className={`offer-banner promo-banner offer-banner-${offer.key}`}>
                 {offer.image ? <div className="offer-banner-media">
-                  <img src={offer.image} alt={offer.title} loading="lazy" decoding="async" />
+                  <img src={resolveStorefrontMediaUrl(offer.image)} alt={offer.title} loading="lazy" decoding="async" />
                 </div> : null}
-                <span className="offer-tag">{offer.title}</span>
+                <span className="offer-tag">{offer.badgeText}</span>
                 <div className="offer-banner-copy">
-                  <p className="eyebrow">{offer.eyebrow}</p>
+                  <p className="eyebrow">{offer.title}</p>
                   <h3>{offer.description}</h3>
                   <div className="offer-actions">
-                    <button className="offer-copy-button" type="button" onClick={() => copyText(offer.coupon, () => context.notify("Coupon copied"))}>{`Copy ${offer.coupon}`}</button>
-                    <Link className="primary-button" to={`/offers?offer=${key}`}>Explore</Link>
+                    <button
+                      className="offer-copy-button"
+                      type="button"
+                      onClick={() => copyText(offer.code, () => {
+                        setCopiedHomepageOfferCode(offer.code);
+                        window.setTimeout(() => setCopiedHomepageOfferCode((current) => current === offer.code ? "" : current), 1800);
+                      })}
+                    >
+                      Copy Coupon
+                    </button>
+                    {isExternalLink(offer.buttonLink) ? (
+                      <a className="primary-button" href={offer.buttonLink}>{offer.buttonText}</a>
+                    ) : (
+                      <Link className="primary-button" to={offer.buttonLink || "/offers"}>{offer.buttonText}</Link>
+                    )}
                   </div>
+                  {copiedHomepageOfferCode === offer.code ? <p className="offer-copy-message">Coupon copied</p> : null}
                 </div>
               </article>
             ))}
           </div>
         </div>
       </section>
+      ) : null}
 
       {newArrivalProductsSettings.enabled ? (
         <section className="section-block" style={{ order: newArrivalProductsSettings.sortOrder }}>

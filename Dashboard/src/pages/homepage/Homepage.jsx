@@ -38,6 +38,12 @@ const homepageSections = [
     description: "Enable, rename, and position the homepage newsletter signup block."
   },
   {
+    title: "Limited Time Offers",
+    path: "/dashboard/coupons?view=offers",
+    description: "Manage coupon offer cards shown on the homepage and product pages.",
+    actionLabel: "Configure"
+  },
+  {
     title: "Reviews",
     path: "/dashboard/reviews",
     description: "Manage customer reviews and testimonials displayed on the homepage."
@@ -72,6 +78,7 @@ export default function Homepage() {
             <span style={cardEyebrowStyle}>Homepage Section</span>
             <h3 style={cardTitleStyle}>{section.title}</h3>
             <p style={cardCopyStyle}>{section.description}</p>
+            {section.actionLabel ? <span style={cardActionStyle}>{section.actionLabel}</span> : null}
           </Link>
         ))}
       </div>
@@ -149,4 +156,16 @@ const cardCopyStyle = {
   margin: 0,
   color: "#526377",
   lineHeight: 1.55
+};
+
+const cardActionStyle = {
+  width: "max-content",
+  alignSelf: "end",
+  marginTop: "4px",
+  padding: "8px 12px",
+  borderRadius: "10px",
+  background: "#16a34a",
+  color: "#fff",
+  fontSize: "12px",
+  fontWeight: 900
 };

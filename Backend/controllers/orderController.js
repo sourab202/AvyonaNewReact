@@ -881,9 +881,11 @@ export async function createOrder(request, response) {
       }
 
       const [productRows] = await connection.execute(
-        `SELECT id, asin, slug, name, price, mrp, stock_quantity AS stockQuantity, status, is_visible AS isVisible, is_deleted AS isDeleted
-         FROM products
-         WHERE asin = ? OR slug = ?
+        `SELECT p.id, p.asin, p.slug, p.name, p.price, p.mrp, p.stock_quantity AS stockQuantity, p.status, p.is_visible AS isVisible, p.is_deleted AS isDeleted,
+          c.name AS category, c.slug AS categorySlug
+         FROM products p
+         LEFT JOIN categories c ON c.id = p.category_id
+         WHERE p.asin = ? OR p.slug = ?
          LIMIT 1
          FOR UPDATE`,
         [identifier, identifier]
@@ -906,6 +908,8 @@ export async function createOrder(request, response) {
       normalizedItems.push({
         productId: product.id,
         name: product.name,
+        category: product.category,
+        categorySlug: product.categorySlug,
         quantity,
         unitPrice,
         totalPrice,
@@ -927,12 +931,16 @@ export async function createOrder(request, response) {
           used_count AS usedCount,
           starts_at AS startsAt,
           ends_at AS endsAt,
-          status
+          COALESCE(end_date, DATE(ends_at)) AS endDate,
+          status,
+          customer_eligibility AS customerEligibility,
+          one_use_per_customer AS oneUsePerCustomer,
+          stackable
          FROM coupons
          WHERE code = ?
            AND status = 'active'
            AND (starts_at IS NULL OR starts_at <= NOW())
-           AND (ends_at IS NULL OR ends_at >= NOW())
+           AND (COALESCE(end_date, DATE(ends_at)) IS NULL OR COALESCE(end_date, DATE(ends_at)) >= CURDATE())
            AND (usage_limit IS NULL OR used_count < usage_limit)
          LIMIT 1
          FOR UPDATE`,
@@ -941,6 +949,55 @@ export async function createOrder(request, response) {
       coupon = couponRows[0] || null;
       if (!coupon) {
         throw new ApiError(400, "Coupon is invalid, expired, paused, or fully used");
+      }
+
+      const [categoryRows] = await connection.execute(
+        `SELECT c.name, c.slug
+         FROM coupon_categories cc
+         JOIN categories c ON c.id = cc.category_id
+         WHERE cc.coupon_id = ?`,
+        [coupon.id]
+      );
+      if (categoryRows.length) {
+        const eligibleCategories = new Set(categoryRows.flatMap((row) => [row.name, row.slug].map((value) => String(value || "").toLowerCase())));
+        const hasEligibleItem = normalizedItems.some((item) =>
+          eligibleCategories.has(String(item.category || "").toLowerCase()) ||
+          eligibleCategories.has(String(item.categorySlug || "").toLowerCase())
+        );
+        if (!hasEligibleItem) throw new ApiError(400, "This coupon is not valid for the products in your cart");
+      }
+
+      if (customerId) {
+        const [customerCouponRows] = await connection.execute(
+          `SELECT
+            COUNT(*) AS orderCount,
+            SUM(CASE WHEN coupon_code = ? THEN 1 ELSE 0 END) AS couponUseCount
+           FROM orders
+           WHERE customer_id = ?
+             AND status NOT IN ('cancelled', 'failed')`,
+          [coupon.code, customerId]
+        );
+        const stats = customerCouponRows[0] || {};
+        if (coupon.customerEligibility === "new" && Number(stats.orderCount || 0) > 0) {
+          throw new ApiError(400, "This coupon is valid only for new customers");
+        }
+        if (coupon.oneUsePerCustomer && Number(stats.couponUseCount || 0) > 0) {
+          throw new ApiError(400, "This coupon has already been used by this customer");
+        }
+      } else if (coupon.customerEligibility === "returning" || coupon.oneUsePerCustomer) {
+        throw new ApiError(401, "Login is required to use this coupon");
+      }
+      if (coupon.customerEligibility === "returning" && customerId) {
+        const [returningRows] = await connection.execute(
+          "SELECT COUNT(*) AS orderCount FROM orders WHERE customer_id = ? AND status NOT IN ('cancelled', 'failed')",
+          [customerId]
+        );
+        if (Number(returningRows[0]?.orderCount || 0) <= 0) {
+          throw new ApiError(400, "This coupon is valid only for returning customers");
+        }
+      }
+      if (Number(creditPoints || 0) > 0 && !coupon.stackable) {
+        throw new ApiError(400, "This coupon cannot be combined with other offers");
       }
     }
 

@@ -387,8 +387,27 @@ export function updateCouponStatus(couponId, status) {
   return adminApi.patch(`/coupons/${couponId}/status`, { status });
 }
 
+export function activateCoupon(couponId) {
+  return adminApi.patch(`/coupons/${couponId}/activate`);
+}
+
+export function deactivateCoupon(couponId) {
+  return adminApi.patch(`/coupons/${couponId}/deactivate`);
+}
+
 export function deleteCoupon(couponId) {
   return adminApi.delete(`/coupons/${couponId}`);
+}
+
+export function uploadCouponBackgroundImage(file) {
+  const formData = new FormData();
+  formData.append("image", file);
+
+  return adminApi.post("/coupons/background-image", formData, {
+    headers: {
+      "Content-Type": "multipart/form-data"
+    }
+  });
 }
 
 export function updateOrderTracking(orderId, payload) {

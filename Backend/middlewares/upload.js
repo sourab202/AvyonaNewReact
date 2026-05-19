@@ -7,6 +7,8 @@ const inventoryUploadDirectory = path.resolve(uploadDirectory, "inventory");
 const settingsUploadDirectory = path.resolve(uploadDirectory, "settings");
 const allowedImageMimeTypes = new Set(["image/jpeg", "image/png", "image/webp", "image/svg+xml"]);
 const allowedImageExtensions = new Set([".jpg", ".jpeg", ".png", ".webp", ".svg"]);
+const allowedCouponImageMimeTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
+const allowedCouponImageExtensions = new Set([".jpg", ".jpeg", ".png", ".webp"]);
 const allowedVideoMimeTypes = new Set(["video/mp4", "video/webm", "video/quicktime"]);
 const allowedVideoExtensions = new Set([".mp4", ".webm", ".mov"]);
 
@@ -63,6 +65,15 @@ function fileFilter(_request, file, callback) {
   callback(null, true);
 }
 
+function couponImageFileFilter(_request, file, callback) {
+  const extension = path.extname(file.originalname || "").toLowerCase();
+  if (!allowedCouponImageMimeTypes.has(file.mimetype) || !allowedCouponImageExtensions.has(extension)) {
+    callback(new Error("Only JPG, PNG, and WebP coupon background images are allowed"));
+    return;
+  }
+  callback(null, true);
+}
+
 function mediaFileFilter(_request, file, callback) {
   const extension = path.extname(file.originalname || "").toLowerCase();
   if (file.mimetype.startsWith("image/") && (!allowedImageMimeTypes.has(file.mimetype) || !allowedImageExtensions.has(extension))) {
@@ -100,6 +111,14 @@ function inventoryFileFilter(_request, file, callback) {
 export const upload = multer({
   storage,
   fileFilter,
+  limits: {
+    fileSize: 25 * 1024 * 1024
+  }
+});
+
+export const uploadCouponImage = multer({
+  storage,
+  fileFilter: couponImageFileFilter,
   limits: {
     fileSize: 25 * 1024 * 1024
   }

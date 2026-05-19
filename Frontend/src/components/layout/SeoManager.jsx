@@ -7,7 +7,6 @@ import {
   blogEntriesBySlug,
   collectionData,
   getProductByIdentifier,
-  offerConfigs,
   productData
 } from "../../data/storefront-content";
 import { buildProductPath, getOptimizedAssetPath, getProductVariantByKey } from "../../utils/storefront";
@@ -464,21 +463,21 @@ function getSeoData(location, siteSettings = {}) {
   }
 
   if (pathname === "/offers") {
-    const offerKey = searchParams.get("offer") || "summer-sale";
-    const offer = offerConfigs[offerKey] || offerConfigs["summer-sale"];
-    const description = truncate(`${offer.description} Use coupon ${offer.coupon} on eligible Avyona products.`);
+    const offerKey = searchParams.get("offer") || searchParams.get("code") || "";
+    const title = offerKey ? `Avyona | Offer ${offerKey}` : "Avyona | Offers";
+    const description = truncate("Explore current Avyona coupon offers, limited time promotions, and eligible products.");
     const canonical = toAbsoluteUrl(offerKey ? `/offers?offer=${offerKey}` : "/offers");
     return {
       ...base,
-      title: `Avyona | ${offer.title}`,
+      title,
       description,
-      keywords: `${DEFAULT_KEYWORDS}, ${offer.title}, electronics offers, coupon deals`,
+      keywords: `${DEFAULT_KEYWORDS}, electronics offers, coupon deals`,
       canonical,
-      image: ensureImage(offer.image),
+      image: ensureImage(""),
       type: "website",
       schema: [
         organizationSchema(),
-        pageSchema(`Avyona | ${offer.title}`, `/offers?offer=${offerKey}`, description),
+        pageSchema(title, offerKey ? `/offers?offer=${offerKey}` : "/offers", description),
         breadcrumbSchema([
           { name: "Home", path: "/" },
           { name: "Offers", path: "/offers" }

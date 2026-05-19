@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { trackAnalyticsEvent } from "../api/analyticsApi";
+import { fetchProductOffers } from "../api/couponApi";
 import {
   fetchProductReviewMediaGallery,
   fetchProductReviewSummary,
@@ -64,6 +65,11 @@ const REVIEWER_FILTER_OPTIONS = [
   { label: "All reviewers", value: "all" },
   { label: "Verified purchase only", value: "verified" }
 ];
+
+function formatOfferDiscount(offer) {
+  if (offer.discountType === "fixed") return `Rs. ${Number(offer.discountValue || 0).toLocaleString("en-IN")} off`;
+  return `${Number(offer.discountValue || 0).toLocaleString("en-IN")}% off`;
+}
 
 const POLICY_SECTIONS = [
   {
@@ -411,6 +417,11 @@ export default function ProductPage({ context }) {
   const [productCouponCode, setProductCouponCode] = useState("");
   const [productCouponMessage, setProductCouponMessage] = useState("");
   const [productCouponApplied, setProductCouponApplied] = useState(false);
+  const [productOffersOpen, setProductOffersOpen] = useState(false);
+  const [productOffers, setProductOffers] = useState([]);
+  const [productOffersLoading, setProductOffersLoading] = useState(false);
+  const [productOffersMessage, setProductOffersMessage] = useState("");
+  const [copiedProductOfferCode, setCopiedProductOfferCode] = useState("");
   const [storedReviews, setStoredReviews] = useState(() => (product ? readStorage(getReviewStorageKey(product.slug), []) : []));
   const hasGroupedVariants = Boolean(product?.variantGroupId);
   const selectedVariant = hasGroupedVariants
@@ -453,6 +464,44 @@ export default function ProductPage({ context }) {
       isMounted = false;
     };
   }, [productKey]);
+
+  useEffect(() => {
+    setProductOffersOpen(false);
+    setProductOffers([]);
+    setProductOffersMessage("");
+    setCopiedProductOfferCode("");
+  }, [productPageKey]);
+
+  useEffect(() => {
+    if (!product) return undefined;
+    let isMounted = true;
+
+    setProductOffersLoading(true);
+    setProductOffersMessage("");
+    fetchProductOffers({
+      productId: product.id || product.asin || product.slug,
+      category: product.category,
+      categorySlug: product.collectionSlug
+    })
+      .then((response) => {
+        if (!isMounted) return;
+        const rows = Array.isArray(response.data) ? response.data : [];
+        setProductOffers(rows);
+        setProductOffersMessage(rows.length ? "" : "No offers available");
+      })
+      .catch(() => {
+        if (!isMounted) return;
+        setProductOffers([]);
+        setProductOffersMessage("No offers available");
+      })
+      .finally(() => {
+        if (isMounted) setProductOffersLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [product, productPageKey]);
 
   useEffect(() => {
     if (!product) return;
@@ -755,6 +804,30 @@ export default function ProductPage({ context }) {
       setProductCouponCode(result.coupon.code);
       context.notify(`${result.coupon.code} ready for checkout`);
     }
+  };
+
+  const loadProductOffers = async () => {
+    if (productOffersOpen) {
+      setProductOffersOpen(false);
+      return;
+    }
+
+    setProductOffersOpen(true);
+  };
+
+  const copyProductOffer = (offer) => {
+    copyText(offer.code, () => {
+      setCopiedProductOfferCode(offer.code);
+      window.setTimeout(() => setCopiedProductOfferCode((current) => current === offer.code ? "" : current), 1800);
+    });
+  };
+
+  const applyProductOffer = (offer) => {
+    setProductCouponCode(offer.code);
+    setProductCouponApplied(true);
+    setProductCouponMessage(`${offer.code} ready for checkout.`);
+    writeStorage("avyonaPendingCoupon", offer.code);
+    context.notify(`${offer.code} ready for checkout`);
   };
 
   const handleBuyNow = (triggerElement = null) => {
@@ -1319,6 +1392,34 @@ export default function ProductPage({ context }) {
                   </p>
                 ) : null}
               </form>
+              <div className="avy-product-offers">
+                {productOffersLoading ? <p className="avy-product-offers-note">Loading offers...</p> : null}
+                {!productOffersLoading && productOffers.length ? (
+                  <button type="button" className="avy-product-offers-toggle" onClick={loadProductOffers}>
+                    Show All Offers
+                  </button>
+                ) : null}
+                {!productOffersLoading && !productOffers.length ? <p className="avy-product-offers-note">No offers available</p> : null}
+                {productOffersOpen ? (
+                  <div className="avy-product-offers-dropdown">
+                    {productOffersMessage && productOffers.length ? <p className="avy-product-offers-note">{productOffersMessage}</p> : null}
+                    {productOffers.map((offer) => (
+                      <article key={offer.id || offer.code} className="avy-product-offer-row">
+                        <div className="avy-product-offer-copy">
+                          <strong>{offer.title || offer.badgeText || "Product offer"}</strong>
+                          <span className="avy-product-offer-code">{offer.code}</span>
+                          {copiedProductOfferCode === offer.code ? <small className="avy-product-offer-copy-message">Coupon copied</small> : null}
+                          <small>{`${formatOfferDiscount(offer)} | Min order ${formatCurrency(offer.minSubtotal || 0, context)}${offer.endDate ? ` | Expires ${offer.endDate}` : ""}`}</small>
+                        </div>
+                        <div className="avy-product-offer-actions">
+                          <button type="button" onClick={() => copyProductOffer(offer)}>Copy</button>
+                          <button type="button" onClick={() => applyProductOffer(offer)}>Apply</button>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
             </section>
 
             {hasGroupedVariants && groupedVariantProducts.length > 1 ? (

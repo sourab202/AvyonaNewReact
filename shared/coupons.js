@@ -2,7 +2,8 @@ export const COUPON_STATUS = {
   ACTIVE: "active",
   SCHEDULED: "scheduled",
   PAUSED: "paused",
-  EXPIRED: "expired"
+  EXPIRED: "expired",
+  INACTIVE: "inactive"
 };
 
 export const couponRules = [
@@ -20,6 +21,16 @@ export const couponRules = [
     usedCount: 126,
     startDate: "2026-04-01",
     endDate: "2026-06-30",
+    showOnHomepage: true,
+    showOnProductPage: true,
+    homepageSortOrder: 10,
+    productPageSortOrder: 10,
+    backgroundImageUrl: "",
+    offerBadgeText: "Summer Sale",
+    offerCardTitle: "Season-ready savings",
+    offerCardDescription: "Fresh summer savings on audio, cameras, and travel-ready picks.",
+    buttonText: "Explore",
+    buttonLink: "/offers?offer=summer-sale",
     status: COUPON_STATUS.ACTIVE
   },
   {
@@ -36,6 +47,16 @@ export const couponRules = [
     usedCount: 284,
     startDate: "2026-01-01",
     endDate: "2026-12-31",
+    showOnHomepage: true,
+    showOnProductPage: false,
+    homepageSortOrder: 20,
+    productPageSortOrder: 0,
+    backgroundImageUrl: "",
+    offerBadgeText: "First Purchase",
+    offerCardTitle: "New shopper offer",
+    offerCardDescription: "Unlock an easy first-order deal across Avyona best sellers and everyday favorites.",
+    buttonText: "Explore",
+    buttonLink: "/offers?offer=first-purchase",
     status: COUPON_STATUS.ACTIVE
   },
   {
@@ -52,6 +73,16 @@ export const couponRules = [
     usedCount: 91,
     startDate: "2026-03-01",
     endDate: "2026-08-31",
+    showOnHomepage: true,
+    showOnProductPage: true,
+    homepageSortOrder: 30,
+    productPageSortOrder: 20,
+    backgroundImageUrl: "",
+    offerBadgeText: "Bundle Sale",
+    offerCardTitle: "Save more together",
+    offerCardDescription: "Build a better setup with bundle pricing on selected collections and home-ready products.",
+    buttonText: "Explore",
+    buttonLink: "/offers?offer=bundle-sale",
     status: COUPON_STATUS.ACTIVE
   },
   {

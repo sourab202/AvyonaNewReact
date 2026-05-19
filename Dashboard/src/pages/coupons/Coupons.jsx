@@ -1,4 +1,5 @@
 import React from "react";
+import { useSearchParams } from "react-router-dom";
 import { COUPON_STATUS, couponRules, normalizeCouponCode } from "../../../../shared/coupons";
 import {
   createCoupon,
@@ -6,9 +7,13 @@ import {
   fetchCategories,
   fetchCoupons,
   updateCoupon,
-  updateCouponStatus
+  updateCouponStatus,
+  uploadCouponBackgroundImage
 } from "../../api/adminApi";
 import { canAccess } from "../../utils/accessControl";
+import { getStorefrontBaseUrl } from "../../utils/storefront";
+
+const ALLOWED_OFFER_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 
 function createEmptyCouponForm() {
   return {
@@ -28,7 +33,17 @@ function createEmptyCouponForm() {
     customerEligibility: "all",
     oneUsePerCustomer: true,
     stackable: false,
-    autoApply: false
+    autoApply: false,
+    showOnHomepage: false,
+    showOnProductPage: false,
+    homepageSortOrder: "0",
+    productPageSortOrder: "0",
+    backgroundImageUrl: "",
+    offerBadgeText: "",
+    offerCardTitle: "",
+    offerCardDescription: "",
+    buttonText: "Explore",
+    buttonLink: "/offers"
   };
 }
 
@@ -62,6 +77,20 @@ function getConditionSummary(coupon) {
   ].filter(Boolean);
 }
 
+function getPlacementSummary(coupon) {
+  return [
+    coupon.showOnHomepage ? `Homepage #${Number(coupon.homepageSortOrder || 0)}` : null,
+    coupon.showOnProductPage ? `Product page #${Number(coupon.productPageSortOrder || 0)}` : null
+  ].filter(Boolean);
+}
+
+function getPreviewUrl(url) {
+  const value = String(url || "").trim();
+  if (!value) return "";
+  if (value.startsWith("/uploads/")) return `http://localhost:4000${value}`;
+  return value;
+}
+
 function getStatusStyle(status) {
   if (status === "active") return { background: "#dcfce7", color: "#166534" };
   if (status === "scheduled") return { background: "#dbeafe", color: "#1d4ed8" };
@@ -86,14 +115,16 @@ function getFormErrors(form, coupons, editingCouponId = null) {
   if (maxDiscount < 0) errors.push("Maximum discount cannot be negative.");
   if (form.discountType === "percent" && maxDiscount <= 0) errors.push("Maximum discount is required for percentage coupons.");
   if (!form.startDate) errors.push("Start date is required.");
-  if (!form.endDate) errors.push("End date is required.");
   if (form.startDate && form.endDate && new Date(form.endDate) < new Date(form.startDate)) errors.push("End date must be after start date.");
   if (Number(form.usageLimit || 0) <= 0) errors.push("Usage limit must be greater than zero.");
+  if (form.buttonLink && !form.buttonLink.startsWith("/") && !/^https?:\/\//i.test(form.buttonLink)) errors.push("Button link must be a site path or valid URL.");
 
   return errors;
 }
 
 export default function Coupons() {
+  const [searchParams] = useSearchParams();
+  const isOffersView = searchParams.get("view") === "offers";
   const [coupons, setCoupons] = React.useState(couponRules);
   const [categoryOptions, setCategoryOptions] = React.useState([]);
   const [searchTerm, setSearchTerm] = React.useState("");
@@ -104,6 +135,7 @@ export default function Coupons() {
   const [sourceMessage, setSourceMessage] = React.useState("Loading coupons...");
   const [isLoading, setIsLoading] = React.useState(true);
   const [isSaving, setIsSaving] = React.useState(false);
+  const [isUploadingBackground, setIsUploadingBackground] = React.useState(false);
   const [editingCouponId, setEditingCouponId] = React.useState(null);
   const [currentPage, setCurrentPage] = React.useState(1);
   const [rowsPerPage, setRowsPerPage] = React.useState(50);
@@ -154,7 +186,8 @@ export default function Coupons() {
     const query = searchTerm.trim().toLowerCase();
     const matchesSearch = !query || [coupon.code, coupon.title, coupon.description].some((value) => String(value || "").toLowerCase().includes(query));
     const matchesStatus = statusFilter === "all" || coupon.status === statusFilter;
-    return matchesSearch && matchesStatus;
+    const matchesOfferView = !isOffersView || coupon.showOnHomepage || coupon.showOnProductPage;
+    return matchesSearch && matchesStatus && matchesOfferView;
   });
 
   React.useEffect(() => {
@@ -172,7 +205,7 @@ export default function Coupons() {
 
   const toggleCouponStatus = async (couponId) => {
     const currentCoupon = coupons.find((coupon) => Number(coupon.id) === Number(couponId));
-    const nextStatus = currentCoupon?.status === COUPON_STATUS.ACTIVE ? COUPON_STATUS.PAUSED : COUPON_STATUS.ACTIVE;
+    const nextStatus = currentCoupon?.status === COUPON_STATUS.ACTIVE ? COUPON_STATUS.INACTIVE : COUPON_STATUS.ACTIVE;
 
     setCoupons((current) => current.map((coupon) => (
       Number(coupon.id) === Number(couponId) ? { ...coupon, status: nextStatus } : coupon
@@ -189,6 +222,27 @@ export default function Coupons() {
       setSourceMessage(error.response?.data?.message || "Unable to update coupon status.");
       loadCoupons();
     }
+  };
+
+  const updateCouponQuickPatch = async (coupon, patch, message) => {
+    const updatedCoupon = { ...coupon, ...patch };
+    setCoupons((current) => current.map((item) => Number(item.id) === Number(coupon.id) ? updatedCoupon : item));
+    try {
+      const response = await updateCoupon(coupon.id, updatedCoupon);
+      const savedCoupon = response.data?.data || updatedCoupon;
+      setCoupons((current) => current.map((item) => Number(item.id) === Number(coupon.id) ? savedCoupon : item));
+      setSourceMessage(message);
+    } catch (error) {
+      setSourceMessage(error.response?.data?.message || "Unable to update coupon.");
+      loadCoupons();
+    }
+  };
+
+  const previewCoupon = (coupon) => {
+    const storefrontBaseUrl = getStorefrontBaseUrl();
+    const link = coupon.buttonLink || `/offers?code=${encodeURIComponent(coupon.code)}`;
+    const previewUrl = /^https?:\/\//i.test(link) ? link : `${storefrontBaseUrl}${link.startsWith("/") ? link : `/${link}`}`;
+    window.open(previewUrl, "_blank", "noopener,noreferrer");
   };
 
   const updateForm = (key, value) => {
@@ -222,6 +276,10 @@ export default function Coupons() {
       minSubtotal: String(coupon.minSubtotal || ""),
       usageLimit: String(coupon.usageLimit || ""),
       usedCount: String(coupon.usedCount || "0"),
+      homepageSortOrder: String(coupon.homepageSortOrder || "0"),
+      productPageSortOrder: String(coupon.productPageSortOrder || "0"),
+      buttonText: coupon.buttonText || "Explore",
+      buttonLink: coupon.buttonLink || "/offers",
       eligibleCategories: Array.isArray(coupon.eligibleCategories) ? coupon.eligibleCategories : []
     });
     setFormMessage("");
@@ -281,8 +339,43 @@ export default function Coupons() {
     }
   };
 
-  const handleSaveCoupon = async (event) => {
+  const uploadBackgroundImage = async (file) => {
+    if (!file) return;
+
+    if (!ALLOWED_OFFER_IMAGE_TYPES.has(file.type)) {
+      setFormMessage("Background images must be JPG, PNG, or WebP.");
+      return;
+    }
+
+    setIsUploadingBackground(true);
+    setFormMessage("");
+    try {
+      const response = await uploadCouponBackgroundImage(file);
+      const uploadedUrl = response.data?.data?.url || response.data?.url || "";
+      if (!uploadedUrl) throw new Error("Image upload did not return a URL");
+      updateForm("backgroundImageUrl", uploadedUrl);
+      setFormMessage("Background image uploaded. Save the coupon to publish it.");
+    } catch (error) {
+      setFormMessage(error.response?.data?.message || "Unable to upload background image.");
+    } finally {
+      setIsUploadingBackground(false);
+    }
+  };
+
+  const handleBackgroundImageUpload = (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    uploadBackgroundImage(file);
+  };
+
+  const handleBackgroundImageDrop = (event) => {
     event.preventDefault();
+    event.stopPropagation();
+    const file = event.dataTransfer.files?.[0];
+    uploadBackgroundImage(file);
+  };
+
+  const saveCoupon = async (statusOverride = null) => {
     const errors = getFormErrors(form, coupons, editingCouponId);
 
     if (errors.length) {
@@ -304,11 +397,21 @@ export default function Coupons() {
       usedCount: Number(form.usedCount || 0),
       startDate: form.startDate,
       endDate: form.endDate,
-      status: form.status,
+      status: statusOverride || form.status,
       customerEligibility: form.customerEligibility,
       oneUsePerCustomer: Boolean(form.oneUsePerCustomer),
       stackable: Boolean(form.stackable),
-      autoApply: Boolean(form.autoApply)
+      autoApply: Boolean(form.autoApply),
+      showOnHomepage: Boolean(form.showOnHomepage),
+      showOnProductPage: Boolean(form.showOnProductPage),
+      homepageSortOrder: Number(form.homepageSortOrder || 0),
+      productPageSortOrder: Number(form.productPageSortOrder || 0),
+      backgroundImageUrl: form.backgroundImageUrl.trim(),
+      offerBadgeText: form.offerBadgeText.trim(),
+      offerCardTitle: form.offerCardTitle.trim(),
+      offerCardDescription: form.offerCardDescription.trim(),
+      buttonText: form.buttonText.trim(),
+      buttonLink: form.buttonLink.trim()
     };
 
     setIsSaving(true);
@@ -336,13 +439,18 @@ export default function Coupons() {
     }
   };
 
+  const handleSaveCoupon = async (event) => {
+    event.preventDefault();
+    await saveCoupon();
+  };
+
   return (
     <div style={pageStyle}>
       <section style={headerStyle}>
         <div>
           <span style={eyebrowStyle}>Promotions</span>
-          <h2 style={titleStyle}>Coupons</h2>
-          <p style={mutedTextStyle}>Create and manage coupon rules for product pages and checkout discount validation.</p>
+          <h2 style={titleStyle}>{isOffersView ? "Coupon Offers" : "Coupons"}</h2>
+          <p style={mutedTextStyle}>{isOffersView ? "Configure coupons shown as homepage and product page offer cards." : "Create and manage coupon rules for product pages and checkout discount validation."}</p>
           <p style={{ margin: "8px 0 0", color: "#0f766e", fontWeight: 800, fontSize: "13px" }}>{sourceMessage}</p>
         </div>
         <div style={headerPillsStyle}>
@@ -354,18 +462,20 @@ export default function Coupons() {
               type="button"
               style={primaryButtonStyle}
               onClick={() => {
-                if (!formOpen) resetForm();
-                setFormOpen((current) => !current);
+                resetForm();
+                setFormOpen(true);
               }}
             >
-              {formOpen ? "Close Form" : "+ Add New Coupon"}
+              + Add New Coupon
             </button>
           ) : null}
         </div>
       </section>
 
       {formOpen ? (
-        <form style={formCardStyle} onSubmit={handleSaveCoupon}>
+        <div style={modalOverlayStyle} role="presentation">
+        <form style={modalFormStyle} onSubmit={handleSaveCoupon}>
+          <button type="button" aria-label="Close coupon editor" style={modalCloseButtonStyle} onClick={() => setFormOpen(false)}>X</button>
           <div>
             <span style={eyebrowStyle}>{editingCouponId ? "Edit Coupon" : "Create Coupon"}</span>
             <h3 style={formTitleStyle}>{editingCouponId ? "Update Coupon Rules" : "New Coupon Rules"}</h3>
@@ -407,7 +517,7 @@ export default function Coupons() {
               <input type="date" value={form.startDate} onChange={(event) => updateForm("startDate", event.target.value)} style={inputStyle} />
             </label>
             <label style={fieldStyle}>
-              <span>End Date</span>
+              <span>End Date optional</span>
               <input type="date" value={form.endDate} onChange={(event) => updateForm("endDate", event.target.value)} style={inputStyle} />
             </label>
             <label style={fieldStyle}>
@@ -421,8 +531,85 @@ export default function Coupons() {
                 <option value="scheduled">Scheduled</option>
                 <option value="paused">Paused</option>
                 <option value="expired">Expired</option>
+                <option value="inactive">Inactive</option>
               </select>
             </label>
+          </section>
+
+          <section style={categorySelectorStyle}>
+            <div>
+              <strong>Coupon Display Controls</strong>
+              <p style={mutedTextStyle}>Use these fields to turn this coupon into an offer card for the homepage or product page.</p>
+            </div>
+            <section style={conditionGridStyle}>
+              <label style={toggleStyle}>
+                <input type="checkbox" checked={form.showOnHomepage} onChange={(event) => updateForm("showOnHomepage", event.target.checked)} />
+                <span>Show on Homepage</span>
+              </label>
+              <label style={toggleStyle}>
+                <input type="checkbox" checked={form.showOnProductPage} onChange={(event) => updateForm("showOnProductPage", event.target.checked)} />
+                <span>Show on Product Page</span>
+              </label>
+              <label style={fieldStyle}>
+                <span>Homepage Sort Order</span>
+                <input type="number" value={form.homepageSortOrder} onChange={(event) => updateForm("homepageSortOrder", event.target.value)} style={inputStyle} />
+              </label>
+              <label style={fieldStyle}>
+                <span>Product Page Sort Order</span>
+                <input type="number" value={form.productPageSortOrder} onChange={(event) => updateForm("productPageSortOrder", event.target.value)} style={inputStyle} />
+              </label>
+            </section>
+
+            <section style={formGridStyle}>
+              <label style={fieldStyle}>
+                <span>Offer Badge Text</span>
+                <input value={form.offerBadgeText} onChange={(event) => updateForm("offerBadgeText", event.target.value)} placeholder="Summer Sale" style={inputStyle} />
+              </label>
+              <label style={fieldStyle}>
+                <span>Offer Card Title</span>
+                <input value={form.offerCardTitle} onChange={(event) => updateForm("offerCardTitle", event.target.value)} placeholder="Save more this season" style={inputStyle} />
+              </label>
+              <label style={fieldStyle}>
+                <span>Button Text</span>
+                <input value={form.buttonText} onChange={(event) => updateForm("buttonText", event.target.value)} placeholder="Explore" style={inputStyle} />
+              </label>
+              <label style={fieldStyle}>
+                <span>Button Link</span>
+                <input value={form.buttonLink} onChange={(event) => updateForm("buttonLink", event.target.value)} placeholder="/offers" style={inputStyle} />
+              </label>
+            </section>
+
+            <label style={fieldStyle}>
+              <span>Offer Card Description</span>
+              <textarea value={form.offerCardDescription} onChange={(event) => updateForm("offerCardDescription", event.target.value)} placeholder="Describe the offer shown on storefront cards." style={textareaStyle} />
+            </label>
+
+            <section style={uploadPanelStyle}>
+              <label
+                style={dropZoneStyle}
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                }}
+                onDrop={handleBackgroundImageDrop}
+              >
+                <input type="file" accept="image/jpeg,image/png,image/webp" onChange={handleBackgroundImageUpload} style={hiddenFileInputStyle} disabled={isUploadingBackground} />
+                {form.backgroundImageUrl ? (
+                  <img src={getPreviewUrl(form.backgroundImageUrl)} alt="" style={backgroundPreviewStyle} />
+                ) : (
+                  <div style={backgroundPlaceholderStyle}>Drag and drop image here</div>
+                )}
+                <strong style={uploadTitleStyle}>{isUploadingBackground ? "Uploading image..." : form.backgroundImageUrl ? "Click to replace image" : "Click to upload"}</strong>
+                <span style={uploadHelpStyle}>JPG, PNG, or WebP</span>
+              </label>
+              <div style={uploadControlStyle}>
+                <label style={fieldStyle}>
+                  <span>Background Image URL</span>
+                  <input value={form.backgroundImageUrl} onChange={(event) => updateForm("backgroundImageUrl", event.target.value)} placeholder="/uploads/images/offer.jpg" style={inputStyle} />
+                </label>
+                {form.backgroundImageUrl ? <button type="button" style={secondaryButtonStyle} onClick={() => updateForm("backgroundImageUrl", "")}>Remove Image</button> : null}
+              </div>
+            </section>
           </section>
 
           <label style={fieldStyle}>
@@ -473,15 +660,19 @@ export default function Coupons() {
             <p style={mutedTextStyle}>
               {`${normalizeCouponCode(form.code) || "COUPON"} gives ${form.discountType === "percent" ? `${form.discountValue}%` : formatMoney(form.discountValue)} off, minimum order ${formatMoney(form.minSubtotal)}, max discount ${formatMoney(form.maxDiscount)}, for ${form.eligibleCategories.length ? form.eligibleCategories.join(", ") : "all categories"}.`}
             </p>
+            <p style={mutedTextStyle}>
+              {`Offer card: ${form.offerBadgeText || form.title || "Badge"} / ${form.offerCardTitle || form.title || "Title"} / ${form.buttonText || "Explore"}`}
+            </p>
           </section>
 
           <div style={formActionsStyle}>
-            <button type="button" style={secondaryButtonStyle} onClick={resetForm}>Reset</button>
+            <button type="button" style={secondaryButtonStyle} onClick={() => saveCoupon("inactive")} disabled={isSaving}>Draft</button>
             <button type="submit" style={{ ...primaryButtonStyle, opacity: isSaving ? 0.65 : 1 }} disabled={isSaving}>
-              {isSaving ? "Saving..." : editingCouponId ? "Update Coupon" : "Create Coupon"}
+              {isSaving ? "Saving..." : "Save"}
             </button>
           </div>
         </form>
+        </div>
       ) : null}
 
       <section style={toolbarStyle}>
@@ -498,6 +689,7 @@ export default function Coupons() {
           <option value="scheduled">Scheduled</option>
           <option value="paused">Paused</option>
           <option value="expired">Expired</option>
+          <option value="inactive">Inactive</option>
         </select>
         <select value={rowsPerPage} onChange={(event) => setRowsPerPage(Number(event.target.value))} style={inputStyle}>
           {[10, 20, 50, 100].map((count) => <option key={count} value={count}>{`${count} / page`}</option>)}
@@ -514,7 +706,7 @@ export default function Coupons() {
           {canEditCoupons ? (
             <>
               <button type="button" style={activateButtonStyle} onClick={() => handleBulkCouponStatus("active")}>Activate</button>
-              <button type="button" style={pauseButtonStyle} onClick={() => handleBulkCouponStatus("paused")}>Pause</button>
+              <button type="button" style={pauseButtonStyle} onClick={() => handleBulkCouponStatus("inactive")}>Deactivate</button>
             </>
           ) : null}
           {canDeleteCoupons ? <button type="button" style={deleteButtonStyle} onClick={handleBulkCouponDelete}>Delete Selected</button> : null}
@@ -530,6 +722,7 @@ export default function Coupons() {
           const usagePercent = coupon.usageLimit ? Math.round((Number(coupon.usedCount || 0) / Number(coupon.usageLimit || 1)) * 100) : 0;
           const categorySummary = getCategorySummary(coupon.eligibleCategories);
           const conditions = getConditionSummary(coupon);
+          const placements = getPlacementSummary(coupon);
 
           return (
             <article key={coupon.id} style={cardStyle}>
@@ -566,6 +759,11 @@ export default function Coupons() {
               <div style={conditionListStyle}>
                 {conditions.map((condition) => <span key={condition} style={conditionPillStyle}>{condition}</span>)}
               </div>
+              {placements.length ? (
+                <div style={conditionListStyle}>
+                  {placements.map((placement) => <span key={placement} style={placementPillStyle}>{placement}</span>)}
+                </div>
+              ) : null}
               <div style={usageBlockStyle}>
                 <div style={usageHeadStyle}>
                   <span>{`Usage: ${coupon.usedCount}/${coupon.usageLimit}`}</span>
@@ -577,7 +775,10 @@ export default function Coupons() {
                 {canEditCoupons ? (
                   <>
                     <button type="button" style={coupon.status === "active" ? pauseButtonStyle : activateButtonStyle} onClick={() => toggleCouponStatus(coupon.id)}>
-                      {coupon.status === "active" ? "Pause" : "Activate"}
+                      {coupon.status === "active" ? "Deactivate" : "Activate"}
+                    </button>
+                    <button type="button" style={secondaryButtonStyle} onClick={() => previewCoupon(coupon)}>
+                      Preview
                     </button>
                     <button type="button" style={secondaryButtonStyle} onClick={() => startEditCoupon(coupon)}>
                       Edit
@@ -675,6 +876,37 @@ const cardStyle = {
   boxShadow: "0 12px 26px rgba(15, 23, 42, 0.06)"
 };
 const formCardStyle = { ...cardStyle, padding: "22px" };
+const modalOverlayStyle = {
+  position: "fixed",
+  inset: 0,
+  zIndex: 1000,
+  display: "grid",
+  placeItems: "center",
+  padding: "22px",
+  background: "rgba(15, 23, 42, 0.42)",
+  overflow: "auto"
+};
+const modalFormStyle = {
+  ...cardStyle,
+  position: "relative",
+  width: "min(1040px, 100%)",
+  maxHeight: "calc(100vh - 44px)",
+  overflow: "auto",
+  padding: "24px"
+};
+const modalCloseButtonStyle = {
+  position: "absolute",
+  top: "14px",
+  right: "14px",
+  width: "36px",
+  height: "36px",
+  borderRadius: "999px",
+  border: "1px solid #cbd5e1",
+  background: "#fff",
+  color: "#0f172a",
+  fontWeight: 900,
+  cursor: "pointer"
+};
 const cardSelectStyle = { display: "inline-flex", alignItems: "center", gap: "8px", color: "#475569", fontWeight: 800, fontSize: "12px" };
 const cardHeadStyle = { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px" };
 const codeStyle = { color: "#0f766e", fontSize: "12px", fontWeight: 900, letterSpacing: "0.08em" };
@@ -731,6 +963,7 @@ const categoryTextStyle = {
 const countPillStyle = { flex: "0 0 auto", padding: "4px 8px", borderRadius: "999px", background: "#e0f2fe", color: "#0369a1", fontSize: "12px", fontWeight: 900 };
 const conditionListStyle = { display: "flex", flexWrap: "wrap", gap: "8px" };
 const conditionPillStyle = { padding: "7px 9px", borderRadius: "999px", background: "#f1f5f9", color: "#334155", fontSize: "12px", fontWeight: 800 };
+const placementPillStyle = { padding: "7px 9px", borderRadius: "999px", background: "#ecfdf5", color: "#047857", fontSize: "12px", fontWeight: 900 };
 const usageBlockStyle = { display: "grid", gap: "8px" };
 const usageHeadStyle = { display: "flex", justifyContent: "space-between", color: "#475569", fontWeight: 700 };
 const progressTrackStyle = { height: "8px", borderRadius: "999px", background: "#e2e8f0", overflow: "hidden" };
@@ -748,6 +981,14 @@ const categoryGridStyle = { display: "grid", gridTemplateColumns: "repeat(3, min
 const categoryOptionStyle = { display: "flex", alignItems: "center", gap: "8px", padding: "10px", borderRadius: "10px", background: "#fff", border: "1px solid #dbe7f0", color: "#334155", fontWeight: 700 };
 const conditionGridStyle = { display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "12px" };
 const toggleStyle = { display: "flex", alignItems: "center", gap: "10px", minHeight: "42px", padding: "0 12px", borderRadius: "10px", border: "1px solid #dbe7f0", background: "#fff", color: "#334155", fontWeight: 700 };
+const uploadPanelStyle = { display: "grid", gridTemplateColumns: "minmax(180px, 260px) minmax(0, 1fr)", gap: "14px", alignItems: "stretch" };
+const dropZoneStyle = { display: "grid", gap: "9px", minHeight: "230px", padding: "10px", borderRadius: "14px", border: "1px dashed #94a3b8", background: "#fff", cursor: "pointer", alignContent: "start" };
+const hiddenFileInputStyle = { display: "none" };
+const backgroundPreviewStyle = { width: "100%", aspectRatio: "16 / 10", objectFit: "cover", borderRadius: "10px", border: "1px solid #dbe7f0", background: "#fff" };
+const backgroundPlaceholderStyle = { width: "100%", aspectRatio: "16 / 10", display: "grid", placeItems: "center", borderRadius: "10px", border: "1px dashed #cbd5e1", background: "#f8fafc", color: "#64748b", fontWeight: 800, textAlign: "center", padding: "12px" };
+const uploadControlStyle = { display: "grid", gap: "10px", alignContent: "start" };
+const uploadTitleStyle = { color: "#0f172a", fontSize: "14px", lineHeight: 1.25 };
+const uploadHelpStyle = { color: "#64748b", fontSize: "12px", fontWeight: 700 };
 const previewBoxStyle = { padding: "14px", borderRadius: "14px", background: "#f0fdf4", border: "1px solid #bbf7d0", color: "#166534" };
 const errorBoxStyle = { padding: "12px 14px", borderRadius: "12px", background: "#fff1f2", border: "1px solid #fecaca", color: "#b91c1c", fontWeight: 700 };
 const formActionsStyle = { display: "flex", justifyContent: "flex-end", gap: "10px", flexWrap: "nowrap" };

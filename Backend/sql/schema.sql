@@ -939,7 +939,18 @@ CREATE TABLE IF NOT EXISTS coupons (
   used_count INT NOT NULL DEFAULT 0,
   starts_at DATETIME NULL,
   ends_at DATETIME NULL,
+  end_date DATE NULL,
   status ENUM('active', 'inactive', 'expired') NOT NULL DEFAULT 'active',
+  show_on_homepage TINYINT(1) NOT NULL DEFAULT 0,
+  show_on_product_page TINYINT(1) NOT NULL DEFAULT 0,
+  homepage_sort_order INT NOT NULL DEFAULT 0,
+  product_page_sort_order INT NOT NULL DEFAULT 0,
+  background_image_url VARCHAR(500) NULL,
+  offer_badge_text VARCHAR(80) NULL,
+  offer_card_title VARCHAR(160) NULL,
+  offer_card_description VARCHAR(500) NULL,
+  offer_button_text VARCHAR(80) NULL,
+  offer_button_link VARCHAR(500) NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );

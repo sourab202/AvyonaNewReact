@@ -11,36 +11,6 @@ export const categoryRouteMap = {
   "reading-light": "/collection/reading-light"
 };
 
-export const offerConfigs = {
-  "summer-sale": {
-    title: "Summer Sale",
-    eyebrow: "Season Picks",
-    description: "Fresh summer savings on audio, cameras, and travel-ready picks.",
-    coupon: "SUMMER15",
-    image: "",
-    heading: "Summer Sale Products",
-    matches: (product) => ["Personal Audio", "Digital Camera", "Reading Light"].includes(product.category)
-  },
-  "first-purchase": {
-    title: "On Your First Purchase",
-    eyebrow: "New Shopper Offer",
-    description: "Unlock an easy first-order deal across Avyona best sellers and everyday favorites.",
-    coupon: "FIRST12",
-    image: "",
-    heading: "First Purchase Eligible Products",
-    matches: (product) => product.stockTone !== "out-of-stock"
-  },
-  "bundle-sale": {
-    title: "Bundle Sale",
-    eyebrow: "Save More Together",
-    description: "Build a better setup with bundle pricing on selected collections and home-ready products.",
-    coupon: "BUNDLE20",
-    image: "",
-    heading: "Bundle Sale Products",
-    matches: (product) => ["Avyona Digital Photo Frames", "Professional Audio", "Security Camera"].includes(product.category)
-  }
-};
-
 export const homeBanners = [];
 
 export const blogEntries = [
