@@ -443,10 +443,24 @@ export function uploadAdminImage(file) {
 
 export function uploadSettingsAsset(file, assetType) {
   const formData = new FormData();
-  formData.append("asset", file);
   if (assetType) formData.append("assetType", assetType);
+  formData.append("asset", file);
+  const queryString = assetType ? `?assetType=${encodeURIComponent(assetType)}` : "";
 
-  return adminApi.post("/settings/upload", formData, {
+  return adminApi.post(`/settings/upload${queryString}`, formData, {
+    headers: {
+      "Content-Type": "multipart/form-data"
+    }
+  });
+}
+
+export function uploadFooterImage(file, assetType) {
+  const formData = new FormData();
+  if (assetType) formData.append("assetType", assetType);
+  formData.append("image", file);
+  const queryString = assetType ? `?assetType=${encodeURIComponent(assetType)}` : "";
+
+  return adminApi.post(`/admin/footer/upload${queryString}`, formData, {
     headers: {
       "Content-Type": "multipart/form-data"
     }

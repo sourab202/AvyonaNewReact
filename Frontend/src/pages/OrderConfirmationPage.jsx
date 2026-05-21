@@ -4,6 +4,7 @@ import { formatCurrency } from "../utils/storefront";
 import ProductCard from "../components/product/ProductCard";
 import { trackStorefrontOrder } from "../api/orderApi";
 import { getCustomerToken } from "../api/customerApi";
+import { resolveMediaUrl } from "../utils/media";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000/api/v1";
 
@@ -307,7 +308,7 @@ export default function OrderConfirmationPage({ context }) {
               {items.map((item, index) => (
                 <div key={`${item.slug || item.name}:${index}`} className="thankyou-item">
                   {item.image ? (
-                    <img src={item.image} alt={item.name} className="thankyou-item-img" />
+                    <img src={resolveMediaUrl(item.image)} alt={item.name} className="thankyou-item-img" />
                   ) : (
                     <div className="thankyou-item-img" style={{ background: "#f1f5f9" }} />
                   )}

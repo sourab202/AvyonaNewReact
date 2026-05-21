@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { fetchAdminSettings, updateAdminSettings, uploadAdminImage } from "../../api/adminApi";
+import { resolveAdminMediaUrl } from "../../utils/media";
 
 const DEFAULT_SETTINGS = {
   successTitle: "Thank you for your order",
@@ -26,16 +27,8 @@ const BUTTON_STYLE_OPTIONS = [
   { value: "ghost", label: "Ghost (Text only)" }
 ];
 
-const API_MEDIA_ORIGIN = (import.meta.env?.VITE_API_BASE_URL || "http://localhost:4000/api/v1")
-  .replace(/\/api\/v\d+\/?$/i, "")
-  .replace(/\/$/, "");
-
 function resolvePreviewUrl(value) {
-  const url = String(value || "").trim();
-  if (!url) return "";
-  if (/^(data|blob|https?):/i.test(url)) return url;
-  if (url.startsWith("/uploads/")) return `${API_MEDIA_ORIGIN}${url}`;
-  return url;
+  return resolveAdminMediaUrl(value);
 }
 
 export default function ThankYouPageSettings() {

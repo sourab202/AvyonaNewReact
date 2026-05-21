@@ -13,7 +13,7 @@ export const env = {
   dbName: process.env.DB_NAME || "avyona_admin",
   dbUser: process.env.DB_USER || "root",
   dbPassword: process.env.DB_PASSWORD || "",
-  jwtSecret: process.env.JWT_SECRET || "change_this_to_a_long_secure_secret",
+  jwtSecret: process.env.JWT_SECRET || "AWS!@#123578&^$hdjsgwidfg526485635134!@#$%^)(*&^%?><",
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || "7d",
   allowLocalDevAdmin: process.env.ALLOW_LOCAL_DEV_ADMIN === "true" || (process.env.ALLOW_LOCAL_DEV_ADMIN !== "false" && (process.env.NODE_ENV || "development") !== "production")
 };

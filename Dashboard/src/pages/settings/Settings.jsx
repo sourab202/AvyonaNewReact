@@ -1,5 +1,6 @@
 import React from "react";
 import { fetchAdminSettings, fetchGeneralSettings, updateAdminSettings, updateGeneralSettings, uploadSettingsAsset } from "../../api/adminApi";
+import { resolveAdminMediaUrl, toStoredUploadUrl } from "../../utils/media";
 import {
   cloneSettings,
   DEFAULT_APP_SETTINGS,
@@ -75,9 +76,6 @@ function renderFieldControl(field, value, onChange) {
   );
 }
 
-const API_MEDIA_ORIGIN = (import.meta.env?.VITE_API_BASE_URL || "http://localhost:4000/api/v1")
-  .replace(/\/api\/v\d+\/?$/i, "")
-  .replace(/\/$/, "");
 const allowedBrandAssetExtensions = new Set(["png", "jpg", "jpeg", "webp", "svg"]);
 const logoMaxSizeBytes = 2 * 1024 * 1024;
 const faviconMaxSizeBytes = 1 * 1024 * 1024;
@@ -86,18 +84,11 @@ const phonePattern = /^[+]?[\d\s().-]{7,20}$/;
 const gstPattern = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/i;
 
 function getMediaPreviewUrl(value) {
-  const url = String(value || "").trim();
-  if (!url) return "";
-  if (/^(data|blob|https?):/i.test(url)) return url;
-  if (url.startsWith("/uploads/")) return `${API_MEDIA_ORIGIN}${url}`;
-  return url.startsWith("/") ? url : `/${url}`;
+  return resolveAdminMediaUrl(value);
 }
 
 function getStoredMediaUrl(value) {
-  const url = String(value || "").trim();
-  if (!url) return "";
-  if (url.startsWith("/uploads/")) return `${API_MEDIA_ORIGIN}${url}`;
-  return url;
+  return toStoredUploadUrl(value);
 }
 
 function validateBrandAssetFile(file, maxSizeBytes) {
@@ -356,8 +347,8 @@ function ImageUploadSetting({ label, value, onChange, onUpload, onRemove, upload
   );
 }
 
-export default function Settings() {
-  const [activeSection, setActiveSection] = React.useState(SETTINGS_SECTIONS[0].id);
+export default function Settings({ initialSection = SETTINGS_SECTIONS[0].id }) {
+  const [activeSection, setActiveSection] = React.useState(initialSection);
   const [settings, setSettings] = React.useState(() => cloneSettings(DEFAULT_APP_SETTINGS));
   const [isLoading, setIsLoading] = React.useState(true);
   const [isSaving, setIsSaving] = React.useState(false);

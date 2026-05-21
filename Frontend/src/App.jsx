@@ -13,9 +13,11 @@ import { couponRules } from "../../shared/coupons";
 import { DEFAULT_APP_SETTINGS, getPublicSettings, mergeSettings } from "../../shared/appSettings";
 import ProtectedRoute from "./components/common/ProtectedRoute";
 import { usePersistentState } from "./hooks/usePersistentState";
+import { resolveMediaList, resolveMediaUrl } from "./utils/media";
 
 const AccountPage = lazy(() => import("./pages/AccountPage"));
 const BlogPage = lazy(() => import("./pages/BlogPage"));
+const BlogsPage = lazy(() => import("./pages/BlogsPage"));
 const CheckoutPage = lazy(() => import("./pages/CheckoutPage"));
 const CollectionPage = lazy(() => import("./pages/CollectionPage"));
 const CollectionsPage = lazy(() => import("./pages/CollectionsPage"));
@@ -38,23 +40,16 @@ const AUTH_STORAGE_KEY = "avyonaAuthUser";
 const ACCOUNT_STORAGE_KEY = "avyonaAccounts";
 const CUSTOMER_PROFILE_KEY = "avyonaCustomerProfile";
 const ORDER_STORAGE_KEY = "avyonaOrders";
-const API_MEDIA_ORIGIN = (import.meta.env.VITE_API_BASE_URL || "http://localhost:4000/api/v1")
-  .replace(/\/api\/v\d+\/?$/i, "")
-  .replace(/\/$/, "");
 const GENERAL_SETTINGS_FALLBACK = {
   ...DEFAULT_APP_SETTINGS.general,
   storeName: "Avyona",
   supportEmail: "support@avyona.com",
   supportPhone: "",
-  logoUrl: "/images/optimized/avyona-logo.webp"
+  logoUrl: "/uploads/settings/1778912520806-avyona-logo-2.png"
 };
 
 function resolveSettingsMediaUrl(value) {
-  const url = String(value || "").trim();
-  if (!url) return "";
-  if (/^(data|blob|https?):/i.test(url)) return url;
-  if (url.startsWith("/uploads/")) return `${API_MEDIA_ORIGIN}${url}`;
-  return url.startsWith("/") ? url : `/${url}`;
+  return resolveMediaUrl(value);
 }
 
 function normalizePublicSettingsPayload(payload = {}) {
@@ -96,10 +91,8 @@ function normalizeBackendProduct(product) {
   const stockQuantity = Number(product.stockQuantity || 0);
   const discount = mrp > price && price > 0 ? Math.round(((mrp - price) / mrp) * 100) : 0;
   const collectionSlug = product.categorySlug || String(product.categoryName || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
-  const gallery = Array.isArray(product.galleryUrls) && product.galleryUrls.length
-    ? product.galleryUrls.filter(Boolean)
-    : [];
-  const primaryImage = gallery[0] || product.imageUrl || "";
+  const gallery = resolveMediaList(product.galleryUrls);
+  const primaryImage = gallery[0] || resolveMediaUrl(product.imageUrl);
 
   return {
     id: product.id,
@@ -833,6 +826,8 @@ function App() {
               </StoreLayout>
             }
           />
+          <Route path="/blogs" element={<StoreLayout context={context} allProducts={storefrontProducts}><BlogsPage /></StoreLayout>} />
+          <Route path="/blogs/:slug" element={<StoreLayout context={context} allProducts={storefrontProducts}><BlogPage /></StoreLayout>} />
           <Route path="/blog/:slug" element={<StoreLayout context={context} allProducts={storefrontProducts}><BlogPage /></StoreLayout>} />
           <Route path="/collections" element={<StoreLayout context={context} allProducts={storefrontProducts}><CollectionsPage context={context} /></StoreLayout>} />
           <Route path="/category/:slug" element={<StoreLayout context={context} allProducts={storefrontProducts}><CollectionPage context={context} /></StoreLayout>} />

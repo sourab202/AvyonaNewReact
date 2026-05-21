@@ -1,7 +1,12 @@
 import { Router } from "express";
 import { pingDatabase } from "../../config/db.js";
 import adminAuthRoutes from "./adminAuthRoutes.js";
+import adminFooterItemsRoutes from "./adminFooterItemsRoutes.js";
+import adminFooterRoutes from "./adminFooterRoutes.js";
+import adminFooterSettingsRoutes from "./adminFooterSettingsRoutes.js";
 import analyticsRoutes from "./analyticsRoutes.js";
+import blogRoutes from "./blogRoutes.js";
+import blogTagRoutes from "./blogTagRoutes.js";
 import categoryRoutes from "./categoryRoutes.js";
 import contactEnquiryRoutes from "./contactEnquiryRoutes.js";
 import customerRoutes from "./customerRoutes.js";
@@ -12,6 +17,9 @@ import couponRoutes from "./couponRoutes.js";
 import dashboardRoutes from "./dashboardRoutes.js";
 import orderRoutes from "./orderRoutes.js";
 import productRoutes from "./productRoutes.js";
+import publicFooterRoutes from "./publicFooterRoutes.js";
+import publicBlogRoutes from "./publicBlogRoutes.js";
+import publicBlogTagRoutes from "./publicBlogTagRoutes.js";
 import reviewRoutes from "./reviewRoutes.js";
 import seoRoutes from "./seoRoutes.js";
 import settingsRoutes from "./settingsRoutes.js";
@@ -40,7 +48,15 @@ router.get("/health", async (_request, response) => {
 });
 
 router.use("/admin/auth", adminAuthRoutes);
+router.use("/admin/footer", adminFooterRoutes);
+router.use("/admin/footer-settings", adminFooterSettingsRoutes);
+router.use("/admin/footer-items", adminFooterItemsRoutes);
+router.use("/admin/blogs", blogRoutes);
+router.use("/admin/blog-tags", blogTagRoutes);
 router.use("/analytics", analyticsRoutes);
+router.use("/footer", publicFooterRoutes);
+router.use("/blogs", publicBlogRoutes);
+router.use("/blog-tags", publicBlogTagRoutes);
 router.use("/categories", categoryRoutes);
 router.use("/contact-enquiries", contactEnquiryRoutes);
 router.use("/products", productRoutes);

@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { trackAnalyticsEvent } from "../api/analyticsApi";
 import { applyCustomerCreditPoints, fetchCustomerWallet } from "../api/customerApi";
+import { resolveMediaUrl } from "../utils/media";
 import {
   formatCurrency,
   getCheckoutPaymentMethods,
@@ -487,7 +488,7 @@ export default function CheckoutPage({ context }) {
               <div className="mobile-summary-body">
                 <div className="summary-shell">
                   <div className="summary-items">
-                    {context.cart.length ? context.cart.map((item) => <article key={`${item.slug}:${item.variantLabel || ""}`} className="summary-item"><div className="summary-item-art"><img src={item.image} alt={item.name} /></div><div className="summary-item-copy"><h3>{item.name}</h3><p className="summary-meta">{`Quantity: ${item.quantity}`}</p></div><strong className="summary-item-price">{formatCurrency(Number(item.price || 0) * Number(item.quantity || 1), context)}</strong></article>) : <div className="checkout-empty-state"><h3>Your cart is empty</h3><p>Add products before continuing to checkout.</p><Link to="/">Continue Shopping</Link></div>}
+                    {context.cart.length ? context.cart.map((item) => <article key={`${item.slug}:${item.variantLabel || ""}`} className="summary-item"><div className="summary-item-art"><img src={resolveMediaUrl(item.image)} alt={item.name} /></div><div className="summary-item-copy"><h3>{item.name}</h3><p className="summary-meta">{`Quantity: ${item.quantity}`}</p></div><strong className="summary-item-price">{formatCurrency(Number(item.price || 0) * Number(item.quantity || 1), context)}</strong></article>) : <div className="checkout-empty-state"><h3>Your cart is empty</h3><p>Add products before continuing to checkout.</p><Link to="/">Continue Shopping</Link></div>}
                   </div>
                   <div className="summary-totals">
                     <form className="checkout-coupon-form" onSubmit={applyCoupon}>

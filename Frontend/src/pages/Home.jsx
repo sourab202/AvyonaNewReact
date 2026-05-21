@@ -1,15 +1,16 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import ProductCard from "../components/product/ProductCard";
+import { fetchHomepageBlogs } from "../api/blogApi";
 import { fetchHomepageOffers } from "../api/couponApi";
 import { flattenCategoryTree, fallbackCategoryTree } from "../data/category-data";
 import {
   arrivalProducts,
-  blogEntries,
   featuredBrands,
   featuredProducts,
   frameProducts
 } from "../data/storefront-content";
+import { resolveMediaUrl } from "../utils/media";
 import { copyText } from "../utils/storefront";
 
 function getCategoryHomepageRule(category) {
@@ -26,23 +27,13 @@ function getCategoryHomepageRule(category) {
   return typeof value === "object" && !Array.isArray(value) ? value : {};
 }
 
-const API_MEDIA_ORIGIN = (import.meta.env.VITE_API_BASE_URL || "http://localhost:4000/api/v1")
-  .replace(/\/api\/v\d+\/?$/i, "")
-  .replace(/\/$/, "");
-
 function resolveStorefrontMediaUrl(value, fallback = "") {
-  const url = String(value || "").trim();
-  if (!url) return fallback;
-  if (/^(data|blob):/i.test(url)) return url;
-  if (/^https?:\/\//i.test(url)) return url;
-  if (url.startsWith("/uploads/")) return `${API_MEDIA_ORIGIN}${url}`;
-  return url.startsWith("/") ? url : `/${url}`;
+  return resolveMediaUrl(value, fallback);
 }
 
 function handleCategoryImageError(event) {
-  const fallback = "";
-  if (event.currentTarget.src.endsWith(fallback)) return;
-  event.currentTarget.src = fallback;
+  event.currentTarget.closest(".category-art")?.classList.add("category-art-missing");
+  event.currentTarget.remove();
 }
 
 function getHomepageBrowseEntryKey(entry) {
@@ -61,6 +52,15 @@ function normalizeCardsPerRow(value) {
 function normalizeMobileCardsPerRow(value) {
   const count = Number(value);
   return Number.isFinite(count) ? Math.min(3, Math.max(1, Math.floor(count))) : 1;
+}
+
+function normalizeTabletCardsPerRow(value, fallback = 2) {
+  const count = Number(value);
+  return Number.isFinite(count) ? Math.min(6, Math.max(1, Math.floor(count))) : fallback;
+}
+
+function normalizeProductButtonDisplayType(value, fallback = "both") {
+  return ["view_product", "add_to_cart", "both", "none"].includes(value) ? value : fallback;
 }
 
 function getBrowseCategoriesSettings(homepageSettings = {}) {
@@ -84,7 +84,9 @@ function getHomepageSectionSettings(homepageSettings = {}, key, fallback) {
     title: String(settings.title || fallback.title).trim(),
     subtitle: String(settings.subtitle || "").trim(),
     cardsPerRow: normalizeCardsPerRow(settings.cardsPerRow ?? fallback.cardsPerRow),
+    tabletCardsPerRow: normalizeTabletCardsPerRow(settings.tabletCardsPerRow ?? fallback.tabletCardsPerRow, fallback.tabletCardsPerRow ?? fallback.cardsPerRow ?? 2),
     mobileCardsPerRow: normalizeMobileCardsPerRow(settings.mobileCardsPerRow ?? fallback.mobileCardsPerRow),
+    buttonDisplayType: normalizeProductButtonDisplayType(settings.buttonDisplayType, fallback.buttonDisplayType || "both"),
     sortOrder: Number.isFinite(Number(settings.sortOrder)) ? Number(settings.sortOrder) : fallback.sortOrder
   };
 }
@@ -165,6 +167,29 @@ function normalizeHomepageOffer(coupon) {
   };
 }
 
+function formatBlogDate(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+}
+
+function normalizeHomepageBlog(blog) {
+  const publishedAt = blog.publishedAt || blog.published_at || blog.createdAt || "";
+  return {
+    id: String(blog.id || blog.slug || blog.title),
+    slug: blog.slug || "",
+    title: blog.title || "",
+    tag: blog.tagName || blog.tag || "",
+    subtitle: blog.subtitle || blog.excerpt || "",
+    excerpt: blog.excerpt || blog.subtitle || "",
+    image: blog.featuredImageUrl || blog.image || "",
+    publishedDate: formatBlogDate(publishedAt),
+    publishedDateIso: String(publishedAt || "").slice(0, 10),
+    sortOrder: Number(blog.homepageSortOrder || 0)
+  };
+}
+
 function isSafeHeroLink(value) {
   const link = String(value || "").trim();
   return !link || link.startsWith("/") || isExternalLink(link);
@@ -191,6 +216,7 @@ export default function Home({ context }) {
   const [isMobileHeroViewport, setIsMobileHeroViewport] = useState(false);
   const [failedBannerMedia, setFailedBannerMedia] = useState({});
   const [homepageOffers, setHomepageOffers] = useState([]);
+  const [homepageBlogs, setHomepageBlogs] = useState([]);
   const [copiedHomepageOfferCode, setCopiedHomepageOfferCode] = useState("");
   const homepageSettings = context.siteSettings?.homepage || {};
   const browseCategoriesSettings = getBrowseCategoriesSettings(homepageSettings);
@@ -200,6 +226,7 @@ export default function Home({ context }) {
     subtitle: "",
     cardsPerRow: 4,
     mobileCardsPerRow: 2,
+    buttonDisplayType: "both",
     sortOrder: 20
   });
   const bestSellerProductsSettings = getHomepageSectionSettings(homepageSettings, "bestSellerProductsSettings", {
@@ -208,6 +235,7 @@ export default function Home({ context }) {
     subtitle: "",
     cardsPerRow: 4,
     mobileCardsPerRow: 2,
+    buttonDisplayType: "both",
     sortOrder: 40
   });
   const newArrivalProductsSettings = getHomepageSectionSettings(homepageSettings, "newArrivalProductsSettings", {
@@ -216,6 +244,7 @@ export default function Home({ context }) {
     subtitle: "",
     cardsPerRow: 3,
     mobileCardsPerRow: 2,
+    buttonDisplayType: "both",
     sortOrder: 60
   });
   const featuredBrandsSettings = getHomepageSectionSettings(homepageSettings, "featuredBrandsSettings", {
@@ -234,6 +263,15 @@ export default function Home({ context }) {
     mobileCardsPerRow: 1,
     sortOrder: 90
   });
+  const blogPostsSettings = getHomepageSectionSettings(homepageSettings, "blogPostsSettings", {
+    enabled: true,
+    title: "Blog",
+    subtitle: "Buying guides and electronics insights that support discovery",
+    cardsPerRow: 3,
+    tabletCardsPerRow: 2,
+    mobileCardsPerRow: 1,
+    sortOrder: 85
+  });
   const mainCategories = getHomepageBrowseCategories(siteCategories, homepageSettings);
   const displayOffers = homepageOffers;
   const activeTopCategories = flattenCategoryTree(siteCategories)
@@ -251,10 +289,12 @@ export default function Home({ context }) {
   const currentBanner = activeHeroBanners[bannerIndex] || activeHeroBanners[0];
   const currentVideoUrl = currentBanner?.desktopVideo || currentBanner?.mobileVideo || "";
   const currentMobileVideoUrl = currentBanner?.mobileVideo || currentBanner?.desktopVideo || "";
+  const currentDesktopImageUrl = resolveStorefrontMediaUrl(currentBanner?.desktopImage || currentBanner?.mobileImage || "");
+  const currentMobileImageUrl = resolveStorefrontMediaUrl(currentBanner?.mobileImage || currentBanner?.desktopImage || "");
   const currentIsVideo = isVideoHeroBanner(currentBanner) && Boolean(currentVideoUrl || currentMobileVideoUrl);
-  const currentVideoSrc = isMobileHeroViewport && currentMobileVideoUrl
+  const currentVideoSrc = resolveStorefrontMediaUrl(isMobileHeroViewport && currentMobileVideoUrl
     ? currentMobileVideoUrl
-    : currentVideoUrl || currentMobileVideoUrl;
+    : currentVideoUrl || currentMobileVideoUrl);
   const currentButtonText = globalHeroCta.enabled
     ? globalHeroCta.buttonText
     : currentBanner?.ctaEnabled === false
@@ -294,6 +334,24 @@ export default function Home({ context }) {
     updateViewport();
     mediaQuery.addEventListener?.("change", updateViewport);
     return () => mediaQuery.removeEventListener?.("change", updateViewport);
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    fetchHomepageBlogs()
+      .then((response) => {
+        if (!isMounted) return;
+        const rows = Array.isArray(response.data) ? response.data : [];
+        setHomepageBlogs(rows.map(normalizeHomepageBlog).filter((blog) => blog.slug && blog.title));
+      })
+      .catch(() => {
+        if (isMounted) setHomepageBlogs([]);
+      });
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -417,12 +475,12 @@ export default function Home({ context }) {
                   event.currentTarget.play?.().catch?.(() => {});
                 }}
               />
-            ) : (currentBanner.desktopImage || currentBanner.mobileImage) ? (
+            ) : (currentDesktopImageUrl || currentMobileImageUrl) ? (
               <picture>
-                <source media="(max-width: 767px)" srcSet={currentBanner.mobileImage || currentBanner.desktopImage} />
+                <source media="(max-width: 767px)" srcSet={currentMobileImageUrl || currentDesktopImageUrl} />
                 <img
                   className="hero-banner-image"
-                  src={currentBanner.desktopImage || currentBanner.mobileImage}
+                  src={currentDesktopImageUrl || currentMobileImageUrl}
                   alt={currentBanner.altText || currentBanner.title || "Avyona featured banner"}
                   fetchPriority="high"
                   onError={() => setFailedBannerMedia((current) => ({ ...current, [currentBanner.id]: true }))}
@@ -510,7 +568,7 @@ export default function Home({ context }) {
             }}
           >
             {homepageOurProducts.map((product) => (
-              <ProductCard key={product.slug} product={product} context={context} actionLabel="View Product" actionMode="link" />
+              <ProductCard key={product.slug} product={product} context={context} actionLabel="View Product" actionMode="link" buttonDisplayType={ourProductsSettings.buttonDisplayType} />
             ))}
           </div>
         </section>
@@ -550,7 +608,7 @@ export default function Home({ context }) {
             }}
           >
             {homepageBestSellerProducts.map((product) => (
-              <ProductCard key={product.slug} product={product} context={context} eyebrow="Best Seller / Trending" actionLabel="View Product" actionMode="link" />
+              <ProductCard key={product.slug} product={product} context={context} eyebrow="Best Seller / Trending" actionLabel="View Product" actionMode="link" buttonDisplayType={bestSellerProductsSettings.buttonDisplayType} />
             ))}
           </div>
         </section>
@@ -612,27 +670,45 @@ export default function Home({ context }) {
             }}
           >
             {homepageNewArrivalProducts.map((product) => (
-              <ProductCard key={product.slug} product={product} context={context} eyebrow="New Arrival" actionLabel="View Product" actionMode="link" />
+              <ProductCard key={product.slug} product={product} context={context} eyebrow="New Arrival" actionLabel="View Product" actionMode="link" buttonDisplayType={newArrivalProductsSettings.buttonDisplayType} />
             ))}
           </div>
         </section>
       ) : null}
 
-      <section className="section-block blog-section" style={{ order: 70 }}>
-        <div className="section-heading"><div><p className="eyebrow">Latest from Avyona Blog</p><h2>Buying guides and electronics insights that support discovery</h2></div></div>
-        <div className="blog-grid">
-          {blogEntries.map((entry) => (
-            <article key={entry.title} className="blog-card">
-              <Link className="blog-card-link" to={`/blog/${entry.slug}`}>
-                {entry.image ? <div className="blog-art"><img src={entry.image} alt={entry.title} loading="lazy" decoding="async" /></div> : null}
+      {blogPostsSettings.enabled && homepageBlogs.length ? (
+      <section className="section-block blog-section" style={{ order: blogPostsSettings.sortOrder }}>
+        <div className="section-heading section-heading-centered blog-section-heading">
+          <div>
+            <p className="eyebrow">{blogPostsSettings.title || "Blog"}</p>
+            {blogPostsSettings.subtitle ? <p>{blogPostsSettings.subtitle}</p> : null}
+          </div>
+        </div>
+        <div
+          className="blog-grid homepage-dynamic-grid"
+          style={{
+            "--homepage-cards-per-row": blogPostsSettings.cardsPerRow,
+            "--homepage-tablet-cards-per-row": blogPostsSettings.tabletCardsPerRow,
+            "--homepage-mobile-cards-per-row": blogPostsSettings.mobileCardsPerRow
+          }}
+        >
+          {homepageBlogs.map((entry) => (
+            <article key={entry.id} className="blog-card">
+              <Link className="blog-card-link" to={`/blogs/${entry.slug}`}>
+                {entry.image ? <div className="blog-art"><img src={resolveStorefrontMediaUrl(entry.image)} alt={entry.title} loading="lazy" decoding="async" /></div> : null}
+                <div className="blog-card-meta">
+                  {entry.tag ? <span>{entry.tag}</span> : null}
+                  {entry.publishedDate ? <time dateTime={entry.publishedDateIso}>{entry.publishedDate}</time> : null}
+                </div>
                 <h3>{entry.title}</h3>
-                <p>{entry.body}</p>
+                <p>{entry.excerpt || entry.subtitle}</p>
                 <span className="blog-read-link">Read More</span>
               </Link>
             </article>
           ))}
         </div>
       </section>
+      ) : null}
 
       {featuredBrandsSettings.enabled ? (
       <section className="section-block brand-section" id="brands" style={{ order: featuredBrandsSettings.sortOrder }}>

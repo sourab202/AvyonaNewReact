@@ -1,14 +1,25 @@
 import React from "react";
 import { Link } from "react-router-dom";
+import { resolveMediaUrl } from "../../utils/media";
 import { buildProductPath, formatCurrency } from "../../utils/storefront";
 
-function ProductCard({ product, context, eyebrow, actionLabel = "Add to Cart", actionMode = "cart", onProductClick }) {
+const PRODUCT_BUTTON_DISPLAY_TYPES = new Set(["view_product", "add_to_cart", "both", "none"]);
+
+function normalizeButtonDisplayType(value, actionMode) {
+  if (PRODUCT_BUTTON_DISPLAY_TYPES.has(value)) return value;
+  return actionMode === "link" ? "view_product" : "add_to_cart";
+}
+
+function ProductCard({ product, context, eyebrow, actionLabel = "Add to Cart", actionMode = "cart", buttonDisplayType, onProductClick }) {
   const firstVariant = product.variants?.[0];
   const ratingValue = Number(product.rating || 0);
   const ratingPercent = `${Math.max(0, Math.min(100, (ratingValue / 5) * 100))}%`;
   const productPath = buildProductPath(product, firstVariant);
-  const displayImage = firstVariant?.image || product.image || "";
+  const displayImage = resolveMediaUrl(firstVariant?.image || product.image || "");
   const hasImage = Boolean(String(displayImage || "").trim());
+  const resolvedButtonDisplayType = normalizeButtonDisplayType(buttonDisplayType, actionMode);
+  const showViewProduct = resolvedButtonDisplayType === "view_product" || resolvedButtonDisplayType === "both";
+  const showAddToCart = resolvedButtonDisplayType === "add_to_cart" || resolvedButtonDisplayType === "both";
 
   return (
     <article className={`product-card ${hasImage ? "has-product-image" : "has-no-product-image"}`}>
@@ -36,11 +47,20 @@ function ProductCard({ product, context, eyebrow, actionLabel = "Add to Cart", a
             <span className="card-rating-value">{ratingValue.toFixed(1)}</span>
           </span>
         </div>
-        {actionMode === "link" ? (
-          <Link className="add-to-cart" to={productPath} onClick={() => onProductClick?.(product)}>{actionLabel}</Link>
-        ) : (
-          <button className="add-to-cart" type="button" onClick={(event) => context.addToCart(product, firstVariant, 1, event.currentTarget)}>{actionLabel}</button>
-        )}
+        {showViewProduct || showAddToCart ? (
+          <div className={`product-card-actions ${showViewProduct && showAddToCart ? "has-two-actions" : ""}`}>
+            {showViewProduct ? (
+              <Link className="add-to-cart product-card-view-button" to={productPath} onClick={() => onProductClick?.(product)}>
+                {actionMode === "link" ? actionLabel : "View Product"}
+              </Link>
+            ) : null}
+            {showAddToCart ? (
+              <button className="add-to-cart" type="button" onClick={(event) => context.addToCart(product, firstVariant, 1, event.currentTarget)}>
+                Add to Cart
+              </button>
+            ) : null}
+          </div>
+        ) : null}
       </div>
     </article>
   );

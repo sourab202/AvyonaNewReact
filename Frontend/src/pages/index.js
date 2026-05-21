@@ -1,4 +1,5 @@
 export { default as BlogPage } from "./BlogPage";
+export { default as BlogsPage } from "./BlogsPage";
 export { default as AccountPage } from "./AccountPage";
 export { default as CheckoutPage } from "./CheckoutPage";
 export { default as CollectionPage } from "./CollectionPage";

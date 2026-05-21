@@ -1,5 +1,6 @@
 import React from "react";
 import { Link } from "react-router-dom";
+import { resolveMediaUrl } from "../utils/media";
 import { buildProductPath, formatCurrency, getProductVariantByKey } from "../utils/storefront";
 
 function resolveWishlistProduct(item, productCatalog = []) {
@@ -45,7 +46,7 @@ export default function WishlistPage({ context }) {
             return (
               <article key={`${item.slug}:${item.variantLabel || ""}`} className="wishlist-card">
                 <Link className="wishlist-card-media" to={productPath}>
-                  <img src={item.image} alt={item.name} />
+                  <img src={resolveMediaUrl(item.image)} alt={item.name} />
                 </Link>
                 <div className="wishlist-card-copy">
                   <p className="product-topline">{item.category}</p>

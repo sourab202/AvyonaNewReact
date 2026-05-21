@@ -65,6 +65,75 @@ export const DEFAULT_APP_SETTINGS = {
     passwordRules: "Strong password policy required",
     sessionTimeout: "30 minutes of inactivity"
   },
+  footer: {
+    branding: {
+      footerLogo: "",
+      backgroundWatermarkImage: "",
+      tagline: "Style that moves with you",
+      description: "Curated premium electronic products from trusted domestic and global imported brands.",
+      copyrightText: "Copyright 2026 Avyona. All rights reserved."
+    },
+    quickLinks: [
+      { id: "quick-home", label: "Home", url: "/", sortOrder: 1, status: "active" },
+      { id: "quick-about", label: "About", url: "/about", sortOrder: 2, status: "active" },
+      { id: "quick-products", label: "Products", url: "/collections", sortOrder: 3, status: "active" },
+      { id: "quick-photo-frame", label: "Photo Frame", url: "/category/digital-photo-frames", sortOrder: 4, status: "active" },
+      { id: "quick-audio", label: "Audio", url: "/category/personal-audio", sortOrder: 5, status: "active" },
+      { id: "quick-camera", label: "Camera", url: "/category/digital-camera", sortOrder: 6, status: "active" },
+      { id: "quick-reading-light", label: "Reading Light", url: "/category/reading-light", sortOrder: 7, status: "active" },
+      { id: "quick-contact-us", label: "Contact Us", url: "/contact-us", sortOrder: 8, status: "active" }
+    ],
+    faqLinks: [
+      { id: "faq-orders", questionText: "How do I track my order?", answer: "Use the Track Order page with your order number to view the latest order status.", url: "/track-order", sortOrder: 1, status: "active" },
+      { id: "faq-shipping", questionText: "What are the shipping timelines?", answer: "Most eligible orders are dispatched within 24 to 48 hours and delivered in 3 to 5 business days.", url: "/checkout", sortOrder: 2, status: "active" },
+      { id: "faq-returns", questionText: "How do returns work?", answer: "Return and exchange requests are reviewed by support based on the product condition and applicable policy.", url: "/checkout", sortOrder: 3, status: "active" },
+      { id: "faq-support", questionText: "How can I contact support?", answer: "Email or call our support team during working hours and we will help with product or order questions.", url: "/contact-us", sortOrder: 4, status: "active" }
+    ],
+    support: {
+      sectionTitle: "Support",
+      emailLabel: "Email",
+      supportEmail: "support@avyona.com",
+      emailHelpText: "We usually respond within one business day.",
+      phoneLabel: "Phone",
+      supportPhone: "+91 98765 43210",
+      phoneHelpText: "Call us for order and product support.",
+      workingHours: "Monday to Saturday, 10:00 AM to 7:00 PM"
+    },
+    newsletter: {
+      enabled: true,
+      title: "Stay Updated",
+      emailPlaceholder: "Enter your email",
+      buttonText: "Subscribe",
+      description: "Get offers, product launches, and helpful buying guides from Avyona.",
+      successMessage: "Thank you for subscribing."
+    },
+    socialLinks: [
+      { id: "social-facebook", name: "Facebook", url: "https://facebook.com", icon: "", sortOrder: 1, status: "active" },
+      { id: "social-instagram", name: "Instagram", url: "https://instagram.com", icon: "", sortOrder: 2, status: "active" },
+      { id: "social-youtube", name: "YouTube", url: "https://youtube.com", icon: "", sortOrder: 3, status: "active" }
+    ],
+    paymentIcons: [
+      { id: "payment-visa", name: "Visa", icon: "", sortOrder: 1, status: "active" },
+      { id: "payment-mastercard", name: "Mastercard", icon: "", sortOrder: 2, status: "active" },
+      { id: "payment-upi", name: "UPI", icon: "", sortOrder: 3, status: "active" },
+      { id: "payment-cod", name: "Cash on Delivery", icon: "", sortOrder: 4, status: "active" }
+    ],
+    policyLinks: [
+      { id: "policy-terms", label: "Terms & Conditions", url: "/terms-and-conditions", sortOrder: 1, status: "active" },
+      { id: "policy-privacy", label: "Privacy Policy", url: "/privacy-policy", sortOrder: 2, status: "active" },
+      { id: "policy-refund", label: "Refund Policy", url: "/refund-policy", sortOrder: 3, status: "active" },
+      { id: "policy-shipping", label: "Shipping Policy", url: "/shipping-policy", sortOrder: 4, status: "active" },
+      { id: "policy-warranty", label: "Warranty Policy", url: "/warranty-policy", sortOrder: 5, status: "active" }
+    ],
+    design: {
+      backgroundColor: "#0f172a",
+      textColor: "#f8fafc",
+      accentColor: "#5db467",
+      linkColor: "#ffffff",
+      layoutStyle: "columns",
+      customCss: ""
+    }
+  },
   thankYouPage: {
     successTitle: "Thank you for your order",
     successSubtitle: "Your order has been placed successfully.",
@@ -170,6 +239,7 @@ export const DEFAULT_APP_SETTINGS = {
       subtitle: "",
       cardsPerRow: 4,
       mobileCardsPerRow: 2,
+      buttonDisplayType: "both",
       sortOrder: 20
     },
     bestSellerProductsSettings: {
@@ -178,6 +248,7 @@ export const DEFAULT_APP_SETTINGS = {
       subtitle: "",
       cardsPerRow: 4,
       mobileCardsPerRow: 2,
+      buttonDisplayType: "both",
       sortOrder: 40
     },
     newArrivalProductsSettings: {
@@ -186,6 +257,7 @@ export const DEFAULT_APP_SETTINGS = {
       subtitle: "",
       cardsPerRow: 3,
       mobileCardsPerRow: 2,
+      buttonDisplayType: "both",
       sortOrder: 60
     },
     featuredBrandsSettings: {
@@ -203,6 +275,15 @@ export const DEFAULT_APP_SETTINGS = {
       cardsPerRow: 1,
       mobileCardsPerRow: 1,
       sortOrder: 90
+    },
+    blogPostsSettings: {
+      enabled: true,
+      title: "Blog",
+      subtitle: "Buying guides and electronics insights that support discovery",
+      cardsPerRow: 3,
+      tabletCardsPerRow: 2,
+      mobileCardsPerRow: 1,
+      sortOrder: 85
     },
     creditPointsSettings: {
       enabled: true,
@@ -506,8 +587,13 @@ export function setSettingValue(settings, path, value) {
 
 function normalizePublicHomepageSectionSettings(value = {}, fallback = {}) {
   const cardsPerRow = Number(value?.cardsPerRow);
+  const tabletCardsPerRow = Number(value?.tabletCardsPerRow);
   const mobileCardsPerRow = Number(value?.mobileCardsPerRow);
   const sortOrder = Number(value?.sortOrder);
+  const shouldIncludeButtonDisplayType = Object.prototype.hasOwnProperty.call(fallback, "buttonDisplayType") || value?.buttonDisplayType !== undefined;
+  const buttonDisplayType = ["view_product", "add_to_cart", "both", "none"].includes(value?.buttonDisplayType)
+    ? value.buttonDisplayType
+    : (fallback.buttonDisplayType || "both");
 
   return {
     ...fallback,
@@ -516,7 +602,9 @@ function normalizePublicHomepageSectionSettings(value = {}, fallback = {}) {
     title: String(value?.title || fallback.title || "").trim(),
     subtitle: String(value?.subtitle || fallback.subtitle || "").trim(),
     cardsPerRow: Number.isInteger(cardsPerRow) ? Math.min(10, Math.max(1, cardsPerRow)) : fallback.cardsPerRow,
+    tabletCardsPerRow: Number.isInteger(tabletCardsPerRow) ? Math.min(6, Math.max(1, tabletCardsPerRow)) : (fallback.tabletCardsPerRow || fallback.cardsPerRow),
     mobileCardsPerRow: Number.isInteger(mobileCardsPerRow) ? Math.min(3, Math.max(1, mobileCardsPerRow)) : fallback.mobileCardsPerRow,
+    ...(shouldIncludeButtonDisplayType ? { buttonDisplayType } : {}),
     sortOrder: Number.isFinite(sortOrder) ? Math.floor(sortOrder) : fallback.sortOrder
   };
 }
@@ -587,6 +675,41 @@ export function getPublicSettings(settings = DEFAULT_APP_SETTINGS) {
       whatsappNotificationsEnabled: settings.notifications.whatsappNotificationsEnabled,
       smsNotificationsEnabled: settings.notifications.smsNotificationsEnabled
     },
+    footer: {
+      ...DEFAULT_APP_SETTINGS.footer,
+      ...(settings.footer || {}),
+      branding: {
+        ...DEFAULT_APP_SETTINGS.footer.branding,
+        ...(settings.footer?.branding || {})
+      },
+      quickLinks: Array.isArray(settings.footer?.quickLinks)
+        ? settings.footer.quickLinks
+        : DEFAULT_APP_SETTINGS.footer.quickLinks,
+      faqLinks: Array.isArray(settings.footer?.faqLinks)
+        ? settings.footer.faqLinks
+        : DEFAULT_APP_SETTINGS.footer.faqLinks,
+      support: {
+        ...DEFAULT_APP_SETTINGS.footer.support,
+        ...(settings.footer?.support || {})
+      },
+      newsletter: {
+        ...DEFAULT_APP_SETTINGS.footer.newsletter,
+        ...(settings.footer?.newsletter || {})
+      },
+      socialLinks: Array.isArray(settings.footer?.socialLinks)
+        ? settings.footer.socialLinks
+        : DEFAULT_APP_SETTINGS.footer.socialLinks,
+      paymentIcons: Array.isArray(settings.footer?.paymentIcons)
+        ? settings.footer.paymentIcons
+        : DEFAULT_APP_SETTINGS.footer.paymentIcons,
+      policyLinks: Array.isArray(settings.footer?.policyLinks)
+        ? settings.footer.policyLinks
+        : DEFAULT_APP_SETTINGS.footer.policyLinks,
+      design: {
+        ...DEFAULT_APP_SETTINGS.footer.design,
+        ...(settings.footer?.design || {})
+      }
+    },
     thankYouPage: {
       ...DEFAULT_APP_SETTINGS.thankYouPage,
       ...(settings.thankYouPage || {})
@@ -612,6 +735,7 @@ export function getPublicSettings(settings = DEFAULT_APP_SETTINGS) {
       newArrivalProductsSettings: normalizePublicHomepageSectionSettings(settings.homepage?.newArrivalProductsSettings, DEFAULT_APP_SETTINGS.homepage.newArrivalProductsSettings),
       featuredBrandsSettings: normalizePublicHomepageSectionSettings(settings.homepage?.featuredBrandsSettings, DEFAULT_APP_SETTINGS.homepage.featuredBrandsSettings),
       newsletterSettings: normalizePublicHomepageSectionSettings(settings.homepage?.newsletterSettings, DEFAULT_APP_SETTINGS.homepage.newsletterSettings),
+      blogPostsSettings: normalizePublicHomepageSectionSettings(settings.homepage?.blogPostsSettings, DEFAULT_APP_SETTINGS.homepage.blogPostsSettings),
       creditPointsSettings: normalizePublicHomepageSectionSettings(settings.homepage?.creditPointsSettings, DEFAULT_APP_SETTINGS.homepage.creditPointsSettings),
       browseCategoryCardCount: Number.isInteger(Number(settings.homepage?.browseCategoryCardCount))
         ? Math.min(10, Math.max(1, Number(settings.homepage.browseCategoryCardCount)))

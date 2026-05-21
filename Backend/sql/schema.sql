@@ -1049,6 +1049,45 @@ CREATE TABLE IF NOT EXISTS cms_banners (
   CONSTRAINT fk_cms_banners_section FOREIGN KEY (section_id) REFERENCES cms_sections(id) ON DELETE SET NULL
 );
 
+CREATE TABLE IF NOT EXISTS blog_tags (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(120) NOT NULL,
+  slug VARCHAR(160) NOT NULL UNIQUE,
+  status ENUM('active', 'inactive') NOT NULL DEFAULT 'active',
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_blog_tags_status (status)
+);
+
+CREATE TABLE IF NOT EXISTS blogs (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  title VARCHAR(220) NOT NULL,
+  slug VARCHAR(220) NOT NULL UNIQUE,
+  subtitle VARCHAR(255) NULL,
+  excerpt TEXT NULL,
+  content LONGTEXT NULL,
+  featured_image_url VARCHAR(500) NULL,
+  author_name VARCHAR(160) NULL,
+  tag_id BIGINT UNSIGNED NULL,
+  status ENUM('draft', 'active', 'inactive') NOT NULL DEFAULT 'draft',
+  show_on_homepage TINYINT(1) NOT NULL DEFAULT 0,
+  homepage_sort_order INT NOT NULL DEFAULT 0,
+  published_at DATETIME NULL,
+  meta_title VARCHAR(180) NULL,
+  meta_description TEXT NULL,
+  meta_keywords TEXT NULL,
+  canonical_url VARCHAR(500) NULL,
+  og_image_url VARCHAR(500) NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  deleted_at DATETIME NULL,
+  INDEX idx_blogs_tag (tag_id),
+  INDEX idx_blogs_status_published (status, published_at),
+  INDEX idx_blogs_homepage (show_on_homepage, homepage_sort_order),
+  INDEX idx_blogs_deleted (deleted_at),
+  CONSTRAINT fk_blogs_tag FOREIGN KEY (tag_id) REFERENCES blog_tags(id) ON DELETE SET NULL
+);
+
 CREATE TABLE IF NOT EXISTS blog_posts (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
   title VARCHAR(220) NOT NULL,
@@ -1172,6 +1211,33 @@ CREATE TABLE IF NOT EXISTS app_settings (
   setting_group VARCHAR(80) NOT NULL DEFAULT 'general',
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   INDEX idx_app_settings_group (setting_group)
+);
+
+CREATE TABLE IF NOT EXISTS footer_settings (
+  setting_key VARCHAR(120) NOT NULL PRIMARY KEY,
+  setting_value TEXT NULL,
+  setting_group VARCHAR(80) NOT NULL DEFAULT 'branding',
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_footer_settings_group (setting_group)
+);
+
+CREATE TABLE IF NOT EXISTS footer_items (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  item_uid VARCHAR(120) NOT NULL,
+  item_type ENUM('quick_link', 'faq', 'policy', 'social', 'payment') NOT NULL,
+  label VARCHAR(180) NULL,
+  question_text VARCHAR(255) NULL,
+  name VARCHAR(180) NULL,
+  url VARCHAR(500) NULL,
+  icon_url VARCHAR(500) NULL,
+  sort_order INT NOT NULL DEFAULT 0,
+  status ENUM('active', 'inactive') NOT NULL DEFAULT 'active',
+  metadata_json JSON NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_footer_items_uid_type (item_uid, item_type),
+  INDEX idx_footer_items_type_status_sort (item_type, status, sort_order),
+  INDEX idx_footer_items_type_sort (item_type, sort_order)
 );
 
 CREATE INDEX idx_categories_parent ON categories(parent_id);

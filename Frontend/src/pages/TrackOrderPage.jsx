@@ -1,4 +1,5 @@
 import React from "react";
+import { resolveMediaUrl } from "../utils/media";
 import { formatCurrency } from "../utils/storefront";
 import { trackStorefrontOrder } from "../api/orderApi";
 import trackOrders from "../data/track-orders";
@@ -235,7 +236,7 @@ export default function TrackOrderPage({ context }) {
               <div className="track-order-items">
                 {result.orderedItems.map((item) => (
                   <div key={item.id} className="track-order-item">
-                    <img src={item.image} alt={item.name} />
+                    <img src={resolveMediaUrl(item.image)} alt={item.name} />
                     <div>
                       <strong>{item.name}</strong>
                       <p>{`Qty: ${item.quantity}`}</p>

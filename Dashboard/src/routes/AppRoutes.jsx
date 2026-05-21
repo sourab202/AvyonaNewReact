@@ -12,6 +12,7 @@ const Coupons = React.lazy(() => import("../pages/coupons/Coupons"));
 const DashboardHome = React.lazy(() => import("../pages/dashboard/DashboardHome"));
 const CreditPoints = React.lazy(() => import("../pages/credit-points/CreditPoints"));
 const Homepage = React.lazy(() => import("../pages/homepage/Homepage"));
+const BlogPosts = React.lazy(() => import("../pages/homepage/BlogPosts"));
 const HomepageConfigurePage = React.lazy(() => import("../pages/homepage/HomepageConfigurePage"));
 const ThankYouPageSettings = React.lazy(() => import("../pages/homepage/ThankYouPageSettings"));
 const InvoiceDesigner = React.lazy(() => import("../pages/homepage/InvoiceDesigner"));
@@ -23,6 +24,8 @@ const InventoryManager = React.lazy(() => import("../pages/products/InventoryMan
 const Products = React.lazy(() => import("../pages/products/Products"));
 const Reviews = React.lazy(() => import("../pages/reviews/Reviews"));
 const Settings = React.lazy(() => import("../pages/settings/Settings"));
+const BlankSettingsPage = React.lazy(() => import("../pages/settings/BlankSettingsPage"));
+const FooterSettings = React.lazy(() => import("../pages/settings/FooterSettings"));
 const Variations = React.lazy(() => import("../pages/variations/Variations"));
 const WebsiteImages = React.lazy(() => import("../pages/images/WebsiteImages"));
 
@@ -67,6 +70,7 @@ export default function AppRoutes({ context, allProducts }) {
           <Route path="homepage/new-arrivals" element={<HomepageConfigurePage sectionKey="new-arrivals" />} />
           <Route path="homepage/featured-brands" element={<HomepageConfigurePage sectionKey="featured-brands" />} />
           <Route path="homepage/newsletter" element={<HomepageConfigurePage sectionKey="newsletter" />} />
+          <Route path="homepage/blog-posts" element={<BlogPosts />} />
           <Route path="homepage/thank-you-page" element={<ThankYouPageSettings />} />
           <Route path="homepage/thank-you-page/invoice-designer" element={<InvoiceDesigner />} />
           <Route path="homepage/reviews" element={<Navigate to="/dashboard/reviews" replace />} />
@@ -87,8 +91,13 @@ export default function AppRoutes({ context, allProducts }) {
           <Route path="contact-enquiries" element={<ContactEnquiries />} />
           <Route path="reviews" element={<Reviews />} />
           <Route path="reviews/new" element={<Reviews />} />
-          <Route path="settings" element={<Settings />} />
-          <Route path="settings/manage-access" element={<Navigate to="/dashboard/settings" replace />} />
+          <Route path="settings" element={<Navigate to="/dashboard/settings/main" replace />} />
+          <Route path="settings/main" element={<Settings />} />
+          <Route path="settings/header" element={<BlankSettingsPage />} />
+          <Route path="settings/footer" element={<FooterSettings />} />
+          <Route path="settings/contact-page" element={<BlankSettingsPage />} />
+          <Route path="settings/theme" element={<BlankSettingsPage />} />
+          <Route path="settings/manage-access" element={<Settings initialSection="manage-access" />} />
         </Route>
       </Routes>
     </React.Suspense>

@@ -128,11 +128,25 @@ body {
 }
 
 .dashboard-nav-sublink {
+  display: flex;
+  align-items: center;
   margin-left: 1.15rem;
   min-height: clamp(2.35rem, 2.6vw, 2.7rem);
+  padding: 0 clamp(0.75rem, 0.9vw, 1rem);
   border-radius: 14px;
   font-size: 0.84rem;
   background: rgba(255, 255, 255, 0.03);
+  color: rgba(248, 251, 248, 0.72);
+  font-weight: 700;
+  text-decoration: none;
+  transition: background-color 180ms ease, transform 180ms ease, color 180ms ease;
+}
+
+.dashboard-nav-sublink:hover,
+.dashboard-nav-sublink.is-active {
+  background: rgba(93, 180, 103, 0.15);
+  color: #ffffff;
+  transform: translateX(2px);
 }
 
 .dashboard-nav-sublink .dashboard-nav-icon {

@@ -56,6 +56,7 @@ function App() {
       <Route path="/homepage/new-arrivals" element={<Navigate to="/dashboard/homepage/new-arrivals" replace />} />
       <Route path="/homepage/featured-brands" element={<Navigate to="/dashboard/homepage/featured-brands" replace />} />
       <Route path="/homepage/newsletter" element={<Navigate to="/dashboard/homepage/newsletter" replace />} />
+      <Route path="/homepage/blog-posts" element={<Navigate to="/dashboard/homepage/blog-posts" replace />} />
       <Route path="/homepage/credit-points" element={<Navigate to="/dashboard/homepage/credit-points" replace />} />
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
       <Route path="*" element={<Navigate to="/dashboard" replace />} />

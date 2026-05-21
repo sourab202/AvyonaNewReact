@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from "react";
 import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { deleteCustomerAddress, fetchCustomerAddresses, fetchCustomerReferral, fetchCustomerTransactions, fetchCustomerWallet, fetchMyReviews, saveCustomerAddress, updateCustomerProfile } from "../api/customerApi";
+import { resolveMediaUrl } from "../utils/media";
 import { compressImageFile, formatCurrency, getMergedProfile } from "../utils/storefront";
 
 function ProfileProductImage({ src, alt }) {
-  return src ? <img src={src} alt={alt} /> : <span className="profile-no-image">No image</span>;
+  return src ? <img src={resolveMediaUrl(src)} alt={alt} /> : <span className="profile-no-image">No image</span>;
 }
 
 const TX_LABELS = {

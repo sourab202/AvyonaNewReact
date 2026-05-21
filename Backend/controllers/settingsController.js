@@ -4,8 +4,11 @@ import { DEFAULT_APP_SETTINGS, getPublicSettings, mergeSettings } from "../../sh
 
 const settingsTableName = "app_settings";
 const legacySettingsTableName = "app_settings_legacy_json";
+const footerSettingsTableName = "footer_settings";
+const footerItemsTableName = "footer_items";
 const faviconMaxSizeBytes = 1 * 1024 * 1024;
 let appSettingsTableReady = false;
+let footerSettingsTablesReady = false;
 
 const generalSettingKeyByPath = {
   "general.storeName": "store_name",
@@ -69,6 +72,59 @@ function serializeSettingValue(value) {
   return String(value);
 }
 
+function flattenFooterSettings(footer = {}) {
+  return ["branding", "support", "newsletter", "design"].flatMap((group) => (
+    Object.entries(footer[group] || {}).map(([key, value]) => ({
+      key,
+      group,
+      value
+    }))
+  ));
+}
+
+function normalizeFooterItemRows(footer = {}) {
+  const itemGroups = [
+    { key: "quickLinks", type: "quick_link" },
+    { key: "faqLinks", type: "faq" },
+    { key: "policyLinks", type: "policy" },
+    { key: "socialLinks", type: "social" },
+    { key: "paymentIcons", type: "payment" }
+  ];
+
+  return itemGroups.flatMap(({ key, type }) => (
+    Array.isArray(footer[key]) ? footer[key] : []
+  ).map((item, index) => ({
+    itemUid: String(item.id || `${type}-${index + 1}`),
+    itemType: type,
+    label: item.label ?? null,
+    questionText: item.questionText ?? null,
+    name: item.name ?? null,
+    url: item.url ?? null,
+    iconUrl: item.icon ?? null,
+    sortOrder: Number.isFinite(Number(item.sortOrder)) ? Math.floor(Number(item.sortOrder)) : index + 1,
+    status: item.status === "inactive" ? "inactive" : "active",
+    metadataJson: type === "faq" ? JSON.stringify({ answer: String(item.answer || "").trim() }) : null
+  })));
+}
+
+function parseFooterMetadata(value) {
+  if (!value) return {};
+  if (typeof value === "object") return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return {};
+  }
+}
+
+function getDefaultFooterFaqAnswer(row = {}) {
+  const defaults = DEFAULT_APP_SETTINGS.footer?.faqLinks || [];
+  const match = defaults.find((link) => (
+    link.id === row.itemUid || link.questionText === row.questionText
+  ));
+  return match?.answer || "";
+}
+
 function parseSettingValue(rawValue, fallbackValue) {
   if (Array.isArray(fallbackValue) || (fallbackValue && typeof fallbackValue === "object")) {
     try {
@@ -108,6 +164,45 @@ async function createKeyValueSettingsTable() {
       INDEX idx_app_settings_group (setting_group)
     )`
   );
+}
+
+async function createFooterSettingsTables() {
+  await query(
+    `CREATE TABLE IF NOT EXISTS ${footerSettingsTableName} (
+      setting_key VARCHAR(120) NOT NULL PRIMARY KEY,
+      setting_value TEXT NULL,
+      setting_group VARCHAR(80) NOT NULL DEFAULT 'branding',
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_footer_settings_group (setting_group)
+    )`
+  );
+
+  await query(
+    `CREATE TABLE IF NOT EXISTS ${footerItemsTableName} (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      item_uid VARCHAR(120) NOT NULL,
+      item_type ENUM('quick_link', 'faq', 'policy', 'social', 'payment') NOT NULL,
+      label VARCHAR(180) NULL,
+      question_text VARCHAR(255) NULL,
+      name VARCHAR(180) NULL,
+      url VARCHAR(500) NULL,
+      icon_url VARCHAR(500) NULL,
+      sort_order INT NOT NULL DEFAULT 0,
+      status ENUM('active', 'inactive') NOT NULL DEFAULT 'active',
+      metadata_json JSON NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY uq_footer_items_uid_type (item_uid, item_type),
+      INDEX idx_footer_items_type_status_sort (item_type, status, sort_order),
+      INDEX idx_footer_items_type_sort (item_type, sort_order)
+    )`
+  );
+}
+
+async function ensureFooterSettingsTables() {
+  if (footerSettingsTablesReady) return;
+  await createFooterSettingsTables();
+  footerSettingsTablesReady = true;
 }
 
 async function ensureAppSettingsTable() {
@@ -224,6 +319,7 @@ const homepageSectionSettingsKeyBySection = {
   "new-arrivals": "newArrivalProductsSettings",
   "featured-brands": "featuredBrandsSettings",
   newsletter: "newsletterSettings",
+  "blog-posts": "blogPostsSettings",
   "credit-points": "creditPointsSettings"
 };
 
@@ -236,12 +332,20 @@ function getHomepageSectionSettingsKey(sectionKey) {
 }
 
 function normalizeHomepageSectionSettings(payload = {}, fallback = DEFAULT_APP_SETTINGS.homepage.ourProductsSettings) {
+  const allowedButtonDisplayTypes = new Set(["view_product", "add_to_cart", "both", "none"]);
+  const shouldIncludeButtonDisplayType = Object.prototype.hasOwnProperty.call(fallback, "buttonDisplayType") || payload.buttonDisplayType !== undefined;
+  const buttonDisplayType = allowedButtonDisplayTypes.has(payload.buttonDisplayType)
+    ? payload.buttonDisplayType
+    : (fallback.buttonDisplayType || "both");
+
   return {
     enabled: payload.enabled !== false,
     title: String(payload.title || fallback.title || "").trim(),
     subtitle: String(payload.subtitle || "").trim(),
     cardsPerRow: clampInteger(payload.cardsPerRow, 1, 10, "cardsPerRow"),
+    tabletCardsPerRow: clampInteger(payload.tabletCardsPerRow ?? fallback.tabletCardsPerRow ?? payload.cardsPerRow, 1, 6, "tabletCardsPerRow"),
     mobileCardsPerRow: clampInteger(payload.mobileCardsPerRow, 1, 3, "mobileCardsPerRow"),
+    ...(shouldIncludeButtonDisplayType ? { buttonDisplayType } : {}),
     sortOrder: Number.isFinite(Number(payload.sortOrder)) ? Math.floor(Number(payload.sortOrder)) : fallback.sortOrder
   };
 }
@@ -264,6 +368,14 @@ async function readStoredSettings() {
     setNestedValue(settings, path, parseSettingValue(row.settingValue, fallbackValue));
   });
 
+  const footerSettings = await readStoredFooterSettings();
+  if (footerSettings) {
+    settings.footer = {
+      ...(settings.footer || {}),
+      ...footerSettings
+    };
+  }
+
   return settings;
 }
 
@@ -280,6 +392,133 @@ async function writeStoredSettings(settings) {
        setting_group = VALUES(setting_group)`,
     [entry.key, serializeSettingValue(entry.value), entry.group]
   )));
+
+  await writeStoredFooterSettings(settings.footer || DEFAULT_APP_SETTINGS.footer);
+}
+
+async function readStoredFooterSettings() {
+  await ensureFooterSettingsTables();
+
+  const [settingsRows, itemRows] = await Promise.all([
+    query(
+      `SELECT setting_key AS settingKey, setting_value AS settingValue, setting_group AS settingGroup
+       FROM ${footerSettingsTableName}`
+    ),
+    query(
+      `SELECT
+         item_uid AS itemUid,
+         item_type AS itemType,
+         label,
+         question_text AS questionText,
+         name,
+         url,
+         icon_url AS iconUrl,
+         sort_order AS sortOrder,
+         status,
+         metadata_json AS metadataJson
+       FROM ${footerItemsTableName}
+       ORDER BY item_type ASC, sort_order ASC, id ASC`
+    )
+  ]);
+
+  if (!settingsRows.length && !itemRows.length) {
+    return null;
+  }
+
+  const footer = {};
+  settingsRows.forEach((row) => {
+    const group = row.settingGroup || "branding";
+    const fallbackValue = DEFAULT_APP_SETTINGS.footer?.[group]?.[row.settingKey];
+    footer[group] = {
+      ...(footer[group] || {}),
+      [row.settingKey]: parseSettingValue(row.settingValue, fallbackValue)
+    };
+  });
+
+  const quickLinks = [];
+  const faqLinks = [];
+  const policyLinks = [];
+  const socialLinks = [];
+  const paymentIcons = [];
+
+  itemRows.forEach((row) => {
+    const base = {
+      id: row.itemUid,
+      sortOrder: Number(row.sortOrder || 0),
+      status: row.status === "inactive" ? "inactive" : "active"
+    };
+
+    if (row.itemType === "quick_link") {
+      quickLinks.push({ ...base, label: row.label || "", url: row.url || "" });
+    } else if (row.itemType === "faq") {
+      const metadata = parseFooterMetadata(row.metadataJson);
+      faqLinks.push({ ...base, questionText: row.questionText || "", answer: metadata.answer || getDefaultFooterFaqAnswer(row), url: row.url || "" });
+    } else if (row.itemType === "policy") {
+      policyLinks.push({ ...base, label: row.label || "", url: row.url || "" });
+    } else if (row.itemType === "social") {
+      socialLinks.push({ ...base, name: row.name || "", url: row.url || "", icon: row.iconUrl || "" });
+    } else if (row.itemType === "payment") {
+      paymentIcons.push({ ...base, name: row.name || "", icon: row.iconUrl || "" });
+    }
+  });
+
+  if (quickLinks.length) footer.quickLinks = quickLinks;
+  if (faqLinks.length) footer.faqLinks = faqLinks;
+  if (policyLinks.length) footer.policyLinks = policyLinks;
+  if (socialLinks.length) footer.socialLinks = socialLinks;
+  if (paymentIcons.length) footer.paymentIcons = paymentIcons;
+
+  return footer;
+}
+
+async function writeStoredFooterSettings(footer = DEFAULT_APP_SETTINGS.footer) {
+  await ensureFooterSettingsTables();
+
+  const scalarEntries = flattenFooterSettings(footer);
+  const itemEntries = normalizeFooterItemRows(footer);
+
+  await query(`DELETE FROM ${footerSettingsTableName}`);
+  await query(`DELETE FROM ${footerItemsTableName}`);
+
+  if (scalarEntries.length) {
+    await Promise.all(scalarEntries.map((entry) => query(
+      `INSERT INTO ${footerSettingsTableName} (setting_key, setting_value, setting_group)
+       VALUES (?, ?, ?)
+       ON DUPLICATE KEY UPDATE
+         setting_value = VALUES(setting_value),
+         setting_group = VALUES(setting_group)`,
+      [entry.key, serializeSettingValue(entry.value), entry.group]
+    )));
+  }
+
+  if (itemEntries.length) {
+    await Promise.all(itemEntries.map((item) => query(
+      `INSERT INTO ${footerItemsTableName}
+        (item_uid, item_type, label, question_text, name, url, icon_url, sort_order, status, metadata_json)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE
+         label = VALUES(label),
+         question_text = VALUES(question_text),
+         name = VALUES(name),
+         url = VALUES(url),
+         icon_url = VALUES(icon_url),
+         sort_order = VALUES(sort_order),
+         status = VALUES(status),
+         metadata_json = VALUES(metadata_json)`,
+      [
+        item.itemUid,
+        item.itemType,
+        item.label,
+        item.questionText,
+        item.name,
+        item.url,
+        item.iconUrl,
+        item.sortOrder,
+        item.status,
+        item.metadataJson
+      ]
+    )));
+  }
 }
 
 export async function getAdminSettings(_request, response) {
@@ -449,6 +688,7 @@ export async function uploadSettingsAsset(request, response) {
   }
 
   const assetType = String(request.body?.assetType || request.query?.assetType || "").trim().toLowerCase();
+  const uploadFolder = assetType.startsWith("footer-") ? "footer" : "settings";
   if (assetType === "favicon" && request.file.size > faviconMaxSizeBytes) {
     throw new ApiError(400, "Favicon image is too large. Maximum size is 1 MB.");
   }
@@ -456,8 +696,8 @@ export async function uploadSettingsAsset(request, response) {
   response.status(201).json({
     success: true,
     data: {
-      url: `/uploads/settings/${request.file.filename}`
+      url: `/uploads/${uploadFolder}/${request.file.filename}`
     },
-    url: `/uploads/settings/${request.file.filename}`
+    url: `/uploads/${uploadFolder}/${request.file.filename}`
   });
 }

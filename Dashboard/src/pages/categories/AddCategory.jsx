@@ -7,6 +7,7 @@ import {
   updateCategory,
   uploadAdminImage
 } from "../../api/adminApi";
+import { resolveAdminMediaUrl, toStoredUploadUrl } from "../../utils/media";
 
 function createSlug(value) {
   return String(value || "")
@@ -17,10 +18,7 @@ function createSlug(value) {
 }
 
 function getPreviewUrl(url) {
-  if (!url) return "";
-  if (/^(data:|blob:|https?:)/i.test(url)) return url;
-  if (url.startsWith("/uploads/")) return `http://localhost:4000${url}`;
-  return url;
+  return resolveAdminMediaUrl(url);
 }
 
 function normalizeCategoryForm(category = {}) {
@@ -191,7 +189,7 @@ export default function AddCategory() {
     try {
       const response = await uploadAdminImage(file);
       const uploadedUrl = response.data?.data?.url || "";
-      setFormValue(field, uploadedUrl.startsWith("/uploads/") ? `http://localhost:4000${uploadedUrl}` : uploadedUrl);
+      setFormValue(field, toStoredUploadUrl(uploadedUrl));
     } catch (error) {
       setMessageTone("error");
       setStatusMessage(error.response?.data?.message || "Unable to upload image.");

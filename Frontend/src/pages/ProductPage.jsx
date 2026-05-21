@@ -13,6 +13,7 @@ import {
 import { submitCustomerReview as submitCustomerReviewApi, uploadCustomerReviewMedia } from "../api/customerApi";
 import ProductCard from "../components/product/ProductCard";
 import { categoryRouteMap } from "../data/storefront-content";
+import { resolveMediaList, resolveMediaUrl } from "../utils/media";
 import {
   buildProductPath,
   compressImageFile,
@@ -99,7 +100,7 @@ function normalizeBackendProduct(product) {
   const mrp = Number(product.mrp || price || 0);
   const stockQuantity = Number(product.stockQuantity || 0);
   const discount = mrp > price && price > 0 ? Math.round(((mrp - price) / mrp) * 100) : 0;
-  const gallery = Array.isArray(product.galleryUrls) && product.galleryUrls.length ? product.galleryUrls.filter(hasMediaUrl) : [];
+  const gallery = resolveMediaList(product.galleryUrls).filter(hasMediaUrl);
 
   return {
     id: product.id,
@@ -113,7 +114,7 @@ function normalizeBackendProduct(product) {
     price,
     mrp,
     discount,
-    image: gallery[0] || product.imageUrl || "",
+    image: gallery[0] || resolveMediaUrl(product.imageUrl),
     gallery,
     highlights: [product.shortDescription || "New Avyona product"].filter(Boolean),
     description: product.description ? String(product.description).split(/\n+/).filter(Boolean) : [product.shortDescription || "Product details will be updated soon."],
@@ -136,11 +137,7 @@ function normalizeBackendProduct(product) {
 }
 
 function resolveReviewMediaUrl(url) {
-  const value = String(url || "").trim();
-  if (!value || value.startsWith("http") || value.startsWith("data:")) return value;
-  const apiBase = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000/api/v1";
-  const assetBase = apiBase.replace(/\/api\/v1\/?$/, "");
-  return `${assetBase}${value.startsWith("/") ? value : `/${value}`}`;
+  return resolveMediaUrl(url);
 }
 
 function renderStars(rating) {

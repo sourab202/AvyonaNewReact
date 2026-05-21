@@ -4,12 +4,10 @@ import { FaGripVertical } from "react-icons/fa";
 import { deleteCategory, fetchCategories, updateCategory } from "../../api/adminApi";
 import { useAutoRefresh } from "../../hooks/useAutoRefresh";
 import { canAccess } from "../../utils/accessControl";
+import { resolveAdminMediaUrl } from "../../utils/media";
 
 function getPreviewUrl(url) {
-  if (!url) return "";
-  if (/^(data:|blob:|https?:)/i.test(url)) return url;
-  if (url.startsWith("/uploads/")) return `http://localhost:4000${url}`;
-  return url;
+  return resolveAdminMediaUrl(url);
 }
 
 function normalizeRow(category) {

@@ -11,6 +11,7 @@ import {
   uploadCouponBackgroundImage
 } from "../../api/adminApi";
 import { canAccess } from "../../utils/accessControl";
+import { resolveAdminMediaUrl } from "../../utils/media";
 import { getStorefrontBaseUrl } from "../../utils/storefront";
 
 const ALLOWED_OFFER_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
@@ -85,10 +86,7 @@ function getPlacementSummary(coupon) {
 }
 
 function getPreviewUrl(url) {
-  const value = String(url || "").trim();
-  if (!value) return "";
-  if (value.startsWith("/uploads/")) return `http://localhost:4000${value}`;
-  return value;
+  return resolveAdminMediaUrl(url);
 }
 
 function getStatusStyle(status) {

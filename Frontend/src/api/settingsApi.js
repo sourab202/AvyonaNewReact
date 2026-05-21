@@ -20,6 +20,11 @@ export async function fetchPublicSettings() {
   return fetchCachedJson(`${apiBaseUrl}/settings/public`, "Unable to fetch public settings");
 }
 
+export async function fetchPublicFooter() {
+  const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000/api/v1";
+  return fetchCachedJson(`${apiBaseUrl}/footer`, "Unable to fetch footer settings");
+}
+
 export async function fetchGeneralSettings() {
   const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000/api/v1";
   return fetchCachedJson(`${apiBaseUrl}/settings/general`, "Unable to fetch general settings");

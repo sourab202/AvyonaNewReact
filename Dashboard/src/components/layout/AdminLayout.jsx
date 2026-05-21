@@ -71,6 +71,31 @@ const pageMeta = [
     subtitle: "Manage backend access, uploads, and store-level configuration."
   },
   {
+    path: "/dashboard/settings/main",
+    title: "Main Settings",
+    subtitle: "Manage the existing dashboard settings in one place."
+  },
+  {
+    path: "/dashboard/settings/header",
+    title: "Header Settings",
+    subtitle: ""
+  },
+  {
+    path: "/dashboard/settings/footer",
+    title: "Footer Settings",
+    subtitle: ""
+  },
+  {
+    path: "/dashboard/settings/contact-page",
+    title: "Contact Page Settings",
+    subtitle: ""
+  },
+  {
+    path: "/dashboard/settings/theme",
+    title: "Theme Settings",
+    subtitle: ""
+  },
+  {
     path: "/dashboard",
     title: "Dashboard",
     subtitle: "Monitor revenue, orders, customers, and product activity from the admin backend."

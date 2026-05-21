@@ -78,6 +78,11 @@ INSERT INTO permissions (permission_key, module_name, action_name, display_name,
   ('homepage.create', 'homepage', 'create', 'Create Homepage Content', 'Create homepage content blocks.', 0, 1),
   ('homepage.edit', 'homepage', 'edit', 'Edit Homepage', 'Edit homepage content.', 0, 1),
   ('homepage.delete', 'homepage', 'delete', 'Delete Homepage Content', 'Delete homepage content blocks.', 0, 1),
+  ('blogs.view', 'blogs', 'view', 'View Blogs', 'View blog articles and tags.', 0, 1),
+  ('blogs.create', 'blogs', 'create', 'Create Blogs', 'Create blog articles and tags.', 0, 1),
+  ('blogs.edit', 'blogs', 'edit', 'Edit Blogs', 'Edit blog articles, tags, SEO, and homepage placement.', 0, 1),
+  ('blogs.delete', 'blogs', 'delete', 'Delete Blogs', 'Delete blog articles and tags.', 0, 1),
+  ('blogs.publish', 'blogs', 'publish', 'Publish Blogs', 'Activate, inactivate, or publish blog articles.', 1, 1),
   ('reviews.view', 'reviews', 'view', 'View Reviews', 'View product reviews.', 0, 1),
   ('reviews.create', 'reviews', 'create', 'Create Reviews', 'Create admin review records.', 0, 1),
   ('reviews.edit', 'reviews', 'edit', 'Edit Reviews', 'Moderate or update reviews.', 0, 1),
@@ -104,6 +109,18 @@ ON DUPLICATE KEY UPDATE
   is_sensitive = VALUES(is_sensitive),
   is_available = VALUES(is_available);
 
+INSERT INTO blog_tags (name, slug, status) VALUES
+  ('Buying Guide', 'buying-guide', 'active'),
+  ('Product Tips', 'product-tips', 'active'),
+  ('Smart Living', 'smart-living', 'active'),
+  ('Audio Guide', 'audio-guide', 'active'),
+  ('Camera Guide', 'camera-guide', 'active'),
+  ('Home Security', 'home-security', 'active'),
+  ('Gift Ideas', 'gift-ideas', 'active')
+ON DUPLICATE KEY UPDATE
+  name = VALUES(name),
+  status = VALUES(status);
+
 INSERT INTO role_permissions
   (role_id, module_name, can_view, can_create, can_edit, can_delete, can_export, can_approve)
 SELECT r.id, module_name, 1, 1, 1, 1, 1, 1
@@ -120,6 +137,7 @@ JOIN (
   SELECT 'coupons' UNION ALL
   SELECT 'credit_points' UNION ALL
   SELECT 'homepage' UNION ALL
+  SELECT 'blogs' UNION ALL
   SELECT 'reviews' UNION ALL
   SELECT 'settings' UNION ALL
   SELECT 'sensitive_access'
@@ -149,6 +167,7 @@ JOIN (
   SELECT 'admin', 'coupons', 1, 1, 1, 1, 1, 0 UNION ALL
   SELECT 'admin', 'credit_points', 1, 1, 1, 1, 1, 0 UNION ALL
   SELECT 'admin', 'homepage', 1, 1, 1, 1, 0, 0 UNION ALL
+  SELECT 'admin', 'blogs', 1, 1, 1, 1, 0, 1 UNION ALL
   SELECT 'admin', 'reviews', 1, 1, 1, 1, 1, 0 UNION ALL
   SELECT 'admin', 'settings', 1, 0, 1, 0, 0, 0 UNION ALL
   SELECT 'product_manager', 'dashboard', 1, 0, 0, 0, 0, 0 UNION ALL
@@ -157,6 +176,7 @@ JOIN (
   SELECT 'product_manager', 'brands', 1, 1, 1, 1, 1, 0 UNION ALL
   SELECT 'product_manager', 'variations', 1, 1, 1, 1, 1, 0 UNION ALL
   SELECT 'product_manager', 'homepage', 1, 0, 1, 0, 0, 0 UNION ALL
+  SELECT 'product_manager', 'blogs', 1, 0, 0, 0, 0, 0 UNION ALL
   SELECT 'order_manager', 'dashboard', 1, 0, 0, 0, 0, 0 UNION ALL
   SELECT 'order_manager', 'orders', 1, 1, 1, 0, 1, 0 UNION ALL
   SELECT 'order_manager', 'customers', 1, 0, 1, 0, 0, 0 UNION ALL
@@ -165,6 +185,7 @@ JOIN (
   SELECT 'marketing_manager', 'coupons', 1, 1, 1, 1, 1, 0 UNION ALL
   SELECT 'marketing_manager', 'credit_points', 1, 1, 1, 0, 1, 0 UNION ALL
   SELECT 'marketing_manager', 'homepage', 1, 1, 1, 1, 0, 0 UNION ALL
+  SELECT 'marketing_manager', 'blogs', 1, 1, 1, 1, 0, 1 UNION ALL
   SELECT 'marketing_manager', 'reviews', 1, 1, 1, 1, 1, 0 UNION ALL
   SELECT 'support_staff', 'dashboard', 1, 0, 0, 0, 0, 0 UNION ALL
   SELECT 'support_staff', 'orders', 1, 0, 1, 0, 0, 0 UNION ALL
@@ -181,6 +202,7 @@ JOIN (
   SELECT 'viewer', 'coupons', 1, 0, 0, 0, 0, 0 UNION ALL
   SELECT 'viewer', 'credit_points', 1, 0, 0, 0, 0, 0 UNION ALL
   SELECT 'viewer', 'homepage', 1, 0, 0, 0, 0, 0 UNION ALL
+  SELECT 'viewer', 'blogs', 1, 0, 0, 0, 0, 0 UNION ALL
   SELECT 'viewer', 'reviews', 1, 0, 0, 0, 0, 0 UNION ALL
   SELECT 'viewer', 'settings', 1, 0, 0, 0, 0, 0
 ) defaults ON defaults.role_name = r.name
@@ -202,7 +224,7 @@ ON DUPLICATE KEY UPDATE admin_id = VALUES(admin_id);
 INSERT INTO app_settings (setting_key, setting_value, setting_group)
 VALUES
   ('store_name', 'Avyona', 'general'),
-  ('store_logo_url', '/images/optimized/avyona-logo.webp', 'general'),
+  ('store_logo_url', '/uploads/settings/1778912520806-avyona-logo-2.png', 'general'),
   ('favicon_url', '/favicon.ico', 'general'),
   ('brand_tagline', 'Style that moves with you', 'general'),
   ('business_name', 'Avyona', 'general'),
@@ -247,12 +269,12 @@ INSERT INTO categories (
   meta_description,
   meta_keywords
 ) VALUES
-('Personal Audio', 'personal-audio', NULL, 'Headphones, earbuds, and neckbands for daily listening.', '/images/optimized/personal-audio-thumb.webp', '/images/optimized/personal-audio-banner.webp', 'active', 1, 1, 1, 'Personal Audio Collection | Avyona', 'Shop personal audio products including headphones, earbuds, and neckbands.', 'personal audio, headphones, earbuds, neckbands'),
-('Professional Audio', 'professional-audio', NULL, 'Creator and studio-style audio gear.', '/images/optimized/professional-audio-thumb.webp', '/images/optimized/professional-audio-banner.webp', 'active', 1, 1, 2, 'Professional Audio Collection | Avyona', 'Discover microphones, monitors, and creator-focused professional audio gear.', 'professional audio, studio audio, creator gear'),
-('Digital Camera', 'digital-camera', NULL, 'Compact and creator-friendly digital cameras.', '/images/optimized/digital-camera-thumb.webp', '/images/optimized/digital-camera-banner.webp', 'active', 1, 1, 3, 'Digital Camera Collection | Avyona', 'Browse digital cameras for travel, family, and creator use.', 'digital camera, compact camera, creator camera'),
-('Security Camera', 'security-camera', NULL, 'Indoor and outdoor smart camera setups.', '/images/optimized/security-camera-thumb.webp', '/images/optimized/security-camera-banner.webp', 'active', 1, 0, 4, 'Security Camera Collection | Avyona', 'Explore indoor and outdoor security camera collections.', 'security camera, smart camera, surveillance'),
-('Avyona Digital Photo Frames', 'digital-photo-frames', NULL, 'Smart digital frames for gifting and family memories.', '/images/optimized/digital-frame-thumb.webp', '/images/optimized/digital-frame-banner.webp', 'active', 1, 1, 5, 'Digital Photo Frames Collection | Avyona', 'Shop digital photo frames for gifting, family sharing, and home display.', 'digital photo frame, smart frame, gifting frame'),
-('Reading Light', 'reading-light', NULL, 'Portable and bedside reading lights.', '/images/optimized/reading-light-thumb.webp', '/images/optimized/reading-light-banner.webp', 'active', 1, 0, 6, 'Reading Light Collection | Avyona', 'Find clip-on and bedside reading lights for everyday use.', 'reading light, bedside lamp, clip light')
+('Personal Audio', 'personal-audio', NULL, 'Headphones, earbuds, and neckbands for daily listening.', '/uploads/1778905681611-1.jpg', '/uploads/1778905676761-2.jpg', 'active', 1, 1, 1, 'Personal Audio Collection | Avyona', 'Shop personal audio products including headphones, earbuds, and neckbands.', 'personal audio, headphones, earbuds, neckbands'),
+('Professional Audio', 'professional-audio', NULL, 'Creator and studio-style audio gear.', '/uploads/1778905690894-2.jpg', '/uploads/1778905694351-1.jpg', 'active', 1, 1, 2, 'Professional Audio Collection | Avyona', 'Discover microphones, monitors, and creator-focused professional audio gear.', 'professional audio, studio audio, creator gear'),
+('Digital Camera', 'digital-camera', NULL, 'Compact and creator-friendly digital cameras.', '/uploads/1778905725221-3.jpg', '/uploads/1778905722313-3.jpg', 'active', 1, 1, 3, 'Digital Camera Collection | Avyona', 'Browse digital cameras for travel, family, and creator use.', 'digital camera, compact camera, creator camera'),
+('Security Camera', 'security-camera', NULL, 'Indoor and outdoor smart camera setups.', '/uploads/1778905743764-4.jpg', '/uploads/1778905747088-4.jpg', 'active', 1, 0, 4, 'Security Camera Collection | Avyona', 'Explore indoor and outdoor security camera collections.', 'security camera, smart camera, surveillance'),
+('Avyona Digital Photo Frames', 'digital-photo-frames', NULL, 'Smart digital frames for gifting and family memories.', '/uploads/1778905660564-web-category-image.jpg', '/uploads/1778905663964-web-category-banner-image.jpg', 'active', 1, 1, 5, 'Digital Photo Frames Collection | Avyona', 'Shop digital photo frames for gifting, family sharing, and home display.', 'digital photo frame, smart frame, gifting frame'),
+('Reading Light', 'reading-light', NULL, 'Portable and bedside reading lights.', '/uploads/1778905761612-5.jpg', '/uploads/1778905758847-5.jpg', 'active', 1, 0, 6, 'Reading Light Collection | Avyona', 'Find clip-on and bedside reading lights for everyday use.', 'reading light, bedside lamp, clip light')
 ON DUPLICATE KEY UPDATE
   name = VALUES(name),
   parent_id = VALUES(parent_id),
@@ -288,8 +310,8 @@ SELECT
   'earbuds',
   parent.id,
   'Wireless and everyday earbuds under Personal Audio.',
-  '/images/optimized/earbuds-thumb.webp',
-  '/images/optimized/earbuds-banner.webp',
+  '/uploads/1778905681611-1.jpg',
+  '/uploads/1778905676761-2.jpg',
   'active',
   1,
   0,
@@ -333,8 +355,8 @@ SELECT
   'headphones',
   parent.id,
   'Over-ear and on-ear headphones under Personal Audio.',
-  '/images/optimized/headphones-thumb.webp',
-  '/images/optimized/headphones-banner.webp',
+  '/uploads/1778905681611-1.jpg',
+  '/uploads/1778905676761-2.jpg',
   'active',
   1,
   0,
@@ -378,8 +400,8 @@ SELECT
   'dslr-cameras',
   parent.id,
   'DSLR camera collection under Digital Camera.',
-  '/images/optimized/dslr-thumb.webp',
-  '/images/optimized/dslr-banner.webp',
+  '/uploads/1778905725221-3.jpg',
+  '/uploads/1778905722313-3.jpg',
   'active',
   1,
   0,

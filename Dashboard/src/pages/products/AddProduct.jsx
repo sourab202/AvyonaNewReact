@@ -12,6 +12,7 @@ import {
 } from "../../data/productFormData";
 import { flattenCategoryTree, fallbackCategoryTree } from "../../data/category-data";
 import { allProducts, featuredProducts } from "../../data/storefront-content";
+import { toStoredUploadUrl } from "../../utils/media";
 
 const sectionCardStyle = {
   background: "#fff",
@@ -637,7 +638,7 @@ export default function AddProduct({ initialProductData = null, mode = "add" }) 
       if (image.file) {
         const response = await uploadAdminImage(image.file);
         const uploadedUrl = response.data?.data?.url || "";
-        uploadedUrls.push(uploadedUrl.startsWith("/uploads/") ? `http://localhost:4000${uploadedUrl}` : uploadedUrl);
+        uploadedUrls.push(toStoredUploadUrl(uploadedUrl));
       } else if (image.url) {
         uploadedUrls.push(image.url);
       }

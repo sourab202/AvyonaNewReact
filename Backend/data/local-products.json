@@ -17,7 +17,7 @@
     "stockQuantity": 45,
     "rating": 0,
     "reviewCount": 0,
-    "imageUrl": "http://localhost:4000/uploads/1777374998267-testing-product-name-2-.jpg",
+    "imageUrl": "/uploads/1777374998267-testing-product-name-2-.jpg",
     "status": "active",
     "createdAt": "2026-04-28T11:16:38.296Z",
     "updatedAt": "2026-04-28T11:16:38.296Z"
@@ -40,7 +40,7 @@
     "stockQuantity": 56,
     "rating": 0,
     "reviewCount": 0,
-    "imageUrl": "http://localhost:4000/uploads/1777374532275-testing-product-name-2-.jpg",
+    "imageUrl": "/uploads/1777374532275-testing-product-name-2-.jpg",
     "status": "active",
     "createdAt": "2026-04-28T11:08:52.354Z",
     "updatedAt": "2026-04-28T11:08:52.354Z"

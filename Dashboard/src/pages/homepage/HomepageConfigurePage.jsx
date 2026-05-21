@@ -1,6 +1,7 @@
 import React from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { fetchAdminSettings, fetchBrowseCategoriesSettings, fetchCategories, fetchHomepageSectionSettings, fetchProducts, updateAdminSettings, updateBrowseCategoriesSettings, updateCategory, updateHomepageSectionSettings, uploadAdminImage, uploadAdminMedia } from "../../api/adminApi";
+import { resolveAdminMediaUrl, toStoredUploadUrl } from "../../utils/media";
 import { compressImageFile, getStorefrontBaseUrl } from "../../utils/storefront";
 import { fallbackCategoryTree, flattenCategoryTree } from "../../data/category-data";
 import { allProducts } from "../../data/storefront-content";
@@ -36,6 +37,10 @@ export const homepageConfigureSections = {
   newsletter: {
     title: "Newsletter",
     description: "Configure the homepage newsletter signup block."
+  },
+  "blog-posts": {
+    title: "Blog Posts",
+    description: "Configure the homepage blog preview section layout and ordering."
   },
   reviews: {
     title: "Reviews",
@@ -144,6 +149,10 @@ export default function HomepageConfigurePage({ sectionKey }) {
 
   if (sectionKey === "newsletter") {
     return <SimpleHomepageSectionConfigure section={section} routeKey="newsletter" settingsKey="newsletterSettings" sectionLabel="Newsletter" refreshToken={refreshToken} />;
+  }
+
+  if (sectionKey === "blog-posts") {
+    return <SimpleHomepageSectionConfigure section={section} routeKey="blog-posts" settingsKey="blogPostsSettings" sectionLabel="Blog Posts" refreshToken={refreshToken} />;
   }
 
   return (
@@ -316,6 +325,17 @@ function normalizeMobileCardsPerRow(value) {
   return Number.isFinite(count) ? Math.min(3, Math.max(1, Math.floor(count))) : DEFAULT_APP_SETTINGS.homepage.browseCategoriesSettings.mobileCardsPerRow;
 }
 
+const PRODUCT_BUTTON_DISPLAY_TYPE_OPTIONS = [
+  { value: "view_product", label: "View Product Only" },
+  { value: "add_to_cart", label: "Add to Cart Only" },
+  { value: "both", label: "Both Buttons" },
+  { value: "none", label: "No Button" }
+];
+
+function normalizeProductButtonDisplayType(value, fallback = "both") {
+  return PRODUCT_BUTTON_DISPLAY_TYPE_OPTIONS.some((option) => option.value === value) ? value : fallback;
+}
+
 function normalizeBrowseCategoriesSettings(value = {}) {
   return {
     ...DEFAULT_APP_SETTINGS.homepage.browseCategoriesSettings,
@@ -352,6 +372,8 @@ const homepageSectionConfigBySettingsKey = {
 };
 
 function normalizeHomepageSectionSettings(value = {}, fallback = DEFAULT_APP_SETTINGS.homepage.ourProductsSettings) {
+  const shouldIncludeButtonDisplayType = Object.prototype.hasOwnProperty.call(fallback, "buttonDisplayType") || value.buttonDisplayType !== undefined;
+
   return {
     ...fallback,
     ...(value || {}),
@@ -360,6 +382,7 @@ function normalizeHomepageSectionSettings(value = {}, fallback = DEFAULT_APP_SET
     subtitle: String(value.subtitle || "").trim(),
     cardsPerRow: normalizeCardsPerRow(value.cardsPerRow ?? fallback.cardsPerRow),
     mobileCardsPerRow: normalizeMobileCardsPerRow(value.mobileCardsPerRow ?? fallback.mobileCardsPerRow),
+    ...(shouldIncludeButtonDisplayType ? { buttonDisplayType: normalizeProductButtonDisplayType(value.buttonDisplayType, fallback.buttonDisplayType || "both") } : {}),
     sortOrder: Number.isFinite(Number(value.sortOrder)) ? Math.floor(Number(value.sortOrder)) : fallback.sortOrder
   };
 }
@@ -678,9 +701,7 @@ function BrowseCategoriesConfigure({ section, refreshToken = 0 }) {
     try {
       const response = await uploadAdminImage(file);
       const uploadedUrl = response.data?.data?.url || "";
-      const imageUrl = uploadedUrl.startsWith("/uploads/")
-        ? `http://localhost:4000${uploadedUrl}`
-        : uploadedUrl;
+      const imageUrl = toStoredUploadUrl(uploadedUrl);
 
       if (!imageUrl) throw new Error("Image upload did not return a URL");
       updateBrowseEntry(categoryId, { imageUrl });
@@ -1480,9 +1501,11 @@ function ProductArrangementConfigure({ section, settingsKey, categorySettingsKey
         ? normalizeCardsPerRow(value)
         : key === "mobileCardsPerRow"
           ? normalizeMobileCardsPerRow(value)
-          : key === "sortOrder"
-            ? Number(value || 0)
-            : value
+          : key === "buttonDisplayType"
+            ? normalizeProductButtonDisplayType(value)
+            : key === "sortOrder"
+              ? Number(value || 0)
+              : value
     }));
     setMessage("");
   };
@@ -1575,6 +1598,12 @@ function ProductArrangementConfigure({ section, settingsKey, categorySettingsKey
             <span style={labelStyle}>Mobile Cards Per Row</span>
             <select value={sectionSettings.mobileCardsPerRow} onChange={(event) => updateSectionSettingsField("mobileCardsPerRow", event.target.value)} style={inputStyle}>
               {[1, 2, 3].map((count) => <option key={count} value={count}>{count}</option>)}
+            </select>
+          </label>
+          <label style={fieldStyle}>
+            <span style={labelStyle}>Button Display Type</span>
+            <select value={sectionSettings.buttonDisplayType || "both"} onChange={(event) => updateSectionSettingsField("buttonDisplayType", event.target.value)} style={inputStyle}>
+              {PRODUCT_BUTTON_DISPLAY_TYPE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
             </select>
           </label>
           <label style={fieldStyle}>
@@ -2030,7 +2059,7 @@ function FeaturedBrandsConfigure({ section, refreshToken = 0 }) {
     try {
       const response = await uploadAdminImage(file);
       const uploadedUrl = response.data?.data?.url || "";
-      const imageUrl = uploadedUrl.startsWith("/uploads/") ? `http://localhost:4000${uploadedUrl}` : uploadedUrl;
+      const imageUrl = toStoredUploadUrl(uploadedUrl);
       if (!imageUrl) throw new Error("Image upload did not return a URL");
       updateBrand(brandId, { logoUrl: imageUrl });
       setMessage("Brand logo uploaded successfully.");
@@ -2357,10 +2386,9 @@ function getFontStyleParts(value) {
 
 function getAdminMediaPreviewUrl(value) {
   const url = String(value || "").trim();
-  if (!url || /^(data:|https?:|blob:)/i.test(url)) return url;
+  if (!url) return "";
   if (url.startsWith("/im" + "ages/")) return "";
-  if (url.startsWith("/uploads/")) return `http://localhost:4000${url}`;
-  return url;
+  return resolveAdminMediaUrl(url);
 }
 
 function AdminPreviewImage({ src, alt, style }) {
@@ -2518,9 +2546,7 @@ function HeroBannerConfigure({ section, refreshToken = 0 }) {
     try {
       const response = isVideo ? await uploadAdminMedia(file) : await uploadAdminImage(file);
       const uploadedUrl = response.data?.data?.url || "";
-      const mediaUrl = uploadedUrl.startsWith("/uploads/")
-        ? `http://localhost:4000${uploadedUrl}`
-        : uploadedUrl;
+      const mediaUrl = toStoredUploadUrl(uploadedUrl);
 
       if (!mediaUrl) throw new Error("Media upload did not return a URL");
       updateBannerFields(bannerId, {
@@ -2588,9 +2614,7 @@ function HeroBannerConfigure({ section, refreshToken = 0 }) {
     try {
       const response = isVideo ? await uploadAdminMedia(file) : await uploadAdminImage(file);
       const uploadedUrl = response.data?.data?.url || "";
-      const mediaUrl = uploadedUrl.startsWith("/uploads/")
-        ? `http://localhost:4000${uploadedUrl}`
-        : uploadedUrl;
+      const mediaUrl = toStoredUploadUrl(uploadedUrl);
 
       if (!mediaUrl) throw new Error("Media upload did not return a URL");
       updateNewBannerFields({

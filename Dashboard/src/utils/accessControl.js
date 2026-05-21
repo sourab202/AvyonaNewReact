@@ -2,7 +2,7 @@ import { getAdminToken } from "../api/adminApi.js";
 
 const rolePermissionMap = {
   super_admin: {
-    "*": ["view", "create", "edit", "delete", "export"]
+    "*": ["view", "create", "edit", "delete", "export", "publish"]
   },
   admin: {
     dashboard: ["view"],
@@ -15,6 +15,7 @@ const rolePermissionMap = {
     contact_enquiries: ["view", "edit", "export"],
     coupons: ["view", "create", "edit", "delete", "export"],
     homepage: ["view", "create", "edit", "delete"],
+    blogs: ["view", "create", "edit", "delete", "publish"],
     credit_points: ["view", "create", "edit", "delete"],
     reviews: ["view", "create", "edit", "delete", "export"],
     settings: ["view", "edit"]
@@ -25,7 +26,8 @@ const rolePermissionMap = {
     categories: ["view", "create", "edit", "delete", "export"],
     brands: ["view", "create", "edit", "delete", "export"],
     variations: ["view", "create", "edit", "delete", "export"],
-    homepage: ["view", "edit"]
+    homepage: ["view", "edit"],
+    blogs: ["view"]
   },
   order_manager: {
     dashboard: ["view"],
@@ -37,6 +39,7 @@ const rolePermissionMap = {
     dashboard: ["view"],
     coupons: ["view", "create", "edit", "delete", "export"],
     homepage: ["view", "create", "edit", "delete"],
+    blogs: ["view", "create", "edit", "delete", "publish"],
     credit_points: ["view", "create", "edit", "delete"],
     reviews: ["view", "create", "edit", "delete", "export"]
   },
@@ -57,6 +60,7 @@ const rolePermissionMap = {
     contact_enquiries: ["view"],
     coupons: ["view"],
     homepage: ["view"],
+    blogs: ["view"],
     credit_points: ["view"],
     reviews: ["view"],
     settings: ["view"]
@@ -65,7 +69,8 @@ const rolePermissionMap = {
     dashboard: ["view"],
     products: ["view", "edit"],
     categories: ["view", "edit"],
-    homepage: ["view", "edit"]
+    homepage: ["view", "edit"],
+    blogs: ["view", "edit"]
   }
 };
 

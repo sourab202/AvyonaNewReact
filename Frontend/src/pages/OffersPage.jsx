@@ -2,19 +2,11 @@ import React from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { isCouponActive } from "../../../shared/coupons";
 import ProductCard from "../components/product/ProductCard";
+import { resolveMediaUrl } from "../utils/media";
 import { copyText } from "../utils/storefront";
 
-const API_MEDIA_ORIGIN = (import.meta.env.VITE_API_BASE_URL || "http://localhost:4000/api/v1")
-  .replace(/\/api\/v\d+\/?$/i, "")
-  .replace(/\/$/, "");
-
 function resolveOfferImageUrl(value) {
-  const url = String(value || "").trim();
-  if (!url) return "";
-  if (/^(data|blob):/i.test(url)) return url;
-  if (/^https?:\/\//i.test(url)) return url;
-  if (url.startsWith("/uploads/")) return `${API_MEDIA_ORIGIN}${url}`;
-  return url;
+  return resolveMediaUrl(value);
 }
 
 function couponMatchesProduct(coupon, product) {

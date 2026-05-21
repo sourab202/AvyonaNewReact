@@ -39,7 +39,8 @@ const permissionColumnByAction = {
   edit: "can_edit",
   delete: "can_delete",
   export: "can_export",
-  approve: "can_approve"
+  approve: "can_approve",
+  publish: "can_approve"
 };
 
 export async function hasAdminPermission(admin, moduleName, actionName = "view") {

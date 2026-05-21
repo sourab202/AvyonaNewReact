@@ -1,5 +1,6 @@
 import React, { useEffect } from "react";
 import { useLocation } from "react-router-dom";
+import { fetchStorefrontBlog } from "../../api/blogApi";
 import { fetchPageSeo } from "../../api/seoApi";
 import { flattenCategoryTree, fallbackCategoryTree } from "../../data/category-data";
 import {
@@ -234,6 +235,30 @@ function articleSchema(article) {
       name: SITE_NAME
     },
     mainEntityOfPage: toAbsoluteUrl(`/blog/${article.slug}`)
+  };
+}
+
+function dynamicArticleSchema(article, path, siteName = SITE_NAME) {
+  const articleImage = ensureImage(article.ogImageUrl || article.featuredImageUrl || article.image);
+  const publishedAt = article.publishedAt || article.createdAt || "";
+  const updatedAt = article.updatedAt || publishedAt;
+  return {
+    "@context": "https://schema.org",
+    "@type": "Article",
+    headline: article.title,
+    description: truncate(article.metaDescription || article.excerpt || article.subtitle || article.content),
+    ...(articleImage ? { image: [articleImage] } : {}),
+    author: {
+      "@type": "Person",
+      name: article.authorName || siteName
+    },
+    publisher: {
+      "@type": "Organization",
+      name: siteName
+    },
+    ...(publishedAt ? { datePublished: publishedAt } : {}),
+    ...(updatedAt ? { dateModified: updatedAt } : {}),
+    mainEntityOfPage: toAbsoluteUrl(path)
   };
 }
 
@@ -486,6 +511,27 @@ function getSeoData(location, siteSettings = {}) {
     };
   }
 
+  if (pathname === "/blogs") {
+    const title = "Blog Posts | Avyona";
+    const description = "Read Avyona buying guides, product tips, audio guides, camera guides, home security ideas, and smart living articles.";
+    return {
+      ...base,
+      title,
+      description,
+      keywords: `${DEFAULT_KEYWORDS}, Avyona blog, buying guides, product tips`,
+      canonical: toAbsoluteUrl("/blogs"),
+      type: "website",
+      schema: [
+        organizationSchema(),
+        pageSchema(title, "/blogs", description),
+        breadcrumbSchema([
+          { name: "Home", path: "/" },
+          { name: "Blog Posts", path: "/blogs" }
+        ])
+      ]
+    };
+  }
+
   if (pathname === "/contact-us") {
     const title = "Contact Us | Avyona";
     const description = "Need help with an order or business enquiry? Contact Avyona for customer support, delivery help, warranty support, bulk orders, dealership, partnerships, and corporate enquiries.";
@@ -634,6 +680,41 @@ function getSeoData(location, siteSettings = {}) {
   };
 }
 
+async function getDynamicBlogSeoData(location, siteSettings = {}) {
+  const pathSegments = location.pathname.split("/").filter(Boolean);
+  if (!["blogs", "blog"].includes(pathSegments[0]) || !pathSegments[1]) return null;
+
+  const brand = getSeoBrand(siteSettings);
+  const response = await fetchStorefrontBlog(pathSegments[1]);
+  const article = response.data;
+  if (!article?.slug) return null;
+
+  const path = `/blogs/${article.slug}`;
+  const title = article.metaTitle || `${article.title} | ${brand.siteName}`;
+  const description = truncate(article.metaDescription || article.excerpt || article.subtitle || article.content || DEFAULT_DESCRIPTION);
+  const image = ensureImage(article.ogImageUrl || article.featuredImageUrl || article.image);
+
+  return {
+    title,
+    description,
+    keywords: article.metaKeywords || `${DEFAULT_KEYWORDS}, Avyona blog, ${article.tagName || article.tag || ""}, ${article.title}`,
+    robots: "index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1",
+    canonical: toAbsoluteUrl(article.canonicalUrl || path),
+    image,
+    type: "article",
+    schema: [
+      organizationSchema(brand.siteName),
+      pageSchema(title, path, description),
+      breadcrumbSchema([
+        { name: "Home", path: "/" },
+        { name: "Blog Posts", path: "/blogs" },
+        { name: article.title, path }
+      ]),
+      dynamicArticleSchema(article, path, brand.siteName)
+    ]
+  };
+}
+
 export default function SeoManager({ siteSettings }) {
   const location = useLocation();
   const brand = getSeoBrand(siteSettings);
@@ -643,7 +724,22 @@ export default function SeoManager({ siteSettings }) {
     const fallbackSeo = getSeoData(location, siteSettings);
     applySeo(fallbackSeo, brand.siteName);
 
-    if (fallbackSeo.title === "Page Not Found | Avyona") {
+    const isBlogSeoPath = location.pathname === "/blogs" || /^\/blogs?\/[^/]+/.test(location.pathname);
+
+    if (fallbackSeo.title === "Page Not Found | Avyona" && !isBlogSeoPath) {
+      return () => {
+        isMounted = false;
+      };
+    }
+
+    if (isBlogSeoPath) {
+      getDynamicBlogSeoData(location, siteSettings)
+        .then((blogSeo) => {
+          if (!isMounted || !blogSeo) return;
+          applySeo({ ...fallbackSeo, ...blogSeo }, brand.siteName);
+        })
+        .catch(() => {});
+
       return () => {
         isMounted = false;
       };

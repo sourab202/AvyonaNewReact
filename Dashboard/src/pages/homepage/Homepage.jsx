@@ -38,6 +38,12 @@ const homepageSections = [
     description: "Enable, rename, and position the homepage newsletter signup block."
   },
   {
+    title: "Blog Post",
+    path: "/dashboard/homepage/blog-posts",
+    description: "Manage blog articles shown on the homepage and blog page.",
+    actionLabel: "Configure"
+  },
+  {
     title: "Limited Time Offers",
     path: "/dashboard/coupons?view=offers",
     description: "Manage coupon offer cards shown on the homepage and product pages.",

@@ -1,6 +1,12 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import { flattenCategoryTree, fallbackCategoryTree } from "../data/category-data";
+import { resolveMediaUrl } from "../utils/media";
+
+function handleCategoryImageError(event) {
+  event.currentTarget.closest(".category-art")?.classList.add("category-art-missing");
+  event.currentTarget.remove();
+}
 
 export default function CollectionsPage({ context }) {
   const categories = flattenCategoryTree(context?.siteCategories || fallbackCategoryTree)
@@ -18,19 +24,23 @@ export default function CollectionsPage({ context }) {
           </div>
         </div>
         <div className="category-grid">
-          {categories.map((category) => (
-            <Link key={category.slug} className="category-card category-card-link" to={`/category/${category.slug}`}>
-              <div className="category-art"><img src={category.bannerImageUrl} alt={category.name} /></div>
-              <div className="category-copy">
-                <h3>{category.name}</h3>
-                <p>{category.description}</p>
-              </div>
-              <div className="category-meta">
-                <span className="category-meta-label">{category.featuredCategory ? "Featured Collection" : "Collection"}</span>
-                <span className="category-action-chip">Explore Now</span>
-              </div>
-            </Link>
-          ))}
+          {categories.map((category) => {
+            const categoryImage = resolveMediaUrl(category.bannerImageUrl || category.imageUrl);
+
+            return (
+              <Link key={category.slug} className="category-card category-card-link" to={`/category/${category.slug}`}>
+                {categoryImage ? <div className="category-art"><img src={categoryImage} alt={category.name} loading="lazy" decoding="async" onError={handleCategoryImageError} /></div> : null}
+                <div className="category-copy">
+                  <h3>{category.name}</h3>
+                  <p>{category.description}</p>
+                </div>
+                <div className="category-meta">
+                  <span className="category-meta-label">{category.featuredCategory ? "Featured Collection" : "Collection"}</span>
+                  <span className="category-action-chip">Explore Now</span>
+                </div>
+              </Link>
+            );
+          })}
         </div>
       </section>
     </main>

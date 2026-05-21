@@ -1,5 +1,6 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
+import { resolveMediaUrl } from "../../utils/media";
 import { formatCurrency } from "../../utils/storefront";
 
 export default function CartDrawer({ context }) {
@@ -22,7 +23,7 @@ export default function CartDrawer({ context }) {
       <div className="cart-items">
         {context.cart.length ? context.cart.map((item) => (
           <article key={`${item.slug}:${item.variantLabel || ""}`} className="summary-item">
-            <div className="summary-item-art"><img src={item.image} alt={item.name} /></div>
+            <div className="summary-item-art"><img src={resolveMediaUrl(item.image)} alt={item.name} /></div>
             <div className="cart-item-content">
               <div className="cart-item-head">
                 <div className="summary-item-copy">

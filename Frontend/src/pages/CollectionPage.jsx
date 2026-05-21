@@ -4,6 +4,7 @@ import { trackAnalyticsEvent } from "../api/analyticsApi";
 import { fetchStorefrontProducts } from "../api/productApi";
 import ProductCard from "../components/product/ProductCard";
 import { flattenCategoryTree, fallbackCategoryTree } from "../data/category-data";
+import { resolveMediaList, resolveMediaUrl } from "../utils/media";
 import { formatCurrency } from "../utils/storefront";
 
 function normalizeBackendProduct(product) {
@@ -11,8 +12,8 @@ function normalizeBackendProduct(product) {
   const mrp = Number(product.mrp || price || 0);
   const stockQuantity = Number(product.stockQuantity || 0);
   const discount = mrp > price && price > 0 ? Math.round(((mrp - price) / mrp) * 100) : 0;
-  const gallery = Array.isArray(product.galleryUrls) && product.galleryUrls.length ? product.galleryUrls.filter(Boolean) : [];
-  const primaryImage = gallery[0] || product.imageUrl || "";
+  const gallery = resolveMediaList(product.galleryUrls);
+  const primaryImage = gallery[0] || resolveMediaUrl(product.imageUrl);
 
   return {
     asin: product.asin,
@@ -98,6 +99,7 @@ export default function CollectionPage({ context }) {
   const flatCategories = useMemo(() => flattenCategoryTree(categoryTree), [categoryTree]);
   const categoryLookup = useMemo(() => new Map(flatCategories.map((category) => [category.id, category])), [flatCategories]);
   const currentCategory = flatCategories.find((category) => category.slug === slug);
+  const currentCategoryBannerUrl = resolveMediaUrl(currentCategory?.bannerImageUrl || currentCategory?.imageUrl);
   const childCategories = currentCategory?.children || [];
   const selectedSubcategories = useMemo(() => getListParam(searchParams, "subcategory"), [searchParamString]);
   const selectedBrands = useMemo(() => getListParam(searchParams, "brand"), [searchParamString]);
@@ -346,9 +348,9 @@ export default function CollectionPage({ context }) {
       <section className="page-section">
         <div className="collection-reference-layout">
           <section className="collection-reference-shell collection-shell-glow" data-animate="shell">
-            {currentCategory.bannerImageUrl ? (
+            {currentCategoryBannerUrl ? (
               <div className="collection-hero-media" style={bannerShellStyle} data-animate="intro">
-                <img src={currentCategory.bannerImageUrl} alt={currentCategory.name} style={bannerImageStyle} />
+                <img src={currentCategoryBannerUrl} alt={currentCategory.name} style={bannerImageStyle} />
               </div>
             ) : null}
 
