@@ -6,7 +6,7 @@ import { trackAnalyticsEvent } from "./api/analyticsApi";
 import { fetchCategoryTree } from "./api/categoryApi";
 import { fetchStorefrontCoupons } from "./api/couponApi";
 import { fallbackCategoryTree } from "./data/category-data";
-import { fetchGeneralSettings, fetchPublicSettings } from "./api/settingsApi";
+import { fetchGeneralSettings, fetchPublicSettings, fetchPublicThemeSettings } from "./api/settingsApi";
 import { fetchStorefrontProducts } from "./api/productApi";
 import { clearCustomerToken, fetchCurrentCustomer, fetchCustomerCart, fetchCustomerOrders, fetchCustomerWishlist, getCustomerToken, syncCustomerCart, syncCustomerWishlist } from "./api/customerApi";
 import { couponRules } from "../../shared/coupons";
@@ -82,6 +82,111 @@ function mergeGeneralIntoSiteSettings(siteSettings, generalPayload) {
     ...siteSettings,
     general: normalizeGeneralSettingsPayload(generalPayload)
   };
+}
+
+function mergeThemeIntoSiteSettings(siteSettings, themePayload) {
+  return {
+    ...siteSettings,
+    theme: mergeSettings(DEFAULT_APP_SETTINGS.theme, themePayload || siteSettings.theme || {})
+  };
+}
+
+function getThemeShadowValue(shadowStyle) {
+  if (shadowStyle === "none") return "none";
+  if (shadowStyle === "subtle") return "0 6px 16px rgba(15, 23, 42, 0.06)";
+  if (shadowStyle === "elevated") return "0 18px 45px rgba(15, 23, 42, 0.14)";
+  if (shadowStyle === "strong") return "0 26px 70px rgba(15, 23, 42, 0.22)";
+  return "0 12px 30px rgba(15, 23, 42, 0.10)";
+}
+
+function getThemeCssVariables(themePayload = DEFAULT_APP_SETTINGS.theme) {
+  const theme = mergeSettings(DEFAULT_APP_SETTINGS.theme, themePayload || {});
+  const colors = theme.colors || DEFAULT_APP_SETTINGS.theme.colors;
+  const typography = theme.typography || DEFAULT_APP_SETTINGS.theme.typography;
+  const buttons = theme.buttons || DEFAULT_APP_SETTINGS.theme.buttons;
+  const cards = theme.cards || DEFAULT_APP_SETTINGS.theme.cards;
+  const layout = theme.layout || DEFAULT_APP_SETTINGS.theme.layout;
+  const productCards = theme.productCards || DEFAULT_APP_SETTINGS.theme.productCards;
+  const fontFamily = typography.fontFamily === "System Default"
+    ? "system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
+    : `${typography.fontFamily}, system-ui, sans-serif`;
+
+  return {
+    "--color-primary": colors.primaryColor,
+    "--color-secondary": colors.secondaryColor,
+    "--color-accent": colors.accentColor,
+    "--color-background": colors.backgroundColor,
+    "--color-surface": colors.surfaceColor,
+    "--color-text": colors.textColor,
+    "--color-muted": colors.mutedTextColor,
+    "--color-border": colors.borderColor,
+    "--color-success": colors.successColor,
+    "--color-error": colors.errorColor,
+    "--header-background": colors.surfaceColor,
+    "--header-text": colors.textColor,
+    "--footer-background": colors.secondaryColor,
+    "--footer-text": buttons.primaryTextColor,
+    "--font-family-base": fontFamily,
+    "--base-font-size": `${typography.baseFontSize}px`,
+    "--heading-font-weight": typography.headingFontWeight,
+    "--body-font-weight": typography.bodyFontWeight,
+    "--theme-line-height": typography.lineHeight,
+    "--theme-letter-spacing": `${typography.letterSpacing || 0}px`,
+    "--button-radius": `${buttons.borderRadius}px`,
+    "--button-height": `${buttons.height}px`,
+    "--button-font-weight": buttons.fontWeight,
+    "--button-primary-bg": buttons.primaryBackground,
+    "--button-primary-text": buttons.primaryTextColor,
+    "--button-secondary-bg": buttons.secondaryBackground,
+    "--button-secondary-text": buttons.secondaryTextColor,
+    "--button-hover-bg": colors.accentColor,
+    "--card-radius": `${cards.borderRadius}px`,
+    "--card-padding": `${cards.padding}px`,
+    "--card-background": cards.background,
+    "--card-border": cards.borderColor,
+    "--card-shadow": getThemeShadowValue(cards.shadowStyle),
+    "--section-padding": `${layout.sectionPaddingDesktop}px`,
+    "--section-padding-mobile": `${layout.sectionPaddingMobile}px`,
+    "--section-gap": `${layout.sectionGap}px`,
+    "--container-width": `${layout.websiteMaxWidth}px`,
+    "--container-radius": `${layout.containerRadius}px`,
+    "--product-card-radius": `${productCards.borderRadius}px`,
+    "--product-card-shadow": getThemeShadowValue(productCards.shadowStyle),
+    "--product-image-ratio": productCards.imageRatio.replace(":", " / "),
+    "--product-price-color": productCards.priceColor,
+    "--product-mrp-color": productCards.mrpColor,
+    "--product-badge-bg": colors.errorColor,
+    "--product-badge-text": buttons.primaryTextColor,
+    "--product-title-lines": productCards.titleLines,
+    "--bg": "var(--color-background)",
+    "--surface": "var(--color-surface)",
+    "--text": "var(--color-text)",
+    "--muted": "var(--color-muted)",
+    "--line": "var(--color-border)",
+    "--brand": "var(--color-primary)",
+    "--brand-dark": "var(--color-accent)",
+    "--brand-soft": "var(--color-background)",
+    "--shadow": getThemeShadowValue(cards.shadowStyle),
+    "--radius-xl": `${layout.containerRadius}px`,
+    "--radius-lg": `${cards.borderRadius}px`,
+    "--radius-md": `${Math.max(8, Math.round(Number(cards.borderRadius || 12) * 0.75))}px`
+  };
+}
+
+function getScopedCustomCss(themePayload = {}) {
+  const customCss = String(themePayload?.customCss?.css || "").trim();
+  if (!customCss || !/\.avyona-theme[\s.#:[,{>+~]/i.test(`${customCss} `)) return "";
+  if (customCss.length > 10000) return "";
+  if (/<\/?\s*script\b/i.test(customCss)) return "";
+  if (/<\/?\s*[a-z][^>]*>/i.test(customCss)) return "";
+  if (/\bjavascript\s*:/i.test(customCss)) return "";
+  if (/@import\b/i.test(customCss)) return "";
+  if (/\bexpression\s*\(/i.test(customCss)) return "";
+  if (/\biframe\b/i.test(customCss)) return "";
+  if (/\bonerror\s*=/i.test(customCss) || /\bonclick\s*=/i.test(customCss)) return "";
+  if (/url\(\s*['"]?\s*https?:\/\//i.test(customCss)) return "";
+  if (!/[{}]/.test(customCss)) return "";
+  return customCss;
 }
 const PUBLIC_DATA_REFRESH_MS = 5 * 60 * 1000;
 
@@ -383,25 +488,35 @@ function App() {
     let isMounted = true;
 
     async function loadPublicSettings() {
-      try {
-        const [settingsResponse, generalResponse] = await Promise.all([
-          fetchPublicSettings(),
-          fetchGeneralSettings()
-        ]);
+      const [settingsResult, generalResult, themeResult] = await Promise.allSettled([
+        fetchPublicSettings(),
+        fetchGeneralSettings(),
+        fetchPublicThemeSettings()
+      ]);
 
-        if (!isMounted) return;
+      if (!isMounted) return;
 
-        setSiteSettings(mergeGeneralIntoSiteSettings(
-          normalizePublicSettingsPayload(settingsResponse.data || {}),
-          generalResponse.data?.data || generalResponse.data || {}
+      if (settingsResult.status === "fulfilled") {
+        const settingsWithGeneral = mergeGeneralIntoSiteSettings(
+          normalizePublicSettingsPayload(settingsResult.value.data || {}),
+          generalResult.status === "fulfilled"
+            ? (generalResult.value.data?.data || generalResult.value.data || {})
+            : GENERAL_SETTINGS_FALLBACK
+        );
+        setSiteSettings(mergeThemeIntoSiteSettings(
+          settingsWithGeneral,
+          themeResult.status === "fulfilled"
+            ? (themeResult.value.data?.data || themeResult.value.data || {})
+            : DEFAULT_APP_SETTINGS.theme
         ));
-      } catch {
-        if (isMounted) {
-          setSiteSettings(mergeGeneralIntoSiteSettings(
+      } else {
+        setSiteSettings(mergeThemeIntoSiteSettings(
+          mergeGeneralIntoSiteSettings(
             normalizePublicSettingsPayload(DEFAULT_APP_SETTINGS),
             GENERAL_SETTINGS_FALLBACK
-          ));
-        }
+          ),
+          DEFAULT_APP_SETTINGS.theme
+        ));
       }
     }
 
@@ -495,9 +610,10 @@ function App() {
       if (isRefreshing) return;
       isRefreshing = true;
 
-      const [settingsResult, generalResult, productsResult, categoriesResult, couponsResult] = await Promise.allSettled([
+      const [settingsResult, generalResult, themeResult, productsResult, categoriesResult, couponsResult] = await Promise.allSettled([
         fetchPublicSettings(),
         fetchGeneralSettings(),
+        fetchPublicThemeSettings(),
         fetchStorefrontProducts({ status: "active", limit: 36 }),
         fetchCategoryTree(),
         fetchStorefrontCoupons({ status: "active" })
@@ -506,11 +622,17 @@ function App() {
       if (!isMounted) return;
 
       if (settingsResult.status === "fulfilled") {
-        setSiteSettings(mergeGeneralIntoSiteSettings(
+        const settingsWithGeneral = mergeGeneralIntoSiteSettings(
           normalizePublicSettingsPayload(settingsResult.value.data || {}),
           generalResult.status === "fulfilled"
             ? (generalResult.value.data?.data || generalResult.value.data || {})
             : GENERAL_SETTINGS_FALLBACK
+        );
+        setSiteSettings(mergeThemeIntoSiteSettings(
+          settingsWithGeneral,
+          themeResult.status === "fulfilled"
+            ? (themeResult.value.data?.data || themeResult.value.data || {})
+            : DEFAULT_APP_SETTINGS.theme
         ));
       }
 
@@ -812,9 +934,12 @@ function App() {
     isCategoryCatalogLoading,
     allProducts: storefrontProducts
   };
+  const themeCssVariables = getThemeCssVariables(siteSettings.theme);
+  const scopedCustomCss = getScopedCustomCss(siteSettings.theme);
 
   return (
-    <div className="app-shell">
+    <div className="app-shell avyona-theme" style={themeCssVariables}>
+      {scopedCustomCss ? <style>{scopedCustomCss}</style> : null}
       <SeoManager siteSettings={siteSettings} />
       <Suspense fallback={<div className="route-loading">Loading...</div>}>
         <Routes>

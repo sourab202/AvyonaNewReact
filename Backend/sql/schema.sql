@@ -129,9 +129,12 @@ CREATE TABLE IF NOT EXISTS contact_enquiries (
   order_id VARCHAR(80) NULL,
   message TEXT NOT NULL,
   status ENUM('New', 'In Progress', 'Resolved', 'Closed') NOT NULL DEFAULT 'New',
+  is_deleted TINYINT(1) NOT NULL DEFAULT 0,
+  deleted_at TIMESTAMP NULL DEFAULT NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   KEY idx_contact_enquiries_status_created (status, created_at),
-  KEY idx_contact_enquiries_type_created (enquiry_type, created_at)
+  KEY idx_contact_enquiries_type_created (enquiry_type, created_at),
+  KEY idx_contact_enquiries_deleted_created (is_deleted, created_at)
 );
 
 CREATE TABLE IF NOT EXISTS categories (
@@ -1212,6 +1215,38 @@ CREATE TABLE IF NOT EXISTS app_settings (
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   INDEX idx_app_settings_group (setting_group)
 );
+
+CREATE TABLE IF NOT EXISTS theme_settings (
+  id TINYINT UNSIGNED NOT NULL PRIMARY KEY DEFAULT 1,
+  primary_color VARCHAR(7) NOT NULL DEFAULT '#22C55E',
+  secondary_color VARCHAR(7) NOT NULL DEFAULT '#111827',
+  accent_color VARCHAR(7) NOT NULL DEFAULT '#16A34A',
+  background_color VARCHAR(7) NOT NULL DEFAULT '#F6FAF7',
+  surface_color VARCHAR(7) NOT NULL DEFAULT '#FFFFFF',
+  text_color VARCHAR(7) NOT NULL DEFAULT '#111827',
+  muted_text_color VARCHAR(7) NOT NULL DEFAULT '#6B7280',
+  border_color VARCHAR(7) NOT NULL DEFAULT '#E5E7EB',
+  success_color VARCHAR(7) NOT NULL DEFAULT '#22C55E',
+  error_color VARCHAR(7) NOT NULL DEFAULT '#EF4444',
+  font_family VARCHAR(80) NOT NULL DEFAULT 'Inter',
+  base_font_size INT NOT NULL DEFAULT 16,
+  heading_font_weight INT NOT NULL DEFAULT 800,
+  body_font_weight INT NOT NULL DEFAULT 400,
+  line_height DECIMAL(4,2) NOT NULL DEFAULT 1.50,
+  button_radius INT NOT NULL DEFAULT 12,
+  button_height INT NOT NULL DEFAULT 42,
+  card_radius INT NOT NULL DEFAULT 18,
+  card_shadow VARCHAR(30) NOT NULL DEFAULT 'soft',
+  section_padding_desktop INT NOT NULL DEFAULT 64,
+  section_padding_mobile INT NOT NULL DEFAULT 28,
+  website_max_width INT NOT NULL DEFAULT 1280,
+  product_image_ratio VARCHAR(20) NOT NULL DEFAULT '1:1',
+  custom_css MEDIUMTEXT NULL,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT chk_theme_settings_singleton CHECK (id = 1)
+);
+
+INSERT IGNORE INTO theme_settings (id) VALUES (1);
 
 CREATE TABLE IF NOT EXISTS footer_settings (
   setting_key VARCHAR(120) NOT NULL PRIMARY KEY,

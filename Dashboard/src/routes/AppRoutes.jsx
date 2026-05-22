@@ -26,6 +26,7 @@ const Reviews = React.lazy(() => import("../pages/reviews/Reviews"));
 const Settings = React.lazy(() => import("../pages/settings/Settings"));
 const BlankSettingsPage = React.lazy(() => import("../pages/settings/BlankSettingsPage"));
 const FooterSettings = React.lazy(() => import("../pages/settings/FooterSettings"));
+const ThemeSettings = React.lazy(() => import("../pages/settings/ThemeSettings"));
 const Variations = React.lazy(() => import("../pages/variations/Variations"));
 const WebsiteImages = React.lazy(() => import("../pages/images/WebsiteImages"));
 
@@ -96,7 +97,7 @@ export default function AppRoutes({ context, allProducts }) {
           <Route path="settings/header" element={<BlankSettingsPage />} />
           <Route path="settings/footer" element={<FooterSettings />} />
           <Route path="settings/contact-page" element={<BlankSettingsPage />} />
-          <Route path="settings/theme" element={<BlankSettingsPage />} />
+          <Route path="settings/theme" element={<ThemeSettings />} />
           <Route path="settings/manage-access" element={<Settings initialSection="manage-access" />} />
         </Route>
       </Routes>

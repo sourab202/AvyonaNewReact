@@ -12,13 +12,14 @@ const rolePermissionMap = {
     variations: ["view", "create", "edit", "delete", "export"],
     orders: ["view", "create", "edit", "export"],
     customers: ["view", "edit", "export"],
-    contact_enquiries: ["view", "edit", "export"],
+    contact_enquiries: ["view", "edit", "delete", "export"],
     coupons: ["view", "create", "edit", "delete", "export"],
     homepage: ["view", "create", "edit", "delete"],
     blogs: ["view", "create", "edit", "delete", "publish"],
     credit_points: ["view", "create", "edit", "delete"],
     reviews: ["view", "create", "edit", "delete", "export"],
-    settings: ["view", "edit"]
+    settings: ["view", "edit"],
+    theme_settings: ["view", "edit"]
   },
   product_manager: {
     dashboard: ["view"],
@@ -63,7 +64,8 @@ const rolePermissionMap = {
     blogs: ["view"],
     credit_points: ["view"],
     reviews: ["view"],
-    settings: ["view"]
+    settings: ["view"],
+    theme_settings: ["view"]
   },
   editor: {
     dashboard: ["view"],

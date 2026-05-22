@@ -676,6 +676,7 @@ body {
 
 .dashboard-primary-button,
 .dashboard-secondary-button,
+.dashboard-danger-button,
 .dashboard-icon-action {
   display: inline-flex;
   align-items: center;
@@ -703,12 +704,19 @@ body {
   border-color: #cbd5e1;
 }
 
+.dashboard-danger-button {
+  background: #fff7f7;
+  color: #b91c1c;
+  border-color: #fecaca;
+}
+
 .dashboard-secondary-button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 
 .dashboard-primary-button:disabled,
+.dashboard-danger-button:disabled,
 .dashboard-icon-action:disabled,
 .dashboard-bulk-action-select:disabled {
   opacity: 0.55;

@@ -17,13 +17,16 @@ function ProductCard({ product, context, eyebrow, actionLabel = "Add to Cart", a
   const productPath = buildProductPath(product, firstVariant);
   const displayImage = resolveMediaUrl(firstVariant?.image || product.image || "");
   const hasImage = Boolean(String(displayImage || "").trim());
+  const productCardTheme = context?.siteSettings?.theme?.productCards || {};
   const resolvedButtonDisplayType = normalizeButtonDisplayType(buttonDisplayType, actionMode);
   const showViewProduct = resolvedButtonDisplayType === "view_product" || resolvedButtonDisplayType === "both";
-  const showAddToCart = resolvedButtonDisplayType === "add_to_cart" || resolvedButtonDisplayType === "both";
+  const showDiscountBadge = productCardTheme.showDiscountBadge !== false && Number(product.discount || 0) > 0;
+  const showRating = productCardTheme.showRating !== false;
+  const showAddToCart = productCardTheme.showAddToCartButton !== false && (resolvedButtonDisplayType === "add_to_cart" || resolvedButtonDisplayType === "both");
 
   return (
     <article className={`product-card ${hasImage ? "has-product-image" : "has-no-product-image"}`}>
-      <span className="card-discount-badge">{product.discount}% OFF</span>
+      {showDiscountBadge ? <span className="card-discount-badge">{product.discount}% OFF</span> : null}
       <Link className="product-card-link" to={productPath} onClick={() => onProductClick?.(product)}>
         <div className="product-art">
           {hasImage ? (
@@ -42,10 +45,12 @@ function ProductCard({ product, context, eyebrow, actionLabel = "Add to Cart", a
             <strong>{formatCurrency(firstVariant?.price ?? product.price, context)}</strong>
             <span className="card-mrp">{formatCurrency(firstVariant?.mrp ?? product.mrp, context)}</span>
           </div>
-          <span className="card-rating" aria-label={`${ratingValue.toFixed(1)} out of 5 stars`}>
-            <span className="card-rating-stars" aria-hidden="true" style={{ "--rating-percent": ratingPercent }} />
-            <span className="card-rating-value">{ratingValue.toFixed(1)}</span>
-          </span>
+          {showRating ? (
+            <span className="card-rating" aria-label={`${ratingValue.toFixed(1)} out of 5 stars`}>
+              <span className="card-rating-stars" aria-hidden="true" style={{ "--rating-percent": ratingPercent }} />
+              <span className="card-rating-value">{ratingValue.toFixed(1)}</span>
+            </span>
+          ) : null}
         </div>
         {showViewProduct || showAddToCart ? (
           <div className={`product-card-actions ${showViewProduct && showAddToCart ? "has-two-actions" : ""}`}>

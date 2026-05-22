@@ -8,6 +8,7 @@ coverage/
 build/
 .run-logs/
 test-results/
+.codex_tmp_pdf/
 /package-lock.json
 backend/uploads/inventory-test/
 backend/uploads/inventory-exports/

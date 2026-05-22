@@ -123,6 +123,14 @@ export function updateAdminSettings(payload) {
   return adminApi.put("/settings", payload);
 }
 
+export function fetchAdminThemeSettings() {
+  return adminApi.get("/admin/theme-settings");
+}
+
+export function updateAdminThemeSettings(payload) {
+  return adminApi.put("/admin/theme-settings", payload);
+}
+
 export function fetchGeneralSettings() {
   return adminApi.get("/settings/general");
 }
@@ -357,6 +365,10 @@ export function fetchContactEnquiry(enquiryId) {
 
 export function updateContactEnquiryStatus(enquiryId, status) {
   return adminApi.patch(`/contact-enquiries/${enquiryId}/status`, { status });
+}
+
+export function deleteContactEnquiry(enquiryId) {
+  return adminApi.delete(`/admin/contact-enquiries/${enquiryId}`);
 }
 
 export function fetchOrders() {

@@ -67,8 +67,10 @@ function FooterLink({ to, children }) {
 function isSafeFooterCss(value = "") {
   const css = String(value || "").trim();
   if (!css) return false;
+  if (css.length > 10000) return false;
   if (!/\.avyona-footer[\s.#:[,{>+~]/i.test(`${css} `)) return false;
-  return !/(<\s*script|javascript:|on\w+\s*=|expression\s*\(|import\s*\(|@import)/i.test(css);
+  if (!/[{}]/.test(css)) return false;
+  return !/(<\/?\s*[a-z][^>]*>|javascript:|on\w+\s*=|expression\s*\(|import\s*\(|@import|\biframe\b)/i.test(css);
 }
 
 function FooterFaqAccordion({ items = [] }) {
@@ -136,12 +138,12 @@ export default function SiteFooter({ context }) {
   const footerLogo = branding.footerLogo || resolveMediaUrl(general.logoUrl);
   const supportEmail = support.supportEmail || general.supportEmail || "support@avyona.com";
   const supportPhone = support.supportPhone || general.supportPhone || "";
+  const defaultFooterDesign = DEFAULT_APP_SETTINGS.footer.design || {};
   const footerStyle = {
-    backgroundColor: design.backgroundColor || "#0f1713",
-    color: design.textColor || "#f2f6f4",
-    "--footer-text": design.textColor || "#f2f6f4",
-    "--footer-accent": design.accentColor || "#5db467",
-    "--footer-link": "#ffffff"
+    ...(design.backgroundColor && design.backgroundColor !== defaultFooterDesign.backgroundColor ? { "--footer-background": design.backgroundColor } : {}),
+    ...(design.textColor && design.textColor !== defaultFooterDesign.textColor ? { "--footer-text": design.textColor } : {}),
+    ...(design.accentColor && design.accentColor !== defaultFooterDesign.accentColor ? { "--footer-accent": design.accentColor } : {}),
+    ...(design.linkColor && design.linkColor !== defaultFooterDesign.linkColor ? { "--footer-link": design.linkColor } : {})
   };
 
   const handleNewsletterSubmit = (event) => {

@@ -55,6 +55,294 @@ textarea {
   overflow-x: clip;
 }
 
+.avyona-theme .product-card,
+.avyona-theme .mini-card,
+.avyona-theme .collection-results-content .product-card,
+.avyona-theme .search-result-card {
+  border-color: var(--card-border, var(--color-border));
+  border-radius: var(--product-card-radius, var(--card-radius));
+  background: var(--card-background, var(--color-surface));
+  box-shadow: var(--product-card-shadow, var(--card-shadow));
+}
+
+.avyona-theme .product-card:hover,
+.avyona-theme .mini-card:hover,
+.avyona-theme .collection-results-content .product-card:hover {
+  border-color: color-mix(in srgb, var(--color-primary) 34%, var(--card-border, var(--color-border)));
+  box-shadow: var(--product-card-shadow, var(--card-shadow));
+}
+
+.avyona-theme .product-card h3,
+.avyona-theme .mini-card h3,
+.avyona-theme .product-card > .product-card-link > h3,
+.avyona-theme .mini-card > .product-card-link > h3 {
+  color: var(--color-text);
+  -webkit-line-clamp: var(--product-title-lines, 2);
+}
+
+.avyona-theme .product-card p,
+.avyona-theme .mini-card p {
+  color: var(--color-muted);
+}
+
+.avyona-theme .product-topline,
+.avyona-theme .card-rating,
+.avyona-theme .card-rating-value {
+  color: var(--color-accent);
+}
+
+.avyona-theme .card-discount-badge {
+  background: var(--product-badge-bg, var(--color-error));
+  color: var(--product-badge-text, var(--button-primary-text));
+}
+
+.avyona-theme .product-art,
+.avyona-theme .mini-art,
+.avyona-theme .collection-results-content .product-art {
+  aspect-ratio: var(--product-image-ratio, 1 / 1);
+}
+
+.avyona-theme .product-card-footer .add-to-cart,
+.avyona-theme .mini-card-footer .add-to-cart,
+.avyona-theme .frame-card .add-to-cart {
+  border-radius: var(--button-radius);
+  background: var(--button-primary-bg, var(--color-primary));
+  color: var(--button-primary-text);
+  font-weight: var(--button-font-weight);
+}
+
+.avyona-theme .product-card-footer .add-to-cart:hover,
+.avyona-theme .mini-card-footer .add-to-cart:hover,
+.avyona-theme .frame-card .add-to-cart:hover {
+  background: var(--color-accent);
+}
+
+.avyona-theme :is(
+  .primary-button,
+  .add-to-cart,
+  .cart-button,
+  .checkout-button,
+  .checkout-pay-button,
+  .checkout-coupon-input-row button[type="submit"],
+  .contact-submit-button,
+  .track-order-submit,
+  .offer-copy-button,
+  .category-action-chip,
+  .account-submit,
+  .avy-pincode-form button,
+  .avy-button-primary,
+  .avy-product-coupon-row button,
+  .avy-product-offer-actions button:last-child,
+  .blog-read-link
+) {
+  min-height: var(--button-height);
+  border: 0;
+  border-radius: var(--button-radius);
+  background: var(--button-primary-bg, var(--color-primary));
+  color: var(--button-primary-text);
+  font-weight: var(--button-font-weight);
+  box-shadow: 0 12px 26px color-mix(in srgb, var(--button-primary-bg, var(--color-primary)) 22%, transparent);
+}
+
+.avyona-theme :is(
+  .primary-button,
+  .add-to-cart,
+  .cart-button,
+  .checkout-button,
+  .checkout-pay-button,
+  .checkout-coupon-input-row button[type="submit"],
+  .contact-submit-button,
+  .track-order-submit,
+  .offer-copy-button,
+  .category-action-chip,
+  .account-submit,
+  .avy-pincode-form button,
+  .avy-button-primary,
+  .avy-product-coupon-row button,
+  .avy-product-offer-actions button:last-child,
+  .blog-read-link
+):hover {
+  background: var(--button-hover-bg, var(--color-accent));
+  color: var(--button-primary-text);
+}
+
+.avyona-theme :is(
+  .secondary-button,
+  .inverse-button,
+  .thankyou-button-ghost,
+  .account-back-link,
+  .checkout-empty-state a,
+  .checkout-coupon-input-row button[type="button"],
+  .checkout-coupon-suggestions button,
+  .collection-reset-button,
+  .blog-share-button,
+  .blog-tag-filter button,
+  .blog-pagination button,
+  .avy-inline-button,
+  .avy-button-secondary,
+  .avy-product-offers-toggle,
+  .avy-product-offer-actions button:not(:last-child),
+  .profile-address-actions button,
+  .profile-pagination button
+) {
+  min-height: var(--button-height);
+  border: 1px solid var(--color-border);
+  border-radius: var(--button-radius);
+  background: var(--button-secondary-bg, var(--color-surface));
+  color: var(--button-secondary-text, var(--color-text));
+  font-weight: var(--button-font-weight);
+  box-shadow: none;
+}
+
+.avyona-theme :is(
+  .secondary-button,
+  .inverse-button,
+  .thankyou-button-ghost,
+  .account-back-link,
+  .checkout-empty-state a,
+  .checkout-coupon-input-row button[type="button"],
+  .checkout-coupon-suggestions button,
+  .collection-reset-button,
+  .blog-share-button,
+  .blog-tag-filter button,
+  .blog-pagination button,
+  .avy-inline-button,
+  .avy-button-secondary,
+  .avy-product-offers-toggle,
+  .avy-product-offer-actions button:not(:last-child),
+  .profile-address-actions button,
+  .profile-pagination button
+):hover {
+  border-color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 10%, var(--button-secondary-bg, var(--color-surface)));
+  color: var(--color-primary);
+}
+
+.avyona-theme :is(button, .primary-button, .secondary-button, .add-to-cart, .blog-read-link):disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+  transform: none;
+}
+
+.avyona-theme :is(
+  .header-search input,
+  .newsletter-form input,
+  .footer-newsletter input,
+  .catalog-controls select,
+  .checkout-page input:not([type="checkbox"]):not([type="radio"]),
+  .checkout-page select,
+  .checkout-coupon-input-row input,
+  .contact-form input,
+  .contact-form textarea,
+  .profile-field input,
+  .profile-field textarea,
+  .avy-pincode-form input,
+  .avy-review-form input,
+  .avy-review-form textarea,
+  .avy-review-form select,
+  .avy-product-coupon-row input,
+  .blog-search-field input
+) {
+  border-color: var(--color-border);
+  border-radius: min(var(--button-radius), 18px);
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+.avyona-theme :is(
+  .header-search input,
+  .newsletter-form input,
+  .footer-newsletter input,
+  .catalog-controls select,
+  .checkout-page input:not([type="checkbox"]):not([type="radio"]),
+  .checkout-page select,
+  .checkout-coupon-input-row input,
+  .contact-form input,
+  .contact-form textarea,
+  .profile-field input,
+  .profile-field textarea,
+  .avy-pincode-form input,
+  .avy-review-form input,
+  .avy-review-form textarea,
+  .avy-review-form select,
+  .avy-product-coupon-row input,
+  .blog-search-field input
+):focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-primary) 16%, transparent);
+  outline: 0;
+}
+
+.avyona-theme :is(
+  .header-search input,
+  .newsletter-form input,
+  .footer-newsletter input,
+  .checkout-page input:not([type="checkbox"]):not([type="radio"]),
+  .contact-form input,
+  .contact-form textarea,
+  .profile-field input,
+  .profile-field textarea,
+  .avy-pincode-form input,
+  .avy-review-form input,
+  .avy-review-form textarea,
+  .avy-product-coupon-row input,
+  .blog-search-field input
+)::placeholder {
+  color: var(--color-muted);
+}
+
+.avyona-theme :is(
+  .checkout-form-panel,
+  .summary-shell,
+  .checkout-coupon-form,
+  .contact-form-panel,
+  .contact-type-card,
+  .contact-details-bar,
+  .contact-trust-strip,
+  .profile-card,
+  .profile-panel-card,
+  .profile-detail-card,
+  .profile-order-card,
+  .profile-product-card,
+  .profile-address-card,
+  .profile-review-card,
+  .avy-surface-card,
+  .avy-review-form
+) {
+  border-color: var(--card-border, var(--color-border));
+  border-radius: var(--card-radius);
+  background: var(--card-background, var(--color-surface));
+  box-shadow: var(--card-shadow);
+  color: var(--color-text);
+}
+
+.avyona-theme :is(
+  .checkout-pay-button,
+  .checkout-coupon-input-row button,
+  .contact-submit-button,
+  .avy-pincode-form button,
+  .avy-button-primary
+) {
+  border-radius: var(--button-radius);
+  background: var(--button-primary-bg, var(--color-primary));
+  color: var(--button-primary-text);
+  font-weight: var(--button-font-weight);
+}
+
+.avyona-theme .avy-review-form input[type="file"]::file-selector-button {
+  border-radius: var(--button-radius);
+  background: var(--button-primary-bg, var(--color-primary));
+  color: var(--button-primary-text);
+  font-weight: var(--button-font-weight);
+}
+
+.avyona-theme :is(.avy-button-secondary) {
+  border-color: var(--color-primary);
+  border-radius: var(--button-radius);
+  background: var(--button-secondary-bg);
+  color: var(--button-secondary-text);
+}
+
 img,
 video {
   max-width: 100%;
@@ -762,7 +1050,13 @@ body.checkout-page {
   .blog-card,
   .review-grid article,
   .trust-grid article {
-    border-radius: 14px;
+    border-radius: var(--card-radius, 14px);
+  }
+
+  .avyona-theme .product-card,
+  .avyona-theme .mini-card,
+  .avyona-theme .collection-results-content .product-card {
+    border-radius: var(--product-card-radius, var(--card-radius, 14px));
   }
 
   .product-card,
@@ -779,7 +1073,7 @@ body.checkout-page {
   .mini-art,
   .collection-results-content .product-art {
     min-height: 0;
-    aspect-ratio: 1 / 1;
+    aspect-ratio: var(--product-image-ratio, 1 / 1);
     max-height: none;
     padding: 8px;
     margin-bottom: 8px;
@@ -949,7 +1243,7 @@ body.checkout-page {
   .mini-art,
   .collection-results-content .product-art {
     min-height: clamp(150px, 44vw, 220px);
-    aspect-ratio: 1 / 1;
+    aspect-ratio: var(--product-image-ratio, 1 / 1);
     padding: 8px;
     margin-bottom: 8px;
   }

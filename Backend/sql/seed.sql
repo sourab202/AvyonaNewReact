@@ -90,6 +90,8 @@ INSERT INTO permissions (permission_key, module_name, action_name, display_name,
   ('reviews.export', 'reviews', 'export', 'Export Reviews', 'Export review records.', 0, 1),
   ('settings.view', 'settings', 'view', 'View Settings', 'View dashboard settings.', 0, 1),
   ('settings.edit', 'settings', 'edit', 'Edit Settings', 'Edit dashboard settings.', 0, 1),
+  ('theme_settings.view', 'theme_settings', 'view', 'View Theme Settings', 'View website theme settings.', 0, 1),
+  ('theme_settings.edit', 'theme_settings', 'edit', 'Edit Theme Settings', 'Edit website theme settings.', 0, 1),
   ('sensitive.manage_admin_users', 'sensitive_access', 'manage_admin_users', 'Manage admin users', 'Invite, edit, suspend, or remove dashboard users.', 1, 1),
   ('sensitive.manage_roles', 'sensitive_access', 'manage_roles', 'Manage roles', 'Change role structure and role-level access boundaries.', 1, 1),
   ('sensitive.manage_payment_settings', 'sensitive_access', 'manage_payment_settings', 'Manage payment settings', 'Modify payment methods and gateway behavior.', 1, 1),
@@ -140,6 +142,7 @@ JOIN (
   SELECT 'blogs' UNION ALL
   SELECT 'reviews' UNION ALL
   SELECT 'settings' UNION ALL
+  SELECT 'theme_settings' UNION ALL
   SELECT 'sensitive_access'
 ) modules
 WHERE r.name = 'super_admin'
@@ -163,13 +166,14 @@ JOIN (
   SELECT 'admin', 'variations', 1, 1, 1, 1, 1, 0 UNION ALL
   SELECT 'admin', 'orders', 1, 1, 1, 0, 1, 0 UNION ALL
   SELECT 'admin', 'customers', 1, 0, 1, 0, 1, 0 UNION ALL
-  SELECT 'admin', 'contact_enquiries', 1, 0, 1, 0, 1, 0 UNION ALL
+  SELECT 'admin', 'contact_enquiries', 1, 0, 1, 1, 1, 0 UNION ALL
   SELECT 'admin', 'coupons', 1, 1, 1, 1, 1, 0 UNION ALL
   SELECT 'admin', 'credit_points', 1, 1, 1, 1, 1, 0 UNION ALL
   SELECT 'admin', 'homepage', 1, 1, 1, 1, 0, 0 UNION ALL
   SELECT 'admin', 'blogs', 1, 1, 1, 1, 0, 1 UNION ALL
   SELECT 'admin', 'reviews', 1, 1, 1, 1, 1, 0 UNION ALL
   SELECT 'admin', 'settings', 1, 0, 1, 0, 0, 0 UNION ALL
+  SELECT 'admin', 'theme_settings', 1, 0, 1, 0, 0, 0 UNION ALL
   SELECT 'product_manager', 'dashboard', 1, 0, 0, 0, 0, 0 UNION ALL
   SELECT 'product_manager', 'products', 1, 1, 1, 1, 1, 0 UNION ALL
   SELECT 'product_manager', 'categories', 1, 1, 1, 1, 1, 0 UNION ALL
@@ -204,7 +208,8 @@ JOIN (
   SELECT 'viewer', 'homepage', 1, 0, 0, 0, 0, 0 UNION ALL
   SELECT 'viewer', 'blogs', 1, 0, 0, 0, 0, 0 UNION ALL
   SELECT 'viewer', 'reviews', 1, 0, 0, 0, 0, 0 UNION ALL
-  SELECT 'viewer', 'settings', 1, 0, 0, 0, 0, 0
+  SELECT 'viewer', 'settings', 1, 0, 0, 0, 0, 0 UNION ALL
+  SELECT 'viewer', 'theme_settings', 1, 0, 0, 0, 0, 0
 ) defaults ON defaults.role_name = r.name
 ON DUPLICATE KEY UPDATE
   can_view = VALUES(can_view),

@@ -1,5 +1,6 @@
 import React from "react";
 import {
+  deleteContactEnquiry,
   fetchContactEnquiries,
   fetchContactEnquiry,
   updateContactEnquiryStatus
@@ -42,8 +43,11 @@ export default function ContactEnquiries() {
   const [isLoading, setIsLoading] = React.useState(true);
   const [message, setMessage] = React.useState("Loading contact enquiries...");
   const [updatingId, setUpdatingId] = React.useState("");
+  const [deletingId, setDeletingId] = React.useState("");
+  const [pendingDelete, setPendingDelete] = React.useState(null);
   const [activeFilter, setActiveFilter] = React.useState("all");
   const canEdit = canAccess("contact_enquiries", "edit");
+  const canDelete = canAccess("contact_enquiries", "delete");
 
   const filteredEnquiries = React.useMemo(() => {
     if (activeFilter === "b2c") return enquiries.filter((enquiry) => enquiry.enquiryType === "B2C");
@@ -95,6 +99,23 @@ export default function ContactEnquiries() {
       setMessage(error.response?.data?.message || "Unable to update contact enquiry status.");
     } finally {
       setUpdatingId("");
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!pendingDelete) return;
+    const enquiryId = pendingDelete.id;
+    setDeletingId(enquiryId);
+    try {
+      await deleteContactEnquiry(enquiryId);
+      setEnquiries((current) => current.filter((item) => item.id !== enquiryId));
+      setSelectedEnquiry((current) => (current?.id === enquiryId ? null : current));
+      setPendingDelete(null);
+      setMessage("Contact enquiry deleted.");
+    } catch (error) {
+      setMessage(error.response?.data?.message || "Unable to delete contact enquiry.");
+    } finally {
+      setDeletingId("");
     }
   };
 
@@ -174,6 +195,14 @@ export default function ContactEnquiries() {
                         <option key={status} value={status}>{status}</option>
                       ))}
                     </select>
+                    <button
+                      className="dashboard-icon-action dashboard-danger-button"
+                      type="button"
+                      disabled={!canDelete || deletingId === enquiry.id}
+                      onClick={() => setPendingDelete(enquiry)}
+                    >
+                      {deletingId === enquiry.id ? "Deleting..." : "Delete"}
+                    </button>
                   </div>
                 </td>
               </tr>
@@ -223,6 +252,29 @@ export default function ContactEnquiries() {
             <div style={messageBoxStyle}>
               <span style={detailLabelStyle}>Message</span>
               <p style={{ margin: "0.45rem 0 0", color: "#0f172a", whiteSpace: "pre-wrap" }}>{selectedEnquiry.message}</p>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {pendingDelete ? (
+        <div style={modalOverlayStyle} role="dialog" aria-modal="true" aria-labelledby="delete-contact-enquiry-title">
+          <section style={confirmPanelStyle}>
+            <h3 id="delete-contact-enquiry-title" style={{ margin: 0 }}>Delete contact enquiry?</h3>
+            <p style={{ margin: "10px 0 0", color: "#475569", lineHeight: 1.55 }}>
+              This will hide the enquiry from the dashboard list while keeping it in the database for audit history.
+            </p>
+            <div style={confirmMetaStyle}>
+              <strong>{pendingDelete.name}</strong>
+              <span>{pendingDelete.email}</span>
+            </div>
+            <div style={confirmActionRowStyle}>
+              <button className="dashboard-secondary-button" type="button" onClick={() => setPendingDelete(null)} disabled={Boolean(deletingId)}>
+                Cancel
+              </button>
+              <button className="dashboard-danger-button" type="button" onClick={handleDelete} disabled={Boolean(deletingId)}>
+                {deletingId ? "Deleting..." : "Delete"}
+              </button>
             </div>
           </section>
         </div>
@@ -320,4 +372,30 @@ const messageBoxStyle = {
   borderRadius: "14px",
   border: "1px solid #e5e7eb",
   background: "#ffffff"
+};
+
+const confirmPanelStyle = {
+  width: "min(440px, 100%)",
+  borderRadius: "16px",
+  border: "1px solid #fecaca",
+  background: "#ffffff",
+  boxShadow: "0 24px 70px rgba(15, 23, 42, 0.22)",
+  padding: "20px"
+};
+
+const confirmMetaStyle = {
+  display: "grid",
+  gap: "4px",
+  marginTop: "14px",
+  padding: "12px",
+  borderRadius: "12px",
+  background: "#f8fafc",
+  color: "#0f172a"
+};
+
+const confirmActionRowStyle = {
+  display: "flex",
+  justifyContent: "flex-end",
+  gap: "10px",
+  marginTop: "18px"
 };

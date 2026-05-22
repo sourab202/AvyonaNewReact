@@ -15,9 +15,24 @@ async function fetchCachedJson(url, errorMessage) {
   return data;
 }
 
+async function fetchFreshJson(url, errorMessage) {
+  const separator = url.includes("?") ? "&" : "?";
+  const response = await fetch(`${url}${separator}_=${Date.now()}`, { cache: "no-store" });
+  if (!response.ok) {
+    throw new Error(errorMessage);
+  }
+
+  return response.json();
+}
+
 export async function fetchPublicSettings() {
   const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000/api/v1";
   return fetchCachedJson(`${apiBaseUrl}/settings/public`, "Unable to fetch public settings");
+}
+
+export async function fetchPublicThemeSettings() {
+  const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000/api/v1";
+  return fetchFreshJson(`${apiBaseUrl}/theme-settings`, "Unable to fetch theme settings");
 }
 
 export async function fetchPublicFooter() {

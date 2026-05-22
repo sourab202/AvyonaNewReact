@@ -93,7 +93,7 @@ const pageMeta = [
   {
     path: "/dashboard/settings/theme",
     title: "Theme Settings",
-    subtitle: ""
+    subtitle: "Control website colors, buttons, cards, spacing, and global design style."
   },
   {
     path: "/dashboard",

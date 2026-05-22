@@ -39,7 +39,7 @@ const navItems = [
       { label: "Header", to: "/dashboard/settings/header", module: "settings" },
       { label: "Footer", to: "/dashboard/settings/footer", module: "settings" },
       { label: "Contact Page", to: "/dashboard/settings/contact-page", module: "settings" },
-      { label: "Theme", to: "/dashboard/settings/theme", module: "settings" }
+      { label: "Theme", to: "/dashboard/settings/theme", module: "theme_settings" }
     ]
   }
 ];

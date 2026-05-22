@@ -65,6 +65,67 @@ export const DEFAULT_APP_SETTINGS = {
     passwordRules: "Strong password policy required",
     sessionTimeout: "30 minutes of inactivity"
   },
+  theme: {
+    colors: {
+      primaryColor: "#22C55E",
+      secondaryColor: "#111827",
+      accentColor: "#16A34A",
+      backgroundColor: "#F6FAF7",
+      surfaceColor: "#FFFFFF",
+      textColor: "#111827",
+      mutedTextColor: "#6B7280",
+      borderColor: "#E5E7EB",
+      successColor: "#22C55E",
+      errorColor: "#EF4444"
+    },
+    typography: {
+      fontFamily: "Inter",
+      baseFontSize: 16,
+      headingFontWeight: 800,
+      bodyFontWeight: 400,
+      lineHeight: 1.5,
+      letterSpacing: 0
+    },
+    buttons: {
+      primaryBackground: "#22C55E",
+      primaryTextColor: "#FFFFFF",
+      secondaryBackground: "#FFFFFF",
+      secondaryTextColor: "#16A34A",
+      borderRadius: 12,
+      height: 42,
+      fontWeight: 800,
+      hoverStyle: "darken"
+    },
+    cards: {
+      background: "#FFFFFF",
+      borderRadius: 18,
+      borderColor: "#E5E7EB",
+      shadowStyle: "soft",
+      padding: 16
+    },
+    layout: {
+      websiteMaxWidth: 1280,
+      sectionPaddingDesktop: 64,
+      sectionPaddingMobile: 28,
+      sectionGap: 32,
+      containerRadius: 14,
+      mobileCompactMode: false
+    },
+    productCards: {
+      imageRatio: "1:1",
+      showDiscountBadge: true,
+      showRating: true,
+      showAddToCartButton: true,
+      borderRadius: 18,
+      shadowStyle: "soft",
+      titleLines: 2,
+      priceColor: "#111827",
+      mrpColor: "#9CA3AF"
+    },
+    customCss: {
+      css: ""
+    }
+  },
   footer: {
     branding: {
       footerLogo: "",
@@ -674,6 +735,38 @@ export function getPublicSettings(settings = DEFAULT_APP_SETTINGS) {
       orderDeliveredEmailEnabled: settings.notifications.orderDeliveredEmailEnabled,
       whatsappNotificationsEnabled: settings.notifications.whatsappNotificationsEnabled,
       smsNotificationsEnabled: settings.notifications.smsNotificationsEnabled
+    },
+    theme: {
+      ...DEFAULT_APP_SETTINGS.theme,
+      ...(settings.theme || {}),
+      colors: {
+        ...DEFAULT_APP_SETTINGS.theme.colors,
+        ...(settings.theme?.colors || {})
+      },
+      typography: {
+        ...DEFAULT_APP_SETTINGS.theme.typography,
+        ...(settings.theme?.typography || {})
+      },
+      buttons: {
+        ...DEFAULT_APP_SETTINGS.theme.buttons,
+        ...(settings.theme?.buttons || {})
+      },
+      cards: {
+        ...DEFAULT_APP_SETTINGS.theme.cards,
+        ...(settings.theme?.cards || {})
+      },
+      layout: {
+        ...DEFAULT_APP_SETTINGS.theme.layout,
+        ...(settings.theme?.layout || {})
+      },
+      productCards: {
+        ...DEFAULT_APP_SETTINGS.theme.productCards,
+        ...(settings.theme?.productCards || {})
+      },
+      customCss: {
+        ...DEFAULT_APP_SETTINGS.theme.customCss,
+        ...(settings.theme?.customCss || {})
+      }
     },
     footer: {
       ...DEFAULT_APP_SETTINGS.footer,

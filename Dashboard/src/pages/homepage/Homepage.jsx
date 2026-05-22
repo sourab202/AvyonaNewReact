@@ -40,8 +40,7 @@ const homepageSections = [
   {
     title: "Blog Post",
     path: "/dashboard/homepage/blog-posts",
-    description: "Manage blog articles shown on the homepage and blog page.",
-    actionLabel: "Configure"
+    description: "Manage blog articles shown on the homepage and blog page."
   },
   {
     title: "Limited Time Offers",

@@ -4,10 +4,12 @@ import { DEFAULT_APP_SETTINGS, getPublicSettings, mergeSettings } from "../../sh
 
 const settingsTableName = "app_settings";
 const legacySettingsTableName = "app_settings_legacy_json";
+const themeSettingsTableName = "theme_settings";
 const footerSettingsTableName = "footer_settings";
 const footerItemsTableName = "footer_items";
 const faviconMaxSizeBytes = 1 * 1024 * 1024;
 let appSettingsTableReady = false;
+let themeSettingsTableReady = false;
 let footerSettingsTablesReady = false;
 
 const generalSettingKeyByPath = {
@@ -26,6 +28,10 @@ const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const phonePattern = /^[+]?[\d\s().-]{7,20}$/;
 const gstPattern = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/i;
 const publicImageUrlPattern = /^(https?:\/\/|\/(?:uploads|images)\/)/i;
+const customCssMaxLength = 10000;
+const hexColorPattern = /^#[0-9a-f]{6}$/i;
+const rgbColorPattern = /^rgb\(\s*(25[0-5]|2[0-4]\d|1?\d?\d)\s*,\s*(25[0-5]|2[0-4]\d|1?\d?\d)\s*,\s*(25[0-5]|2[0-4]\d|1?\d?\d)\s*\)$/i;
+const rgbaColorPattern = /^rgba\(\s*(25[0-5]|2[0-4]\d|1?\d?\d)\s*,\s*(25[0-5]|2[0-4]\d|1?\d?\d)\s*,\s*(25[0-5]|2[0-4]\d|1?\d?\d)\s*,\s*(0|1|0?\.\d+)\s*\)$/i;
 
 const generalPathBySettingKey = Object.fromEntries(
   Object.entries(generalSettingKeyByPath).map(([path, key]) => [key, path])
@@ -141,6 +147,168 @@ function parseSettingValue(rawValue, fallbackValue) {
   return String(rawValue ?? "");
 }
 
+function validateCustomCssValue(css = "") {
+  const value = String(css || "").trim();
+  if (!value) return "";
+
+  if (value.length > customCssMaxLength) {
+    throw new ApiError(400, "Custom CSS must be 10,000 characters or less.");
+  }
+
+  const lowered = value.toLowerCase();
+  if (/<\/?\s*script\b/i.test(value)) {
+    throw new ApiError(400, "Script tags are not allowed in Custom CSS.");
+  }
+  if (/<\/?\s*[a-z][^>]*>/i.test(value)) {
+    throw new ApiError(400, "HTML tags are not allowed in Custom CSS.");
+  }
+  if (/\bjavascript\s*:/i.test(lowered)) {
+    throw new ApiError(400, "javascript: URLs are not allowed in Custom CSS.");
+  }
+  if (/@import\b/i.test(value)) {
+    throw new ApiError(400, "@import is not allowed in Custom CSS.");
+  }
+  if (/\bexpression\s*\(/i.test(value)) {
+    throw new ApiError(400, "CSS expression() is not allowed in Custom CSS.");
+  }
+  if (/\biframe\b/i.test(value)) {
+    throw new ApiError(400, "Iframe is not allowed in Custom CSS.");
+  }
+  if (/\bonerror\s*=/i.test(value) || /\bonclick\s*=/i.test(value)) {
+    throw new ApiError(400, "Inline event handlers are not allowed in Custom CSS.");
+  }
+  if (/url\(\s*['\"]?\s*https?:\/\//i.test(value)) {
+    throw new ApiError(400, "External URLs are not allowed in Custom CSS.");
+  }
+  if (!/[{}]/.test(value)) {
+    throw new ApiError(400, "Custom CSS must include CSS selectors and declarations.");
+  }
+  if (!/\.avyona-theme[\s.#:[,{>+~]/i.test(`${value} `)) {
+    throw new ApiError(400, "Custom CSS must be scoped under .avyona-theme.");
+  }
+
+  return value;
+}
+
+function validateThemeColor(value, fieldName = "Color") {
+  const color = String(value || "").trim();
+
+  if (!color) {
+    throw new ApiError(400, `${fieldName} is required.`);
+  }
+  if (/<\/?\s*script\b/i.test(color) || /\bjavascript\s*:/i.test(color)) {
+    throw new ApiError(400, `${fieldName} contains unsafe content.`);
+  }
+  if (!hexColorPattern.test(color) && !rgbColorPattern.test(color) && !rgbaColorPattern.test(color)) {
+    throw new ApiError(400, `${fieldName} must be a valid HEX, rgb(), or rgba() color.`);
+  }
+
+  return color;
+}
+
+function validateThemeColors(theme = DEFAULT_APP_SETTINGS.theme) {
+  const colorFieldsToValidate = [
+    ["colors.primaryColor", "Primary Color", theme.colors?.primaryColor],
+    ["colors.secondaryColor", "Secondary Color", theme.colors?.secondaryColor],
+    ["colors.accentColor", "Accent Color", theme.colors?.accentColor],
+    ["colors.backgroundColor", "Background Color", theme.colors?.backgroundColor],
+    ["colors.surfaceColor", "Surface Color", theme.colors?.surfaceColor],
+    ["colors.textColor", "Text Color", theme.colors?.textColor],
+    ["colors.mutedTextColor", "Muted Text Color", theme.colors?.mutedTextColor],
+    ["colors.borderColor", "Border Color", theme.colors?.borderColor],
+    ["colors.successColor", "Success Color", theme.colors?.successColor],
+    ["colors.errorColor", "Error Color", theme.colors?.errorColor],
+    ["buttons.primaryBackground", "Primary Button Background", theme.buttons?.primaryBackground],
+    ["buttons.primaryTextColor", "Primary Button Text Color", theme.buttons?.primaryTextColor],
+    ["buttons.secondaryBackground", "Secondary Button Background", theme.buttons?.secondaryBackground],
+    ["buttons.secondaryTextColor", "Secondary Button Text Color", theme.buttons?.secondaryTextColor],
+    ["cards.background", "Card Background", theme.cards?.background],
+    ["cards.borderColor", "Card Border Color", theme.cards?.borderColor],
+    ["productCards.priceColor", "Price Color", theme.productCards?.priceColor],
+    ["productCards.mrpColor", "MRP Color", theme.productCards?.mrpColor]
+  ];
+
+  colorFieldsToValidate.forEach(([_path, label, value]) => validateThemeColor(value, label));
+}
+
+function mapThemeRowToSettings(row = {}) {
+  if (!row || !Object.keys(row).length) return null;
+
+  return {
+    colors: {
+      primaryColor: row.primary_color,
+      secondaryColor: row.secondary_color,
+      accentColor: row.accent_color,
+      backgroundColor: row.background_color,
+      surfaceColor: row.surface_color,
+      textColor: row.text_color,
+      mutedTextColor: row.muted_text_color,
+      borderColor: row.border_color,
+      successColor: row.success_color,
+      errorColor: row.error_color
+    },
+    typography: {
+      fontFamily: row.font_family,
+      baseFontSize: Number(row.base_font_size),
+      headingFontWeight: Number(row.heading_font_weight),
+      bodyFontWeight: Number(row.body_font_weight),
+      lineHeight: Number(row.line_height)
+    },
+    buttons: {
+      borderRadius: Number(row.button_radius),
+      height: Number(row.button_height)
+    },
+    cards: {
+      borderRadius: Number(row.card_radius),
+      shadowStyle: row.card_shadow
+    },
+    layout: {
+      sectionPaddingDesktop: Number(row.section_padding_desktop),
+      sectionPaddingMobile: Number(row.section_padding_mobile),
+      websiteMaxWidth: Number(row.website_max_width)
+    },
+    productCards: {
+      imageRatio: row.product_image_ratio
+    },
+    customCss: {
+      css: row.custom_css || ""
+    }
+  };
+}
+
+function getThemeSettingValues(theme = DEFAULT_APP_SETTINGS.theme) {
+  const mergedTheme = mergeSettings(DEFAULT_APP_SETTINGS.theme, theme || {});
+  const customCss = validateCustomCssValue(mergedTheme.customCss.css || "");
+  validateThemeColors(mergedTheme);
+
+  return [
+    mergedTheme.colors.primaryColor,
+    mergedTheme.colors.secondaryColor,
+    mergedTheme.colors.accentColor,
+    mergedTheme.colors.backgroundColor,
+    mergedTheme.colors.surfaceColor,
+    mergedTheme.colors.textColor,
+    mergedTheme.colors.mutedTextColor,
+    mergedTheme.colors.borderColor,
+    mergedTheme.colors.successColor,
+    mergedTheme.colors.errorColor,
+    mergedTheme.typography.fontFamily,
+    Number(mergedTheme.typography.baseFontSize),
+    Number(mergedTheme.typography.headingFontWeight),
+    Number(mergedTheme.typography.bodyFontWeight),
+    Number(mergedTheme.typography.lineHeight),
+    Number(mergedTheme.buttons.borderRadius),
+    Number(mergedTheme.buttons.height),
+    Number(mergedTheme.cards.borderRadius),
+    mergedTheme.cards.shadowStyle,
+    Number(mergedTheme.layout.sectionPaddingDesktop),
+    Number(mergedTheme.layout.sectionPaddingMobile),
+    Number(mergedTheme.layout.websiteMaxWidth),
+    mergedTheme.productCards.imageRatio,
+    customCss
+  ];
+}
+
 async function tableExists(tableName) {
   const rows = await query("SHOW TABLES LIKE ?", [tableName]);
   return rows.length > 0;
@@ -164,6 +332,73 @@ async function createKeyValueSettingsTable() {
       INDEX idx_app_settings_group (setting_group)
     )`
   );
+}
+
+async function createThemeSettingsTable() {
+  const defaults = DEFAULT_APP_SETTINGS.theme;
+
+  await query(
+    `CREATE TABLE IF NOT EXISTS ${themeSettingsTableName} (
+      id TINYINT UNSIGNED NOT NULL PRIMARY KEY DEFAULT 1,
+      primary_color VARCHAR(7) NOT NULL DEFAULT ?,
+      secondary_color VARCHAR(7) NOT NULL DEFAULT ?,
+      accent_color VARCHAR(7) NOT NULL DEFAULT ?,
+      background_color VARCHAR(7) NOT NULL DEFAULT ?,
+      surface_color VARCHAR(7) NOT NULL DEFAULT ?,
+      text_color VARCHAR(7) NOT NULL DEFAULT ?,
+      muted_text_color VARCHAR(7) NOT NULL DEFAULT ?,
+      border_color VARCHAR(7) NOT NULL DEFAULT ?,
+      success_color VARCHAR(7) NOT NULL DEFAULT ?,
+      error_color VARCHAR(7) NOT NULL DEFAULT ?,
+      font_family VARCHAR(80) NOT NULL DEFAULT ?,
+      base_font_size INT NOT NULL DEFAULT ?,
+      heading_font_weight INT NOT NULL DEFAULT ?,
+      body_font_weight INT NOT NULL DEFAULT ?,
+      line_height DECIMAL(4,2) NOT NULL DEFAULT ?,
+      button_radius INT NOT NULL DEFAULT ?,
+      button_height INT NOT NULL DEFAULT ?,
+      card_radius INT NOT NULL DEFAULT ?,
+      card_shadow VARCHAR(30) NOT NULL DEFAULT ?,
+      section_padding_desktop INT NOT NULL DEFAULT ?,
+      section_padding_mobile INT NOT NULL DEFAULT ?,
+      website_max_width INT NOT NULL DEFAULT ?,
+      product_image_ratio VARCHAR(20) NOT NULL DEFAULT ?,
+      custom_css MEDIUMTEXT NULL,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      CONSTRAINT chk_theme_settings_singleton CHECK (id = 1)
+    )`,
+    [
+      defaults.colors.primaryColor,
+      defaults.colors.secondaryColor,
+      defaults.colors.accentColor,
+      defaults.colors.backgroundColor,
+      defaults.colors.surfaceColor,
+      defaults.colors.textColor,
+      defaults.colors.mutedTextColor,
+      defaults.colors.borderColor,
+      defaults.colors.successColor,
+      defaults.colors.errorColor,
+      defaults.typography.fontFamily,
+      defaults.typography.baseFontSize,
+      defaults.typography.headingFontWeight,
+      defaults.typography.bodyFontWeight,
+      defaults.typography.lineHeight,
+      defaults.buttons.borderRadius,
+      defaults.buttons.height,
+      defaults.cards.borderRadius,
+      defaults.cards.shadowStyle,
+      defaults.layout.sectionPaddingDesktop,
+      defaults.layout.sectionPaddingMobile,
+      defaults.layout.websiteMaxWidth,
+      defaults.productCards.imageRatio
+    ]
+  );
+}
+
+async function ensureThemeSettingsTable() {
+  if (themeSettingsTableReady) return;
+  await createThemeSettingsTable();
+  themeSettingsTableReady = true;
 }
 
 async function createFooterSettingsTables() {
@@ -352,13 +587,17 @@ function normalizeHomepageSectionSettings(payload = {}, fallback = DEFAULT_APP_S
 
 async function readStoredSettings() {
   await ensureAppSettingsTable();
-  const rows = await query(
-    `SELECT setting_key AS settingKey, setting_value AS settingValue
-     FROM ${settingsTableName}`
-  );
+  await ensureThemeSettingsTable();
+  const [rows, themeSettings] = await Promise.all([
+    query(
+      `SELECT setting_key AS settingKey, setting_value AS settingValue
+       FROM ${settingsTableName}`
+    ),
+    readStoredThemeSettings()
+  ]);
 
   if (!rows.length) {
-    return null;
+    return themeSettings ? { theme: themeSettings } : null;
   }
 
   const settings = {};
@@ -367,6 +606,12 @@ async function readStoredSettings() {
     const fallbackValue = getNestedValue(DEFAULT_APP_SETTINGS, path);
     setNestedValue(settings, path, parseSettingValue(row.settingValue, fallbackValue));
   });
+
+  if (themeSettings) {
+    settings.theme = mergeSettings(settings.theme || {}, themeSettings);
+  } else {
+    await writeStoredThemeSettings(settings.theme || DEFAULT_APP_SETTINGS.theme);
+  }
 
   const footerSettings = await readStoredFooterSettings();
   if (footerSettings) {
@@ -381,6 +626,7 @@ async function readStoredSettings() {
 
 async function writeStoredSettings(settings) {
   await createKeyValueSettingsTable();
+  await ensureThemeSettingsTable();
   const entries = flattenSettings(settings);
   if (!entries.length) return;
 
@@ -393,7 +639,106 @@ async function writeStoredSettings(settings) {
     [entry.key, serializeSettingValue(entry.value), entry.group]
   )));
 
+  await writeStoredThemeSettings(settings.theme || DEFAULT_APP_SETTINGS.theme);
   await writeStoredFooterSettings(settings.footer || DEFAULT_APP_SETTINGS.footer);
+}
+
+async function readStoredThemeSettings() {
+  await ensureThemeSettingsTable();
+
+  const rows = await query(
+    `SELECT
+       primary_color,
+       secondary_color,
+       accent_color,
+       background_color,
+       surface_color,
+       text_color,
+       muted_text_color,
+       border_color,
+       success_color,
+       error_color,
+       font_family,
+       base_font_size,
+       heading_font_weight,
+       body_font_weight,
+       line_height,
+       button_radius,
+       button_height,
+       card_radius,
+       card_shadow,
+       section_padding_desktop,
+       section_padding_mobile,
+       website_max_width,
+       product_image_ratio,
+       custom_css
+     FROM ${themeSettingsTableName}
+     WHERE id = 1
+     LIMIT 1`
+  );
+
+  return rows[0] ? mapThemeRowToSettings(rows[0]) : null;
+}
+
+async function writeStoredThemeSettings(theme = DEFAULT_APP_SETTINGS.theme) {
+  await ensureThemeSettingsTable();
+
+  await query(
+    `INSERT INTO ${themeSettingsTableName} (
+       id,
+       primary_color,
+       secondary_color,
+       accent_color,
+       background_color,
+       surface_color,
+       text_color,
+       muted_text_color,
+       border_color,
+       success_color,
+       error_color,
+       font_family,
+       base_font_size,
+       heading_font_weight,
+       body_font_weight,
+       line_height,
+       button_radius,
+       button_height,
+       card_radius,
+       card_shadow,
+       section_padding_desktop,
+       section_padding_mobile,
+       website_max_width,
+       product_image_ratio,
+       custom_css
+     )
+     VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON DUPLICATE KEY UPDATE
+       primary_color = VALUES(primary_color),
+       secondary_color = VALUES(secondary_color),
+       accent_color = VALUES(accent_color),
+       background_color = VALUES(background_color),
+       surface_color = VALUES(surface_color),
+       text_color = VALUES(text_color),
+       muted_text_color = VALUES(muted_text_color),
+       border_color = VALUES(border_color),
+       success_color = VALUES(success_color),
+       error_color = VALUES(error_color),
+       font_family = VALUES(font_family),
+       base_font_size = VALUES(base_font_size),
+       heading_font_weight = VALUES(heading_font_weight),
+       body_font_weight = VALUES(body_font_weight),
+       line_height = VALUES(line_height),
+       button_radius = VALUES(button_radius),
+       button_height = VALUES(button_height),
+       card_radius = VALUES(card_radius),
+       card_shadow = VALUES(card_shadow),
+       section_padding_desktop = VALUES(section_padding_desktop),
+       section_padding_mobile = VALUES(section_padding_mobile),
+       website_max_width = VALUES(website_max_width),
+       product_image_ratio = VALUES(product_image_ratio),
+       custom_css = VALUES(custom_css)`,
+    getThemeSettingValues(theme)
+  );
 }
 
 async function readStoredFooterSettings() {
@@ -549,6 +894,43 @@ export async function updateAdminSettings(request, response) {
   });
 }
 
+export async function getAdminThemeSettings(_request, response) {
+  const storedSettings = await readStoredSettings();
+  const settings = mergeSettings(DEFAULT_APP_SETTINGS, storedSettings || {});
+
+  response.json({
+    success: true,
+    data: settings.theme
+  });
+}
+
+export async function updateAdminThemeSettings(request, response) {
+  const incomingThemeSettings = request.body?.theme || request.body?.settings || request.body;
+
+  if (!incomingThemeSettings || typeof incomingThemeSettings !== "object" || Array.isArray(incomingThemeSettings)) {
+    throw new ApiError(400, "A valid theme settings object is required");
+  }
+
+  const storedSettings = await readStoredSettings();
+  const currentSettings = mergeSettings(DEFAULT_APP_SETTINGS, storedSettings || {});
+  const theme = mergeSettings(currentSettings.theme || DEFAULT_APP_SETTINGS.theme, incomingThemeSettings);
+  theme.customCss = {
+    ...(theme.customCss || {}),
+    css: validateCustomCssValue(theme.customCss?.css || "")
+  };
+  validateThemeColors(theme);
+  const settings = mergeSettings(currentSettings, { theme });
+
+  await writeStoredSettings(settings);
+  const savedSettings = mergeSettings(DEFAULT_APP_SETTINGS, await readStoredSettings() || {});
+
+  response.json({
+    success: true,
+    message: "Theme settings saved successfully",
+    data: savedSettings.theme
+  });
+}
+
 export async function getAdminGeneralSettings(_request, response) {
   const storedSettings = await readStoredSettings();
   const settings = mergeSettings(DEFAULT_APP_SETTINGS, storedSettings || {});
@@ -656,6 +1038,17 @@ export async function getPublicAppSettings(_request, response) {
   response.json({
     success: true,
     data: getPublicSettings(settings)
+  });
+}
+
+export async function getPublicThemeSettings(_request, response) {
+  const storedSettings = await readStoredSettings();
+  const settings = mergeSettings(DEFAULT_APP_SETTINGS, storedSettings || {});
+  const publicSettings = getPublicSettings(settings);
+
+  response.json({
+    success: true,
+    data: publicSettings.theme
   });
 }
 
