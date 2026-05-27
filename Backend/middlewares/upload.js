@@ -7,14 +7,23 @@ const inventoryUploadDirectory = path.resolve(uploadDirectory, "inventory");
 const settingsUploadDirectory = path.resolve(uploadDirectory, "settings");
 const footerUploadDirectory = path.resolve(uploadDirectory, "footer");
 const blogUploadDirectory = path.resolve(uploadDirectory, "blogs");
+const customPageUploadDirectory = path.resolve(uploadDirectory, "pages");
+const whyShopUploadDirectory = path.resolve(uploadDirectory, "homepage", "why-shop");
+const paymentIconsUploadDirectory = path.resolve(uploadDirectory, "homepage", "payment-icons");
 const allowedImageMimeTypes = new Set(["image/jpeg", "image/png", "image/webp", "image/svg+xml"]);
 const allowedImageExtensions = new Set([".jpg", ".jpeg", ".png", ".webp", ".svg"]);
 const allowedCouponImageMimeTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
 const allowedCouponImageExtensions = new Set([".jpg", ".jpeg", ".png", ".webp"]);
 const allowedBlogImageMimeTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
 const allowedBlogImageExtensions = new Set([".jpg", ".jpeg", ".png", ".webp"]);
+const allowedCustomPageImageMimeTypes = new Set(["image/jpeg", "image/png", "image/webp", "image/svg+xml"]);
+const allowedCustomPageImageExtensions = new Set([".jpg", ".jpeg", ".png", ".webp", ".svg"]);
 const allowedFooterImageMimeTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
 const allowedFooterImageExtensions = new Set([".jpg", ".jpeg", ".png", ".webp"]);
+const allowedWhyShopIconMimeTypes = new Set(["image/jpeg", "image/png", "image/webp", "image/svg+xml"]);
+const allowedWhyShopIconExtensions = new Set([".jpg", ".jpeg", ".png", ".webp", ".svg"]);
+const allowedPaymentIconMimeTypes = new Set(["image/jpeg", "image/png", "image/webp", "image/svg+xml"]);
+const allowedPaymentIconExtensions = new Set([".jpg", ".jpeg", ".png", ".webp", ".svg"]);
 const allowedVideoMimeTypes = new Set(["video/mp4", "video/webm", "video/quicktime"]);
 const allowedVideoExtensions = new Set([".mp4", ".webm", ".mov"]);
 
@@ -36,6 +45,18 @@ if (!fs.existsSync(footerUploadDirectory)) {
 
 if (!fs.existsSync(blogUploadDirectory)) {
   fs.mkdirSync(blogUploadDirectory, { recursive: true });
+}
+
+if (!fs.existsSync(customPageUploadDirectory)) {
+  fs.mkdirSync(customPageUploadDirectory, { recursive: true });
+}
+
+if (!fs.existsSync(whyShopUploadDirectory)) {
+  fs.mkdirSync(whyShopUploadDirectory, { recursive: true });
+}
+
+if (!fs.existsSync(paymentIconsUploadDirectory)) {
+  fs.mkdirSync(paymentIconsUploadDirectory, { recursive: true });
 }
 
 const storage = multer.diskStorage({
@@ -98,6 +119,42 @@ const blogImageStorage = multer.diskStorage({
   }
 });
 
+const customPageImageStorage = multer.diskStorage({
+  destination: (_request, _file, callback) => callback(null, customPageUploadDirectory),
+  filename: (_request, file, callback) => {
+    const extension = path.extname(file.originalname || "").toLowerCase();
+    const safeBaseName = String(path.basename(file.originalname || "custom-page-image", extension))
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "custom-page-image";
+    callback(null, `${Date.now()}-${safeBaseName}${extension}`);
+  }
+});
+
+const whyShopIconStorage = multer.diskStorage({
+  destination: (_request, _file, callback) => callback(null, whyShopUploadDirectory),
+  filename: (_request, file, callback) => {
+    const extension = path.extname(file.originalname || "").toLowerCase();
+    const safeBaseName = String(path.basename(file.originalname || "why-shop-icon", extension))
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "why-shop-icon";
+    callback(null, `${Date.now()}-${safeBaseName}${extension}`);
+  }
+});
+
+const paymentIconStorage = multer.diskStorage({
+  destination: (_request, _file, callback) => callback(null, paymentIconsUploadDirectory),
+  filename: (_request, file, callback) => {
+    const extension = path.extname(file.originalname || "").toLowerCase();
+    const safeBaseName = String(path.basename(file.originalname || "payment-icon", extension))
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "payment-icon";
+    callback(null, `${Date.now()}-${safeBaseName}${extension}`);
+  }
+});
+
 function createUploadError(message) {
   return Object.assign(new Error(message), { statusCode: 400 });
 }
@@ -129,10 +186,37 @@ function blogImageFileFilter(_request, file, callback) {
   callback(null, true);
 }
 
+function customPageImageFileFilter(_request, file, callback) {
+  const extension = path.extname(file.originalname || "").toLowerCase();
+  if (!allowedCustomPageImageMimeTypes.has(file.mimetype) || !allowedCustomPageImageExtensions.has(extension)) {
+    callback(createUploadError("Only PNG, JPG, JPEG, WebP, and safe SVG custom page images are allowed"));
+    return;
+  }
+  callback(null, true);
+}
+
 function footerImageFileFilter(_request, file, callback) {
   const extension = path.extname(file.originalname || "").toLowerCase();
   if (!allowedFooterImageMimeTypes.has(file.mimetype) || !allowedFooterImageExtensions.has(extension)) {
     callback(createUploadError("Only JPG, PNG, and WebP footer images are allowed"));
+    return;
+  }
+  callback(null, true);
+}
+
+function whyShopIconFileFilter(_request, file, callback) {
+  const extension = path.extname(file.originalname || "").toLowerCase();
+  if (!allowedWhyShopIconMimeTypes.has(file.mimetype) || !allowedWhyShopIconExtensions.has(extension)) {
+    callback(createUploadError("Only PNG, JPG, JPEG, WebP, and sanitized SVG icons are allowed"));
+    return;
+  }
+  callback(null, true);
+}
+
+function paymentIconFileFilter(_request, file, callback) {
+  const extension = path.extname(file.originalname || "").toLowerCase();
+  if (!allowedPaymentIconMimeTypes.has(file.mimetype) || !allowedPaymentIconExtensions.has(extension)) {
+    callback(createUploadError("Only PNG, JPG, JPEG, WebP, and sanitized SVG payment icons are allowed"));
     return;
   }
   callback(null, true);
@@ -225,5 +309,29 @@ export const uploadBlogImage = multer({
   fileFilter: blogImageFileFilter,
   limits: {
     fileSize: 5 * 1024 * 1024
+  }
+});
+
+export const uploadCustomPageImage = multer({
+  storage: customPageImageStorage,
+  fileFilter: customPageImageFileFilter,
+  limits: {
+    fileSize: 8 * 1024 * 1024
+  }
+});
+
+export const uploadWhyShopIcon = multer({
+  storage: whyShopIconStorage,
+  fileFilter: whyShopIconFileFilter,
+  limits: {
+    fileSize: 1 * 1024 * 1024
+  }
+});
+
+export const uploadPaymentIcon = multer({
+  storage: paymentIconStorage,
+  fileFilter: paymentIconFileFilter,
+  limits: {
+    fileSize: 1 * 1024 * 1024
   }
 });

@@ -155,6 +155,66 @@ export function updateHomepageSectionSettings(sectionKey, payload) {
   return adminApi.put(`/settings/homepage/sections/${sectionKey}`, payload);
 }
 
+export function fetchWhyShopHomepage() {
+  return adminApi.get("/admin/homepage/why-shop");
+}
+
+export function updateWhyShopSettings(payload) {
+  return adminApi.put("/admin/homepage/why-shop/settings", payload);
+}
+
+export function createWhyShopItem(payload) {
+  return adminApi.post("/admin/homepage/why-shop/items", payload);
+}
+
+export function updateWhyShopItem(itemId, payload) {
+  return adminApi.put(`/admin/homepage/why-shop/items/${encodeURIComponent(itemId)}`, payload);
+}
+
+export function deleteWhyShopItem(itemId) {
+  return adminApi.delete(`/admin/homepage/why-shop/items/${encodeURIComponent(itemId)}`);
+}
+
+export function updateWhyShopItemStatus(itemId, status) {
+  return adminApi.patch(`/admin/homepage/why-shop/items/${encodeURIComponent(itemId)}/status`, { status });
+}
+
+export function reorderWhyShopItems(orderedIds) {
+  return adminApi.patch("/admin/homepage/why-shop/items/reorder", { orderedIds });
+}
+
+export function fetchProductPaymentIconsHomepage() {
+  return adminApi.get("/admin/homepage/product-payment-icons");
+}
+
+export function saveProductPaymentIconsHomepage(payload) {
+  return adminApi.put("/admin/homepage/product-payment-icons", payload);
+}
+
+export function updateProductPaymentIconSettings(payload) {
+  return adminApi.put("/admin/homepage/product-payment-icons/settings", payload);
+}
+
+export function createProductPaymentIconItem(payload) {
+  return adminApi.post("/admin/homepage/product-payment-icons/items", payload);
+}
+
+export function updateProductPaymentIconItem(itemId, payload) {
+  return adminApi.put(`/admin/homepage/product-payment-icons/items/${encodeURIComponent(itemId)}`, payload);
+}
+
+export function deleteProductPaymentIconItem(itemId) {
+  return adminApi.delete(`/admin/homepage/product-payment-icons/items/${encodeURIComponent(itemId)}`);
+}
+
+export function updateProductPaymentIconItemStatus(itemId, status) {
+  return adminApi.patch(`/admin/homepage/product-payment-icons/items/${encodeURIComponent(itemId)}/status`, { status });
+}
+
+export function reorderProductPaymentIconItems(orderedIds) {
+  return adminApi.patch("/admin/homepage/product-payment-icons/items/reorder", { orderedIds });
+}
+
 export function fetchCreditSummary() {
   return adminApi.get("/admin/credits/summary");
 }
@@ -447,6 +507,28 @@ export function uploadAdminImage(file) {
   formData.append("image", file);
 
   return adminApi.post("/uploads/image", formData, {
+    headers: {
+      "Content-Type": "multipart/form-data"
+    }
+  });
+}
+
+export function uploadWhyShopIcon(file) {
+  const formData = new FormData();
+  formData.append("icon", file);
+
+  return adminApi.post("/admin/homepage/why-shop/upload", formData, {
+    headers: {
+      "Content-Type": "multipart/form-data"
+    }
+  });
+}
+
+export function uploadPaymentIcon(file) {
+  const formData = new FormData();
+  formData.append("icon", file);
+
+  return adminApi.post("/admin/homepage/product-payment-icons/upload", formData, {
     headers: {
       "Content-Type": "multipart/form-data"
     }

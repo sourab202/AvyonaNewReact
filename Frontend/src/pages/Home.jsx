@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import ProductCard from "../components/product/ProductCard";
 import { fetchHomepageBlogs } from "../api/blogApi";
 import { fetchHomepageOffers } from "../api/couponApi";
+import { fetchPublicWhyShop } from "../api/settingsApi";
 import { flattenCategoryTree, fallbackCategoryTree } from "../data/category-data";
 import {
   arrivalProducts,
@@ -190,6 +191,43 @@ function normalizeHomepageBlog(blog) {
   };
 }
 
+function normalizeWhyShopItem(item = {}, index = 0) {
+  const iconPosition = ["left", "right", "top"].includes(item.iconPosition) ? item.iconPosition : "left";
+  return {
+    id: item.id || `why-shop-item-${index}`,
+    title: String(item.title || "").trim(),
+    iconUrl: String(item.iconUrl || "").trim(),
+    iconPosition,
+    iconSize: Math.min(120, Math.max(16, Number(item.iconSize || 42))),
+    titleFontSize: Math.min(42, Math.max(10, Number(item.titleFontSize || item.fontSize || 18))),
+    textColor: item.textColor || "#0f172a",
+    cardBackgroundColor: item.cardBackgroundColor || item.cardBackground || "#ffffff",
+    cardBorderColor: item.cardBorderColor || "#e5e7eb",
+    cardRadius: Math.min(48, Math.max(0, Number(item.cardRadius ?? 16))),
+    sortOrder: Number(item.sortOrder || index + 1)
+  };
+}
+
+function normalizeWhyShopSection(payload = {}) {
+  const data = payload.data || {};
+  const section = data.section || data.settings || {};
+  const items = Array.isArray(data.items) ? data.items : [];
+  return {
+    enabled: data.enabled !== false && section.enabled !== false && items.length > 0,
+    section: {
+      title: section.title || "Why Shop With Avyona",
+      subtitle: section.subtitle || "",
+      cardsPerRow: Math.min(10, Math.max(1, Number(section.cardsPerRow || 4))),
+      mobileCardsPerRow: Math.min(3, Math.max(1, Number(section.mobileCardsPerRow || 1))),
+      sortOrder: Number(section.sortOrder || 30),
+      backgroundColor: section.backgroundColor || "#f8fafc",
+      textColor: section.textColor || "#0f172a",
+      customCss: section.customCss || ""
+    },
+    items: items.map(normalizeWhyShopItem).filter((item) => item.title).sort((left, right) => left.sortOrder - right.sortOrder)
+  };
+}
+
 function isSafeHeroLink(value) {
   const link = String(value || "").trim();
   return !link || link.startsWith("/") || isExternalLink(link);
@@ -217,6 +255,7 @@ export default function Home({ context }) {
   const [failedBannerMedia, setFailedBannerMedia] = useState({});
   const [homepageOffers, setHomepageOffers] = useState([]);
   const [homepageBlogs, setHomepageBlogs] = useState([]);
+  const [whyShopSection, setWhyShopSection] = useState({ enabled: false, section: {}, items: [] });
   const [copiedHomepageOfferCode, setCopiedHomepageOfferCode] = useState("");
   const homepageSettings = context.siteSettings?.homepage || {};
   const browseCategoriesSettings = getBrowseCategoriesSettings(homepageSettings);
@@ -347,6 +386,23 @@ export default function Home({ context }) {
       })
       .catch(() => {
         if (isMounted) setHomepageBlogs([]);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    fetchPublicWhyShop()
+      .then((response) => {
+        if (!isMounted) return;
+        setWhyShopSection(normalizeWhyShopSection(response));
+      })
+      .catch(() => {
+        if (isMounted) setWhyShopSection({ enabled: false, section: {}, items: [] });
       });
 
     return () => {
@@ -574,15 +630,51 @@ export default function Home({ context }) {
         </section>
       ) : null}
 
-      <section className="trust-section" style={{ order: 30 }}>
-        <div className="section-heading section-heading-centered"><div><h4 className="section-title-medium">Why Shop With Avyona</h4></div></div>
-        <div className="trust-grid">
-          <article><span className="trust-icon" aria-hidden="true">&#10003;</span><strong>Genuine Products</strong></article>
-          <article><span className="trust-icon" aria-hidden="true">&#8377;</span><strong>COD Available</strong></article>
-          <article><span className="trust-icon" aria-hidden="true">&#128274;</span><strong>Secure Payments</strong></article>
-          <article><span className="trust-icon" aria-hidden="true">&#9889;</span><strong>Fast Shipping</strong></article>
-        </div>
-      </section>
+      {whyShopSection.enabled ? (
+        <section
+          className="trust-section avyona-why-shop"
+          style={{
+            order: whyShopSection.section.sortOrder ?? 30,
+            "--why-shop-cards-per-row": whyShopSection.section.cardsPerRow,
+            "--why-shop-mobile-cards-per-row": whyShopSection.section.mobileCardsPerRow,
+            background: whyShopSection.section.backgroundColor,
+            color: whyShopSection.section.textColor
+          }}
+        >
+          {whyShopSection.section.customCss ? <style>{whyShopSection.section.customCss}</style> : null}
+          <div className="section-heading section-heading-centered">
+            <div>
+              <h4 className="section-title-medium">{whyShopSection.section.title}</h4>
+              {whyShopSection.section.subtitle ? <p>{whyShopSection.section.subtitle}</p> : null}
+            </div>
+          </div>
+          <div className="trust-grid">
+            {whyShopSection.items.map((item) => (
+              <article
+                key={item.id}
+                className={`trust-card trust-card-icon-${item.iconPosition}`}
+                style={{
+                  background: item.cardBackgroundColor,
+                  borderColor: item.cardBorderColor,
+                  borderRadius: `${item.cardRadius}px`,
+                  color: item.textColor,
+                  "--trust-icon-size": `${item.iconSize}px`,
+                  "--trust-title-size": `${item.titleFontSize}px`,
+                  "--trust-text-color": item.textColor,
+                  "--trust-card-background": item.cardBackgroundColor,
+                  "--trust-card-border": item.cardBorderColor,
+                  "--trust-card-radius": `${item.cardRadius}px`
+                }}
+              >
+                <span className="trust-icon" aria-hidden="true">
+                  {item.iconUrl ? <img src={resolveStorefrontMediaUrl(item.iconUrl)} alt="" loading="lazy" decoding="async" /> : null}
+                </span>
+                <strong>{item.title}</strong>
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       {null}
       {bestSellerProductsSettings.enabled ? (

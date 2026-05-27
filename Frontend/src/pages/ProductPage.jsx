@@ -11,6 +11,7 @@ import {
   uploadGuestReviewMedia
 } from "../api/productApi";
 import { submitCustomerReview as submitCustomerReviewApi, uploadCustomerReviewMedia } from "../api/customerApi";
+import { fetchPublicProductPaymentIcons } from "../api/settingsApi";
 import ProductCard from "../components/product/ProductCard";
 import { categoryRouteMap } from "../data/storefront-content";
 import { resolveMediaList, resolveMediaUrl } from "../utils/media";
@@ -419,6 +420,7 @@ export default function ProductPage({ context }) {
   const [productOffersLoading, setProductOffersLoading] = useState(false);
   const [productOffersMessage, setProductOffersMessage] = useState("");
   const [copiedProductOfferCode, setCopiedProductOfferCode] = useState("");
+  const [productPaymentIconsSection, setProductPaymentIconsSection] = useState(null);
   const [storedReviews, setStoredReviews] = useState(() => (product ? readStorage(getReviewStorageKey(product.slug), []) : []));
   const hasGroupedVariants = Boolean(product?.variantGroupId);
   const selectedVariant = hasGroupedVariants
@@ -436,6 +438,21 @@ export default function ProductPage({ context }) {
       return String(left.variantValue || left.name).localeCompare(String(right.variantValue || right.name));
     });
   }, [product, productCatalog]);
+
+  useEffect(() => {
+    let isMounted = true;
+    fetchPublicProductPaymentIcons()
+      .then((response) => {
+        if (isMounted) setProductPaymentIconsSection(response.data || null);
+      })
+      .catch(() => {
+        if (isMounted) setProductPaymentIconsSection(null);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -736,6 +753,33 @@ export default function ProductPage({ context }) {
   const shippingSettings = siteSettings.shipping || {};
   const paymentSettings = siteSettings.payment || {};
   const availablePaymentMethods = getCheckoutPaymentMethods(context);
+  const hasDynamicPaymentSection = productPaymentIconsSection && typeof productPaymentIconsSection === "object";
+  const dynamicPaymentItems = Array.isArray(productPaymentIconsSection?.items)
+    ? productPaymentIconsSection.items
+      .filter((item) => item.status !== "inactive")
+      .sort((left, right) => Number(left.sortOrder || 0) - Number(right.sortOrder || 0))
+    : [];
+  const paymentSectionVisible = hasDynamicPaymentSection
+    ? productPaymentIconsSection.enabled !== false && dynamicPaymentItems.length > 0
+    : availablePaymentMethods.length > 0;
+  const paymentSectionSettings = productPaymentIconsSection?.section || {};
+  const productPaymentItems = dynamicPaymentItems.length
+    ? dynamicPaymentItems
+    : availablePaymentMethods.map((method, index) => {
+      const logo = PAYMENT_LOGOS[index % PAYMENT_LOGOS.length];
+      return {
+        id: method.id,
+        paymentName: method.label,
+        altText: method.label,
+        iconUrl: logo.src,
+        iconSize: 44,
+        iconBackgroundColor: "#ffffff",
+        iconBorderColor: "rgba(20, 36, 84, 0.08)",
+        iconRadius: 14,
+        sortOrder: index + 1,
+        status: "active"
+      };
+    });
   const dynamicDeliveryText = `Estimated Delivery: ${shippingSettings.deliveryTime || "3 to 5 business days"}`;
   const dynamicDispatchText = `Dispatch Time: ${shippingSettings.dispatchTime || "24 to 48 hours"}`;
   const dynamicShippingText = shippingSettings.shippingCharges
@@ -1558,20 +1602,49 @@ export default function ProductPage({ context }) {
               <span>Warranty Available</span>
             </div>
 
-            <section className="avy-payment-card">
-              <h2>Available Payment Options</h2>
-              <div className="avy-payment-grid">
-                {availablePaymentMethods.map((method, index) => {
-                  const logo = PAYMENT_LOGOS[index % PAYMENT_LOGOS.length];
-
-                  return (
-                    <div key={method.id} className="avy-payment-icon" title={method.label}>
-                      {logo.src ? <img src={logo.src} alt={method.label} /> : <span>{method.label}</span>}
+            {paymentSectionVisible ? (
+              <section
+                className="avy-payment-card avyona-product-payment-icons"
+                style={{
+                  "--payment-icons-per-row": Math.min(10, Math.max(1, Number(paymentSectionSettings.cardsPerRow || 4))),
+                  "--payment-icons-mobile-per-row": Math.min(3, Math.max(1, Number(paymentSectionSettings.mobileCardsPerRow || 3))),
+                  "--payment-icon-count": Math.max(1, productPaymentItems.length),
+                  background: paymentSectionSettings.backgroundColor || undefined,
+                  color: paymentSectionSettings.textColor || undefined
+                }}
+              >
+                {paymentSectionSettings.customCss ? <style>{paymentSectionSettings.customCss}</style> : null}
+                <h2>{paymentSectionSettings.title || "Available Payment Options"}</h2>
+                {paymentSectionSettings.subtitle ? <p className="avy-payment-subtitle">{paymentSectionSettings.subtitle}</p> : null}
+                <div className="avy-payment-grid">
+                  {productPaymentItems.map((item) => (
+                    <div
+                      key={item.id}
+                      className="avy-payment-icon payment-icon-card"
+                      title={item.paymentName}
+                      style={{
+                        background: item.iconBackgroundColor || "#ffffff",
+                        borderColor: item.iconBorderColor || "rgba(20, 36, 84, 0.08)",
+                        borderRadius: `${Math.min(48, Math.max(0, Number(item.iconRadius || 14)))}px`
+                      }}
+                    >
+                      {item.iconUrl ? (
+                        <img
+                          src={resolveMediaUrl(item.iconUrl)}
+                          alt={item.altText || item.paymentName}
+                          style={{
+                            width: `${Math.min(120, Math.max(16, Number(item.iconSize || 44)))}px`,
+                            height: `${Math.min(120, Math.max(16, Number(item.iconSize || 44)))}px`
+                          }}
+                        />
+                      ) : (
+                        <span>{item.paymentName}</span>
+                      )}
                     </div>
-                  );
-                })}
-              </div>
-            </section>
+                  ))}
+                </div>
+              </section>
+            ) : null}
 
             <div className="avy-trust-strip">
               {TRUST_POINTS.map((item) => <span key={item}>{item}</span>)}

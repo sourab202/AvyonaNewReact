@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
+import { fetchHeaderPages } from "../../api/customPageApi";
 import { fetchStorefrontProducts } from "../../api/productApi";
 import { flattenCategoryTree } from "../../data/category-data";
 import { getSuggestionEntries, getSuggestionScore } from "../../utils/storefront";
@@ -9,6 +10,7 @@ export default function SiteHeader({ context, allProducts }) {
   const [query, setQuery] = useState("");
   const [searchFocused, setSearchFocused] = useState(false);
   const [serverSuggestions, setServerSuggestions] = useState([]);
+  const [headerPages, setHeaderPages] = useState([]);
   const siteSettings = context.siteSettings || {};
   const general = siteSettings.general || {};
   const shipping = siteSettings.shipping || {};
@@ -57,6 +59,23 @@ export default function SiteHeader({ context, allProducts }) {
   useEffect(() => {
     setMenuOpen(false);
   }, [location.pathname, location.search]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    fetchHeaderPages()
+      .then((response) => {
+        if (!isMounted) return;
+        setHeaderPages(Array.isArray(response.data) ? response.data : []);
+      })
+      .catch(() => {
+        if (isMounted) setHeaderPages([]);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     const searchTerm = query.trim();
@@ -174,6 +193,11 @@ export default function SiteHeader({ context, allProducts }) {
             {menuCategories.map((category) => (
               <NavLink key={category.slug} to={`/category/${category.slug}`} onClick={() => setMenuOpen(false)}>
                 {category.name}
+              </NavLink>
+            ))}
+            {headerPages.map((page) => (
+              <NavLink key={page.id || page.slug} to={page.url || `/pages/${page.slug}`} onClick={() => setMenuOpen(false)}>
+                {page.title}
               </NavLink>
             ))}
             <NavLink to="/contact-us" onClick={() => setMenuOpen(false)}>Contact Us</NavLink>

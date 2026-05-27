@@ -22,6 +22,7 @@ const CheckoutPage = lazy(() => import("./pages/CheckoutPage"));
 const CollectionPage = lazy(() => import("./pages/CollectionPage"));
 const CollectionsPage = lazy(() => import("./pages/CollectionsPage"));
 const ContactPage = lazy(() => import("./pages/ContactPage"));
+const CustomPage = lazy(() => import("./pages/CustomPage"));
 const Home = lazy(() => import("./pages/Home"));
 const NotFoundPage = lazy(() => import("./pages/NotFoundPage"));
 const OffersPage = lazy(() => import("./pages/OffersPage"));
@@ -961,6 +962,7 @@ function App() {
           <Route path="/offers" element={<StoreLayout context={context} allProducts={storefrontProducts}><OffersPage context={context} /></StoreLayout>} />
           <Route path="/contact-us" element={<StoreLayout context={context} allProducts={storefrontProducts}><ContactPage context={context} /></StoreLayout>} />
           <Route path="/contact" element={<Navigate to="/contact-us" replace />} />
+          <Route path="/pages/:slug" element={<StoreLayout context={context} allProducts={storefrontProducts}><CustomPage context={context} /></StoreLayout>} />
           <Route path="/wishlist" element={<StoreLayout context={context} allProducts={storefrontProducts}><WishlistPage context={context} /></StoreLayout>} />
           <Route path="/track-order" element={<StoreLayout context={context} allProducts={storefrontProducts}><TrackOrderPage context={context} /></StoreLayout>} />
           <Route path="/product/:slug/:variantKey" element={<StoreLayout context={context} allProducts={storefrontProducts}><ProductPage context={context} /></StoreLayout>} />

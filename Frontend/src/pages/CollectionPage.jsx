@@ -397,6 +397,19 @@ export default function CollectionPage({ context }) {
                 <button className="collection-filter-close" type="button" onClick={() => setFilterOpen(false)}>Close</button>
               </div>
 
+              <div className="filter-group collection-filter-sort-group">
+                <label className="collection-sort-control">
+                  <span className="collection-sort-label">Sort By</span>
+                  <select className="collection-sort-select" value={sortBy} onChange={(event) => updateFilters({ sort: event.target.value })}>
+                    <option value="latest">Latest</option>
+                    <option value="price-low-high">Price: Low to High</option>
+                    <option value="price-high-low">Price: High to Low</option>
+                    <option value="popularity">Popularity</option>
+                    <option value="rating-high-low">Top Rated</option>
+                  </select>
+                </label>
+              </div>
+
               {childCategories.length ? (
                 <div className="filter-group">
                   <h3>Subcategories</h3>

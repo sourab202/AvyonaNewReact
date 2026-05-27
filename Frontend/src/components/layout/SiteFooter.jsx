@@ -1,6 +1,7 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import { DEFAULT_APP_SETTINGS } from "../../../../shared/appSettings";
+import { fetchFooterPages } from "../../api/customPageApi";
 import { fetchPublicFooter } from "../../api/settingsApi";
 import { resolveMediaUrl } from "../../utils/media";
 
@@ -105,6 +106,7 @@ export default function SiteFooter({ context }) {
   const siteSettings = context.siteSettings || {};
   const general = siteSettings.general || {};
   const [footer, setFooter] = React.useState(() => normalizeFooterData(siteSettings.footer || DEFAULT_APP_SETTINGS.footer));
+  const [customFooterPages, setCustomFooterPages] = React.useState([]);
   const [newsletterMessage, setNewsletterMessage] = React.useState("");
 
   React.useEffect(() => {
@@ -116,11 +118,20 @@ export default function SiteFooter({ context }) {
 
     async function loadFooter() {
       try {
-        const response = await fetchPublicFooter();
+        const [response, pageResponse] = await Promise.all([
+          fetchPublicFooter(),
+          fetchFooterPages().catch(() => ({ data: [] }))
+        ]);
         const payload = response.data?.data || response.data || {};
-        if (isMounted) setFooter(normalizeFooterData(payload));
+        if (isMounted) {
+          setFooter(normalizeFooterData(payload));
+          setCustomFooterPages(Array.isArray(pageResponse.data) ? pageResponse.data : []);
+        }
       } catch {
-        if (isMounted) setFooter(normalizeFooterData(siteSettings.footer || DEFAULT_APP_SETTINGS.footer));
+        if (isMounted) {
+          setFooter(normalizeFooterData(siteSettings.footer || DEFAULT_APP_SETTINGS.footer));
+          setCustomFooterPages([]);
+        }
       }
     }
 
@@ -136,6 +147,12 @@ export default function SiteFooter({ context }) {
   const newsletter = footer.newsletter || {};
   const design = footer.design || {};
   const footerLogo = branding.footerLogo || resolveMediaUrl(general.logoUrl);
+  const footerPageLinks = customFooterPages.map((page) => ({
+    id: `custom-page-${page.id || page.slug}`,
+    label: page.title,
+    url: page.url || `/pages/${page.slug}`
+  }));
+  const policyLinks = [...footer.policyLinks, ...footerPageLinks];
   const supportEmail = support.supportEmail || general.supportEmail || "support@avyona.com";
   const supportPhone = support.supportPhone || general.supportPhone || "";
   const defaultFooterDesign = DEFAULT_APP_SETTINGS.footer.design || {};
@@ -183,9 +200,9 @@ export default function SiteFooter({ context }) {
             </div>
           ) : null}
           {branding.copyrightText ? <span className="footer-copyright">{branding.copyrightText}</span> : null}
-          {footer.policyLinks.length ? (
+          {policyLinks.length ? (
             <div className="footer-policy-row">
-              {footer.policyLinks.map((item) => (
+              {policyLinks.map((item) => (
                 <FooterLink key={item.id || item.label} to={item.url}>{item.label}</FooterLink>
               ))}
             </div>
@@ -287,9 +304,9 @@ export default function SiteFooter({ context }) {
           </div>
         ) : null}
 
-        {footer.policyLinks.length ? (
+        {policyLinks.length ? (
           <div className="footer-policy-row">
-            {footer.policyLinks.map((item) => (
+            {policyLinks.map((item) => (
               <FooterLink key={item.id || item.label} to={item.url}>{item.label}</FooterLink>
             ))}
           </div>

@@ -13,6 +13,7 @@ const DashboardHome = React.lazy(() => import("../pages/dashboard/DashboardHome"
 const CreditPoints = React.lazy(() => import("../pages/credit-points/CreditPoints"));
 const Homepage = React.lazy(() => import("../pages/homepage/Homepage"));
 const BlogPosts = React.lazy(() => import("../pages/homepage/BlogPosts"));
+const CustomPages = React.lazy(() => import("../pages/homepage/CustomPages"));
 const HomepageConfigurePage = React.lazy(() => import("../pages/homepage/HomepageConfigurePage"));
 const ThankYouPageSettings = React.lazy(() => import("../pages/homepage/ThankYouPageSettings"));
 const InvoiceDesigner = React.lazy(() => import("../pages/homepage/InvoiceDesigner"));
@@ -70,6 +71,9 @@ export default function AppRoutes({ context, allProducts }) {
           <Route path="homepage/best-sellers" element={<HomepageConfigurePage sectionKey="best-sellers" />} />
           <Route path="homepage/new-arrivals" element={<HomepageConfigurePage sectionKey="new-arrivals" />} />
           <Route path="homepage/featured-brands" element={<HomepageConfigurePage sectionKey="featured-brands" />} />
+          <Route path="homepage/why-shop" element={<HomepageConfigurePage sectionKey="why-shop" />} />
+          <Route path="homepage/product-payment-icons" element={<HomepageConfigurePage sectionKey="product-payment-icons" />} />
+          <Route path="homepage/pages" element={<CustomPages />} />
           <Route path="homepage/newsletter" element={<HomepageConfigurePage sectionKey="newsletter" />} />
           <Route path="homepage/blog-posts" element={<BlogPosts />} />
           <Route path="homepage/thank-you-page" element={<ThankYouPageSettings />} />

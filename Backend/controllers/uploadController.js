@@ -248,6 +248,9 @@ async function getProductImageLinks() {
 }
 
 async function trackUploadedAsset(request, assetType) {
+  const relativeUploadPath = normalizeAssetUrl(path.relative(uploadsRoot, request.file.path || path.join(uploadsRoot, request.file.filename)));
+  const assetUrl = `/uploads/${relativeUploadPath}`;
+
   try {
     await query(
       `INSERT INTO uploaded_assets
@@ -258,7 +261,7 @@ async function trackUploadedAsset(request, assetType) {
         request.file.filename,
         request.file.mimetype,
         assetType,
-        `/uploads/${request.file.filename}`,
+        assetUrl,
         request.file.size,
         request.admin?.id || null
       ]
@@ -423,6 +426,79 @@ export async function uploadMedia(request, response) {
       size: request.file.size,
       mediaType: assetType,
       url: `/uploads/${request.file.filename}`
+    }
+  });
+}
+
+async function assertSafeSvgIcon(filePath) {
+  const extension = path.extname(filePath || "").toLowerCase();
+  if (extension !== ".svg") return;
+
+  const svg = await fs.readFile(filePath, "utf8");
+  const unsafePatterns = [
+    /<\s*script\b/i,
+    /<\s*foreignObject\b/i,
+    /<\s*iframe\b/i,
+    /<\s*object\b/i,
+    /<\s*embed\b/i,
+    /\son[a-z]+\s*=/i,
+    /javascript\s*:/i,
+    /data\s*:\s*text\/html/i,
+    /<\s*link\b/i
+  ];
+
+  if (unsafePatterns.some((pattern) => pattern.test(svg))) {
+    await fs.unlink(filePath);
+    const error = new Error("SVG icon contains unsafe markup and was rejected.");
+    error.statusCode = 400;
+    throw error;
+  }
+}
+
+export async function uploadWhyShopIcon(request, response) {
+  if (!request.file) {
+    response.status(400).json({
+      success: false,
+      message: "Why Shop icon file is required"
+    });
+    return;
+  }
+
+  await assertSafeSvgIcon(request.file.path);
+  await trackUploadedAsset(request, "image");
+
+  response.status(201).json({
+    success: true,
+    data: {
+      filename: request.file.filename,
+      originalName: request.file.originalname,
+      mimeType: request.file.mimetype,
+      size: request.file.size,
+      url: `/uploads/homepage/why-shop/${request.file.filename}`
+    }
+  });
+}
+
+export async function uploadPaymentIcon(request, response) {
+  if (!request.file) {
+    response.status(400).json({
+      success: false,
+      message: "Payment icon file is required"
+    });
+    return;
+  }
+
+  await assertSafeSvgIcon(request.file.path);
+  await trackUploadedAsset(request, "image");
+
+  response.status(201).json({
+    success: true,
+    data: {
+      filename: request.file.filename,
+      originalName: request.file.originalname,
+      mimeType: request.file.mimetype,
+      size: request.file.size,
+      url: `/uploads/homepage/payment-icons/${request.file.filename}`
     }
   });
 }

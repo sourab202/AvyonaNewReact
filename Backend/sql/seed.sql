@@ -78,6 +78,11 @@ INSERT INTO permissions (permission_key, module_name, action_name, display_name,
   ('homepage.create', 'homepage', 'create', 'Create Homepage Content', 'Create homepage content blocks.', 0, 1),
   ('homepage.edit', 'homepage', 'edit', 'Edit Homepage', 'Edit homepage content.', 0, 1),
   ('homepage.delete', 'homepage', 'delete', 'Delete Homepage Content', 'Delete homepage content blocks.', 0, 1),
+  ('pages.view', 'pages', 'view', 'View Pages', 'View custom website pages, policy pages, and landing pages.', 0, 1),
+  ('pages.create', 'pages', 'create', 'Create Pages', 'Create custom website pages, policy pages, and landing pages.', 0, 1),
+  ('pages.edit', 'pages', 'edit', 'Edit Pages', 'Edit custom page details, content blocks, SEO, visibility, and custom CSS.', 0, 1),
+  ('pages.delete', 'pages', 'delete', 'Delete Pages', 'Delete custom pages and page content blocks.', 1, 1),
+  ('pages.publish', 'pages', 'publish', 'Publish Pages', 'Publish custom pages and change live page status.', 1, 1),
   ('blogs.view', 'blogs', 'view', 'View Blogs', 'View blog articles and tags.', 0, 1),
   ('blogs.create', 'blogs', 'create', 'Create Blogs', 'Create blog articles and tags.', 0, 1),
   ('blogs.edit', 'blogs', 'edit', 'Edit Blogs', 'Edit blog articles, tags, SEO, and homepage placement.', 0, 1),
@@ -139,6 +144,7 @@ JOIN (
   SELECT 'coupons' UNION ALL
   SELECT 'credit_points' UNION ALL
   SELECT 'homepage' UNION ALL
+  SELECT 'pages' UNION ALL
   SELECT 'blogs' UNION ALL
   SELECT 'reviews' UNION ALL
   SELECT 'settings' UNION ALL
@@ -170,6 +176,7 @@ JOIN (
   SELECT 'admin', 'coupons', 1, 1, 1, 1, 1, 0 UNION ALL
   SELECT 'admin', 'credit_points', 1, 1, 1, 1, 1, 0 UNION ALL
   SELECT 'admin', 'homepage', 1, 1, 1, 1, 0, 0 UNION ALL
+  SELECT 'admin', 'pages', 1, 1, 1, 1, 0, 1 UNION ALL
   SELECT 'admin', 'blogs', 1, 1, 1, 1, 0, 1 UNION ALL
   SELECT 'admin', 'reviews', 1, 1, 1, 1, 1, 0 UNION ALL
   SELECT 'admin', 'settings', 1, 0, 1, 0, 0, 0 UNION ALL
@@ -180,6 +187,7 @@ JOIN (
   SELECT 'product_manager', 'brands', 1, 1, 1, 1, 1, 0 UNION ALL
   SELECT 'product_manager', 'variations', 1, 1, 1, 1, 1, 0 UNION ALL
   SELECT 'product_manager', 'homepage', 1, 0, 1, 0, 0, 0 UNION ALL
+  SELECT 'product_manager', 'pages', 1, 0, 0, 0, 0, 0 UNION ALL
   SELECT 'product_manager', 'blogs', 1, 0, 0, 0, 0, 0 UNION ALL
   SELECT 'order_manager', 'dashboard', 1, 0, 0, 0, 0, 0 UNION ALL
   SELECT 'order_manager', 'orders', 1, 1, 1, 0, 1, 0 UNION ALL
@@ -189,6 +197,7 @@ JOIN (
   SELECT 'marketing_manager', 'coupons', 1, 1, 1, 1, 1, 0 UNION ALL
   SELECT 'marketing_manager', 'credit_points', 1, 1, 1, 0, 1, 0 UNION ALL
   SELECT 'marketing_manager', 'homepage', 1, 1, 1, 1, 0, 0 UNION ALL
+  SELECT 'marketing_manager', 'pages', 1, 1, 1, 1, 0, 1 UNION ALL
   SELECT 'marketing_manager', 'blogs', 1, 1, 1, 1, 0, 1 UNION ALL
   SELECT 'marketing_manager', 'reviews', 1, 1, 1, 1, 1, 0 UNION ALL
   SELECT 'support_staff', 'dashboard', 1, 0, 0, 0, 0, 0 UNION ALL
@@ -206,6 +215,7 @@ JOIN (
   SELECT 'viewer', 'coupons', 1, 0, 0, 0, 0, 0 UNION ALL
   SELECT 'viewer', 'credit_points', 1, 0, 0, 0, 0, 0 UNION ALL
   SELECT 'viewer', 'homepage', 1, 0, 0, 0, 0, 0 UNION ALL
+  SELECT 'viewer', 'pages', 1, 0, 0, 0, 0, 0 UNION ALL
   SELECT 'viewer', 'blogs', 1, 0, 0, 0, 0, 0 UNION ALL
   SELECT 'viewer', 'reviews', 1, 0, 0, 0, 0, 0 UNION ALL
   SELECT 'viewer', 'settings', 1, 0, 0, 0, 0, 0 UNION ALL

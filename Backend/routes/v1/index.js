@@ -4,6 +4,9 @@ import adminAuthRoutes from "./adminAuthRoutes.js";
 import adminFooterItemsRoutes from "./adminFooterItemsRoutes.js";
 import adminFooterRoutes from "./adminFooterRoutes.js";
 import adminFooterSettingsRoutes from "./adminFooterSettingsRoutes.js";
+import adminHomepageWhyShopRoutes from "./adminHomepageWhyShopRoutes.js";
+import adminHomepageProductPaymentIconsRoutes from "./adminHomepageProductPaymentIconsRoutes.js";
+import adminPageRoutes from "./adminPageRoutes.js";
 import analyticsRoutes from "./analyticsRoutes.js";
 import blogRoutes from "./blogRoutes.js";
 import blogTagRoutes from "./blogTagRoutes.js";
@@ -18,7 +21,10 @@ import couponRoutes from "./couponRoutes.js";
 import dashboardRoutes from "./dashboardRoutes.js";
 import orderRoutes from "./orderRoutes.js";
 import productRoutes from "./productRoutes.js";
+import productPaymentIconsRoutes from "./productPaymentIconsRoutes.js";
 import publicFooterRoutes from "./publicFooterRoutes.js";
+import publicHomepageRoutes from "./publicHomepageRoutes.js";
+import publicPageRoutes from "./publicPageRoutes.js";
 import publicBlogRoutes from "./publicBlogRoutes.js";
 import publicBlogTagRoutes from "./publicBlogTagRoutes.js";
 import reviewRoutes from "./reviewRoutes.js";
@@ -60,6 +66,9 @@ router.use("/admin/auth", adminAuthRoutes);
 router.use("/admin/footer", adminFooterRoutes);
 router.use("/admin/footer-settings", adminFooterSettingsRoutes);
 router.use("/admin/footer-items", adminFooterItemsRoutes);
+router.use("/admin/homepage/why-shop", adminHomepageWhyShopRoutes);
+router.use("/admin/homepage/product-payment-icons", adminHomepageProductPaymentIconsRoutes);
+router.use("/admin/pages", adminPageRoutes);
 router.get(
   "/admin/theme-settings",
   asyncHandler(requireAdminAuth),
@@ -76,6 +85,8 @@ router.use("/admin/blogs", blogRoutes);
 router.use("/admin/blog-tags", blogTagRoutes);
 router.use("/analytics", analyticsRoutes);
 router.use("/footer", publicFooterRoutes);
+router.use("/homepage", publicHomepageRoutes);
+router.use("/pages", publicPageRoutes);
 router.get("/theme-settings", asyncHandler(getPublicThemeSettings));
 router.use("/blogs", publicBlogRoutes);
 router.use("/blog-tags", publicBlogTagRoutes);
@@ -88,6 +99,7 @@ router.delete(
   asyncHandler(deleteContactEnquiry)
 );
 router.use("/products", productRoutes);
+router.use("/product-payment-icons", productPaymentIconsRoutes);
 router.use("/reviews", reviewRoutes);
 router.use("/seo", seoRoutes);
 router.use("/variant-groups", variantGroupRoutes);

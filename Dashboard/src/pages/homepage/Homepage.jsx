@@ -33,6 +33,22 @@ const homepageSections = [
     description: "Select brand highlights and logo placements for the homepage."
   },
   {
+    title: "Why Shop With Avyona",
+    path: "/dashboard/homepage/why-shop",
+    description: "Manage homepage trust badges with icons and text."
+  },
+  {
+    title: "Product Payment Icons",
+    path: "/dashboard/homepage/product-payment-icons",
+    description: "Manage payment icons shown on product detail pages.",
+    actionLabel: "Configure"
+  },
+  {
+    title: "Pages",
+    path: "/dashboard/homepage/pages",
+    description: "Create and manage custom website pages, policy pages, and landing pages."
+  },
+  {
     title: "Newsletter",
     path: "/dashboard/homepage/newsletter",
     description: "Enable, rename, and position the homepage newsletter signup block."

@@ -49,3 +49,13 @@ export async function fetchPublicBrowseCategoriesSettings() {
   const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000/api/v1";
   return fetchCachedJson(`${apiBaseUrl}/settings/public/homepage/browse-categories`, "Unable to fetch Browse Categories settings");
 }
+
+export async function fetchPublicWhyShop() {
+  const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000/api/v1";
+  return fetchFreshJson(`${apiBaseUrl}/homepage/why-shop`, "Unable to fetch Why Shop section");
+}
+
+export async function fetchPublicProductPaymentIcons() {
+  const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000/api/v1";
+  return fetchFreshJson(`${apiBaseUrl}/product-payment-icons`, "Unable to fetch product payment icons");
+}

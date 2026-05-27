@@ -1,6 +1,6 @@
 import React from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { fetchAdminSettings, fetchBrowseCategoriesSettings, fetchCategories, fetchHomepageSectionSettings, fetchProducts, updateAdminSettings, updateBrowseCategoriesSettings, updateCategory, updateHomepageSectionSettings, uploadAdminImage, uploadAdminMedia } from "../../api/adminApi";
+import { createWhyShopItem, deleteWhyShopItem, fetchAdminSettings, fetchBrowseCategoriesSettings, fetchCategories, fetchHomepageSectionSettings, fetchProductPaymentIconsHomepage, fetchProducts, fetchWhyShopHomepage, reorderWhyShopItems, saveProductPaymentIconsHomepage, updateAdminSettings, updateBrowseCategoriesSettings, updateCategory, updateHomepageSectionSettings, updateWhyShopItem, updateWhyShopItemStatus, updateWhyShopSettings, uploadAdminImage, uploadAdminMedia, uploadPaymentIcon, uploadWhyShopIcon } from "../../api/adminApi";
 import { resolveAdminMediaUrl, toStoredUploadUrl } from "../../utils/media";
 import { compressImageFile, getStorefrontBaseUrl } from "../../utils/storefront";
 import { fallbackCategoryTree, flattenCategoryTree } from "../../data/category-data";
@@ -33,6 +33,14 @@ export const homepageConfigureSections = {
   "featured-brands": {
     title: "Featured Brands",
     description: "Configure brand logo cards and featured brand ordering."
+  },
+  "why-shop": {
+    title: "Why Shop With Avyona",
+    description: "Manage homepage trust badges with icons and text."
+  },
+  "product-payment-icons": {
+    title: "Product Payment Icons",
+    description: "Manage payment icons shown on product detail pages."
   },
   newsletter: {
     title: "Newsletter",
@@ -145,6 +153,14 @@ export default function HomepageConfigurePage({ sectionKey }) {
 
   if (sectionKey === "featured-brands") {
     return <FeaturedBrandsConfigure section={section} refreshToken={refreshToken} />;
+  }
+
+  if (sectionKey === "why-shop") {
+    return <WhyShopConfigure section={section} refreshToken={refreshToken} />;
+  }
+
+  if (sectionKey === "product-payment-icons") {
+    return <ProductPaymentIconsConfigure section={section} refreshToken={refreshToken} />;
   }
 
   if (sectionKey === "newsletter") {
@@ -385,6 +401,23 @@ function normalizeHomepageSectionSettings(value = {}, fallback = DEFAULT_APP_SET
     ...(shouldIncludeButtonDisplayType ? { buttonDisplayType: normalizeProductButtonDisplayType(value.buttonDisplayType, fallback.buttonDisplayType || "both") } : {}),
     sortOrder: Number.isFinite(Number(value.sortOrder)) ? Math.floor(Number(value.sortOrder)) : fallback.sortOrder
   };
+}
+
+function getScopedCssValidationError(css = "", scopeSelector = ".avyona-product-payment-icons") {
+  const value = String(css || "").trim();
+  if (!value) return "";
+  if (value.length > 10000) return "Custom CSS must be 10,000 characters or less.";
+  if (/<\/?\s*script\b/i.test(value)) return "Script tags are not allowed in Custom CSS.";
+  if (/<\/?\s*[a-z][^>]*>/i.test(value)) return "Only CSS is allowed in Custom CSS.";
+  if (/\bjavascript\s*:/i.test(value)) return "javascript: URLs are not allowed in Custom CSS.";
+  if (/@import\b/i.test(value)) return "@import is not allowed in Custom CSS.";
+  if (/\biframe\b/i.test(value)) return "Iframe is not allowed in Custom CSS.";
+  if (/\bonclick\s*=/i.test(value) || /\bonerror\s*=/i.test(value)) return "Inline event handlers are not allowed in Custom CSS.";
+  if (!/[{}]/.test(value)) return "Custom CSS must include CSS selectors and declarations.";
+  const escapedScope = scopeSelector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const scopePattern = new RegExp(`${escapedScope}[\\s.#:[,{>+~]`, "i");
+  if (!scopePattern.test(`${value} `)) return `Custom CSS must be scoped under ${scopeSelector}.`;
+  return "";
 }
 
 function normalizeBrowseCategoryEntries(settings, categories) {
@@ -1944,6 +1977,1061 @@ function SimpleHomepageSectionConfigure({ section, routeKey, settingsKey, sectio
         <Link to="/dashboard/homepage" style={backButtonStyle}>Back to Homepage Sections</Link>
       </div>
     </section>
+  );
+}
+
+const ICON_POSITION_OPTIONS = [
+  { label: "Left", value: "left" },
+  { label: "Right", value: "right" },
+  { label: "Top", value: "top" }
+];
+const WHY_SHOP_ICON_MAX_SIZE_BYTES = 1 * 1024 * 1024;
+const WHY_SHOP_ICON_ALLOWED_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/svg+xml"]);
+const WHY_SHOP_ICON_ALLOWED_EXTENSIONS = new Set(["png", "jpg", "jpeg", "webp", "svg"]);
+
+function validateWhyShopIconFile(file) {
+  if (!file) return "Please choose an icon file.";
+  const extension = String(file.name || "").split(".").pop()?.toLowerCase() || "";
+  if (!WHY_SHOP_ICON_ALLOWED_TYPES.has(file.type) || !WHY_SHOP_ICON_ALLOWED_EXTENSIONS.has(extension)) {
+    return "Use PNG, JPG, JPEG, WebP, or sanitized SVG icons only.";
+  }
+  if (file.size > WHY_SHOP_ICON_MAX_SIZE_BYTES) {
+    return "Icon file is too large. Maximum size is 1 MB.";
+  }
+  return "";
+}
+
+function normalizeWhyShopItem(value = {}, index = 0) {
+  const fallback = DEFAULT_APP_SETTINGS.homepage.whyShopItems[index] || DEFAULT_APP_SETTINGS.homepage.whyShopItems[0] || {};
+  const iconPosition = ICON_POSITION_OPTIONS.some((option) => option.value === value.iconPosition) ? value.iconPosition : (fallback.iconPosition || "left");
+
+  return {
+    id: value.id || `why-shop-item-${Date.now()}-${index}`,
+    iconUrl: String(value.iconUrl || fallback.iconUrl || "").trim(),
+    iconPosition,
+    iconSize: Math.min(120, Math.max(16, Number(value.iconSize || fallback.iconSize || 42))),
+    title: String(value.title || fallback.title || "Trust Badge").trim(),
+    titleFontSize: Math.min(42, Math.max(10, Number(value.titleFontSize || fallback.titleFontSize || 18))),
+    textColor: String(value.textColor || fallback.textColor || "#0f172a").trim(),
+    cardBackgroundColor: String(value.cardBackgroundColor || fallback.cardBackgroundColor || "#ffffff").trim(),
+    cardBorderColor: String(value.cardBorderColor || fallback.cardBorderColor || "#e5e7eb").trim(),
+    cardRadius: Math.min(48, Math.max(0, Number(value.cardRadius ?? fallback.cardRadius ?? 16))),
+    sortOrder: Number.isFinite(Number(value.sortOrder)) ? Math.floor(Number(value.sortOrder)) : index + 1,
+    status: String(value.status || fallback.status || "active").toLowerCase() === "inactive" ? "inactive" : "active"
+  };
+}
+
+function normalizeWhyShopItems(settings = DEFAULT_APP_SETTINGS) {
+  const source = Array.isArray(settings.homepage?.whyShopItems) && settings.homepage.whyShopItems.length
+    ? settings.homepage.whyShopItems
+    : DEFAULT_APP_SETTINGS.homepage.whyShopItems;
+
+  return source
+    .map(normalizeWhyShopItem)
+    .sort((left, right) => Number(left.sortOrder || 0) - Number(right.sortOrder || 0));
+}
+
+function createEmptyWhyShopItem(sortOrder) {
+  return normalizeWhyShopItem({
+    id: `why-shop-item-${Date.now()}`,
+    iconUrl: "",
+    iconPosition: "left",
+    iconSize: 42,
+    title: "New Trust Badge",
+    titleFontSize: 18,
+    textColor: "#0f172a",
+    cardBackgroundColor: "#ffffff",
+    cardBorderColor: "#e5e7eb",
+    cardRadius: 16,
+    sortOrder,
+    status: "active"
+  });
+}
+
+function WhyShopConfigure({ section, refreshToken = 0 }) {
+  const settingsKey = "whyShopSettings";
+  const routeKey = "why-shop";
+  const sectionLabel = "Why Shop With Avyona";
+  const [settings, setSettings] = React.useState(() => cloneSettings(DEFAULT_APP_SETTINGS));
+  const [sectionSettings, setSectionSettings] = React.useState(() => normalizeHomepageSectionSettings(DEFAULT_APP_SETTINGS.homepage[settingsKey], DEFAULT_APP_SETTINGS.homepage[settingsKey]));
+  const [items, setItems] = React.useState(() => normalizeWhyShopItems(DEFAULT_APP_SETTINGS));
+  const [persistedItemIds, setPersistedItemIds] = React.useState(() => new Set(DEFAULT_APP_SETTINGS.homepage.whyShopItems.map((item) => item.id)));
+  const [isLoading, setIsLoading] = React.useState(true);
+  const [isSaving, setIsSaving] = React.useState(false);
+  const [uploadingItemId, setUploadingItemId] = React.useState("");
+  const [message, setMessage] = React.useState("");
+  const [messageTone, setMessageTone] = React.useState("success");
+
+  React.useEffect(() => {
+    let isMounted = true;
+
+    async function loadWhyShopSettings() {
+      setIsLoading(true);
+      try {
+        const response = await fetchWhyShopHomepage();
+        if (!isMounted) return;
+        const data = response.data?.data || {};
+        const mergedSettings = mergeSettings(DEFAULT_APP_SETTINGS, {
+          homepage: {
+            [settingsKey]: data.settings,
+            whyShopItems: data.items
+          }
+        });
+        setSettings(mergedSettings);
+        setSectionSettings(normalizeHomepageSectionSettings(data.settings || mergedSettings.homepage?.[settingsKey], DEFAULT_APP_SETTINGS.homepage[settingsKey]));
+        setItems(normalizeWhyShopItems(mergedSettings));
+        setPersistedItemIds(new Set((data.items || []).map((item) => item.id)));
+        setMessage(`${sectionLabel} settings loaded.`);
+        setMessageTone("success");
+      } catch {
+        if (!isMounted) return;
+        const fallbackSettings = cloneSettings(DEFAULT_APP_SETTINGS);
+        setSettings(fallbackSettings);
+        setSectionSettings(normalizeHomepageSectionSettings(fallbackSettings.homepage[settingsKey], DEFAULT_APP_SETTINGS.homepage[settingsKey]));
+        setItems(normalizeWhyShopItems(fallbackSettings));
+        setPersistedItemIds(new Set(fallbackSettings.homepage.whyShopItems.map((item) => item.id)));
+        setMessage("Showing default trust badges. Start backend and sign in as admin to save changes.");
+        setMessageTone("warning");
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
+    }
+
+    loadWhyShopSettings();
+    return () => {
+      isMounted = false;
+    };
+  }, [refreshToken]);
+
+  const updateSectionField = (key, value) => {
+    setSectionSettings((current) => ({
+      ...current,
+      [key]: key === "cardsPerRow"
+        ? normalizeCardsPerRow(value)
+        : key === "mobileCardsPerRow"
+          ? normalizeMobileCardsPerRow(value)
+          : key === "sortOrder"
+            ? Number(value || 0)
+            : value
+    }));
+    setMessage("");
+  };
+
+  const updateItem = (itemId, values) => {
+    setItems((current) => current.map((item) => item.id === itemId ? normalizeWhyShopItem({ ...item, ...values }) : item));
+    setMessage("");
+  };
+
+  const addItem = () => {
+    const nextSort = Math.max(0, ...items.map((item) => Number(item.sortOrder || 0))) + 1;
+    setItems((current) => [...current, createEmptyWhyShopItem(nextSort)]);
+    setMessage("");
+  };
+
+  const removeItem = (itemId) => {
+    setItems((current) => current.filter((item) => item.id !== itemId));
+    setMessage("");
+  };
+
+  const toggleItemStatus = (itemId) => {
+    setItems((current) => current.map((item) => item.id === itemId ? { ...item, status: item.status === "active" ? "inactive" : "active" } : item));
+    setMessage("");
+  };
+
+  const moveItem = (itemId, direction) => {
+    setItems((current) => {
+      const ordered = [...current].sort((left, right) => Number(left.sortOrder || 0) - Number(right.sortOrder || 0));
+      const currentIndex = ordered.findIndex((item) => item.id === itemId);
+      const targetIndex = currentIndex + direction;
+      if (currentIndex < 0 || targetIndex < 0 || targetIndex >= ordered.length) return current;
+
+      const [selected] = ordered.splice(currentIndex, 1);
+      ordered.splice(targetIndex, 0, selected);
+      return ordered.map((item, index) => ({ ...item, sortOrder: index + 1 }));
+    });
+    setMessage("");
+  };
+
+  const uploadIcon = async (itemId, file) => {
+    if (!file) return;
+    const validationMessage = validateWhyShopIconFile(file);
+    if (validationMessage) {
+      setMessage(validationMessage);
+      setMessageTone("warning");
+      return;
+    }
+
+    setUploadingItemId(itemId);
+    try {
+      const response = await uploadWhyShopIcon(file);
+      updateItem(itemId, { iconUrl: response.data?.data?.url || "" });
+      setMessage("Icon uploaded. Save changes to publish it.");
+      setMessageTone("success");
+    } catch (error) {
+      setMessage(error.response?.data?.message || "Icon upload failed.");
+      setMessageTone("warning");
+    } finally {
+      setUploadingItemId("");
+    }
+  };
+
+  const removeIcon = (itemId) => {
+    updateItem(itemId, { iconUrl: "" });
+    setMessage("Icon removed. Save changes to publish it.");
+    setMessageTone("success");
+  };
+
+  const saveAll = async () => {
+    const cssError = getScopedCssValidationError(sectionSettings.customCss, ".avyona-product-payment-icons");
+    if (cssError) {
+      setMessage(cssError);
+      setMessageTone("warning");
+      return;
+    }
+    const cleanSectionSettings = normalizeHomepageSectionSettings(sectionSettings, DEFAULT_APP_SETTINGS.homepage[settingsKey]);
+    const cleanItems = items.map(normalizeWhyShopItem).sort((left, right) => Number(left.sortOrder || 0) - Number(right.sortOrder || 0));
+    const nextSettings = mergeSettings(settings, {
+      homepage: {
+        ...(settings.homepage || {}),
+        [settingsKey]: cleanSectionSettings,
+        whyShopItems: cleanItems
+      }
+    });
+
+    setIsSaving(true);
+    try {
+      await updateWhyShopSettings(cleanSectionSettings);
+
+      const cleanIds = new Set(cleanItems.map((item) => item.id));
+      await Promise.all(
+        [...persistedItemIds]
+          .filter((itemId) => !cleanIds.has(itemId))
+          .map((itemId) => deleteWhyShopItem(itemId))
+      );
+
+      await Promise.all(cleanItems.map((item) => (
+        persistedItemIds.has(item.id)
+          ? updateWhyShopItem(item.id, item)
+          : createWhyShopItem(item)
+      )));
+      await Promise.all(cleanItems.map((item) => updateWhyShopItemStatus(item.id, item.status)));
+      await reorderWhyShopItems(cleanItems.map((item) => item.id));
+
+      const refreshedResponse = await fetchWhyShopHomepage();
+      const refreshedData = refreshedResponse.data?.data || {};
+      const savedSettings = mergeSettings(DEFAULT_APP_SETTINGS, {
+        homepage: {
+          [settingsKey]: refreshedData.settings || cleanSectionSettings,
+          whyShopItems: refreshedData.items || cleanItems
+        }
+      });
+      setSettings(savedSettings);
+      setSectionSettings(normalizeHomepageSectionSettings(refreshedData.settings || cleanSectionSettings, DEFAULT_APP_SETTINGS.homepage[settingsKey]));
+      setItems(normalizeWhyShopItems(savedSettings));
+      setPersistedItemIds(new Set((refreshedData.items || cleanItems).map((item) => item.id)));
+      setMessage(`${sectionLabel} settings and trust badges saved.`);
+      setMessageTone("success");
+    } catch (error) {
+      setMessage(error.response?.data?.message || `${sectionLabel} settings could not be saved.`);
+      setMessageTone("warning");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const previewItems = [...items]
+    .filter((item) => item.status === "active")
+    .sort((left, right) => Number(left.sortOrder || 0) - Number(right.sortOrder || 0));
+
+  return (
+    <section className="dashboard-page-shell">
+      <div style={heroStyle}>
+        <span style={eyebrowStyle}>Homepage Configuration</span>
+        <h2 style={titleStyle}>{section.title}</h2>
+        <p style={copyStyle}>{section.description}</p>
+      </div>
+
+      <div style={whyShopPageLayoutStyle}>
+        {message ? (
+          <div style={{ ...feedbackStyle, ...(messageTone === "warning" ? feedbackWarningStyle : feedbackSuccessStyle) }}>
+            {message}
+          </div>
+        ) : null}
+
+        <div style={whyShopTopCardStyle}>
+          <div>
+            <span style={eyebrowStyle}>Section Settings</span>
+            <h3 style={panelTitleStyle}>Homepage section controls</h3>
+            <p style={panelCopyStyle}>Control visibility, heading text, layout density, ordering, and section colors.</p>
+          </div>
+
+          <div style={browseSettingsPanelStyle}>
+            <label style={checkboxFieldStyle}>
+              <input type="checkbox" checked={sectionSettings.enabled} onChange={(event) => updateSectionField("enabled", event.target.checked)} />
+              <span>Section Enable / Disable</span>
+            </label>
+            <label style={fieldStyle}>
+              <span style={labelStyle}>Section Title</span>
+              <input value={sectionSettings.title} onChange={(event) => updateSectionField("title", event.target.value)} style={inputStyle} />
+            </label>
+            <label style={fieldStyle}>
+              <span style={labelStyle}>Subtitle</span>
+              <input value={sectionSettings.subtitle} onChange={(event) => updateSectionField("subtitle", event.target.value)} style={inputStyle} />
+            </label>
+            <label style={fieldStyle}>
+              <span style={labelStyle}>Cards Per Row</span>
+              <input type="number" min="1" max="10" value={sectionSettings.cardsPerRow} onChange={(event) => updateSectionField("cardsPerRow", event.target.value)} style={inputStyle} />
+            </label>
+            <label style={fieldStyle}>
+              <span style={labelStyle}>Mobile Cards Per Row</span>
+              <input type="number" min="1" max="3" value={sectionSettings.mobileCardsPerRow} onChange={(event) => updateSectionField("mobileCardsPerRow", event.target.value)} style={inputStyle} />
+            </label>
+            <label style={fieldStyle}>
+              <span style={labelStyle}>Section Sort Order</span>
+              <input type="number" value={sectionSettings.sortOrder} onChange={(event) => updateSectionField("sortOrder", event.target.value)} style={inputStyle} />
+            </label>
+            <label style={fieldStyle}>
+              <span style={labelStyle}>Section Background Color</span>
+              <input type="color" value={sectionSettings.backgroundColor || "#f8fafc"} onChange={(event) => updateSectionField("backgroundColor", event.target.value)} style={colorInputStyle} />
+            </label>
+            <label style={fieldStyle}>
+              <span style={labelStyle}>Section Text Color</span>
+              <input type="color" value={sectionSettings.textColor || "#0f172a"} onChange={(event) => updateSectionField("textColor", event.target.value)} style={colorInputStyle} />
+            </label>
+          </div>
+
+          <div style={settingsSaveActionStyle}>
+            <button type="button" onClick={saveAll} disabled={isSaving || isLoading || Boolean(uploadingItemId)} style={saveButtonStyle}>
+              {isSaving ? "Saving..." : "Save Settings"}
+            </button>
+          </div>
+        </div>
+
+        <div style={whyShopMiddleLayoutStyle}>
+          <div style={whyShopItemsColumnStyle}>
+            <div style={homepageArrangementBarStyle}>
+              <div>
+                <span style={eyebrowStyle}>Trust Items</span>
+                <h3 style={panelTitleStyle}>Trust badge cards</h3>
+                <p style={panelCopyStyle}>Create, style, sort, and publish the badges shown in this homepage section.</p>
+              </div>
+              <button type="button" onClick={addItem} style={secondaryButtonStyle}>Add Item</button>
+            </div>
+
+            <div style={whyShopGridStyle}>
+              {items.map((item, index) => (
+                <div key={item.id} style={whyShopEditorCardStyle}>
+                  <div style={whyShopItemActionBarStyle}>
+                    <span style={whyShopStatusPillStyle}>{item.status === "active" ? "Active" : "Inactive"}</span>
+                    <button type="button" onClick={() => toggleItemStatus(item.id)} style={secondaryButtonStyle}>
+                      {item.status === "active" ? "Set Inactive" : "Set Active"}
+                    </button>
+                    <button type="button" onClick={() => moveItem(item.id, -1)} disabled={index === 0} style={index === 0 ? disabledActionButtonStyle : secondaryButtonStyle}>Move Up</button>
+                    <button type="button" onClick={() => moveItem(item.id, 1)} disabled={index === items.length - 1} style={index === items.length - 1 ? disabledActionButtonStyle : secondaryButtonStyle}>Move Down</button>
+                    <a href={`#why-shop-editor-fields-${item.id}`} style={secondaryLinkButtonStyle}>Edit Item</a>
+                    <button type="button" onClick={() => removeItem(item.id)} style={dangerButtonStyle}>Delete Item</button>
+                  </div>
+
+                  <IconUploadDropzone
+                    item={item}
+                    isUploading={uploadingItemId === item.id}
+                    onUpload={(file) => uploadIcon(item.id, file)}
+                    onRemove={() => removeIcon(item.id)}
+                  />
+
+                  <div id={`why-shop-editor-fields-${item.id}`} style={whyShopControlsStyle}>
+                    <label style={fieldStyle}>
+                      <span style={labelStyle}>Icon position</span>
+                      <select value={item.iconPosition} onChange={(event) => updateItem(item.id, { iconPosition: event.target.value })} style={inputStyle}>
+                        {ICON_POSITION_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                      </select>
+                    </label>
+                    <label style={fieldStyle}>
+                      <span style={labelStyle}>Icon size</span>
+                      <input type="number" min="16" max="120" value={item.iconSize} onChange={(event) => updateItem(item.id, { iconSize: event.target.value })} style={inputStyle} />
+                    </label>
+                    <label style={fieldStyle}>
+                      <span style={labelStyle}>Text/title</span>
+                      <input value={item.title} onChange={(event) => updateItem(item.id, { title: event.target.value })} style={inputStyle} />
+                    </label>
+                    <label style={fieldStyle}>
+                      <span style={labelStyle}>Text font size</span>
+                      <input type="number" min="10" max="42" value={item.titleFontSize} onChange={(event) => updateItem(item.id, { titleFontSize: event.target.value })} style={inputStyle} />
+                    </label>
+                    <label style={fieldStyle}>
+                      <span style={labelStyle}>Text color</span>
+                      <input type="color" value={item.textColor} onChange={(event) => updateItem(item.id, { textColor: event.target.value })} style={colorInputStyle} />
+                    </label>
+                    <label style={fieldStyle}>
+                      <span style={labelStyle}>Card background color</span>
+                      <input type="color" value={item.cardBackgroundColor} onChange={(event) => updateItem(item.id, { cardBackgroundColor: event.target.value })} style={colorInputStyle} />
+                    </label>
+                    <label style={fieldStyle}>
+                      <span style={labelStyle}>Card border color</span>
+                      <input type="color" value={item.cardBorderColor} onChange={(event) => updateItem(item.id, { cardBorderColor: event.target.value })} style={colorInputStyle} />
+                    </label>
+                    <label style={fieldStyle}>
+                      <span style={labelStyle}>Card radius</span>
+                      <input type="number" min="0" max="48" value={item.cardRadius} onChange={(event) => updateItem(item.id, { cardRadius: event.target.value })} style={inputStyle} />
+                    </label>
+                    <label style={fieldStyle}>
+                      <span style={labelStyle}>Sort order</span>
+                      <input type="number" value={item.sortOrder} onChange={(event) => updateItem(item.id, { sortOrder: event.target.value })} style={inputStyle} />
+                    </label>
+                    <label style={fieldStyle}>
+                      <span style={labelStyle}>Active / Inactive</span>
+                      <select value={item.status} onChange={(event) => updateItem(item.id, { status: event.target.value })} style={inputStyle}>
+                        <option value="active">Active</option>
+                        <option value="inactive">Inactive</option>
+                      </select>
+                    </label>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <aside style={whyShopLivePreviewPanelStyle}>
+            <span style={eyebrowStyle}>Live Preview</span>
+            <h3 style={panelTitleStyle}>Frontend section</h3>
+            <div
+              className="avyona-why-shop"
+              style={{
+                ...whyShopLivePreviewSectionStyle,
+                background: sectionSettings.backgroundColor || "#f8fafc",
+                color: sectionSettings.textColor || "#0f172a"
+              }}
+            >
+              {sectionSettings.customCss ? <style>{sectionSettings.customCss}</style> : null}
+              <div style={whyShopLivePreviewHeadingStyle}>
+                <h4>{sectionSettings.title}</h4>
+                {sectionSettings.subtitle ? <p>{sectionSettings.subtitle}</p> : null}
+              </div>
+              <div
+                style={{
+                  ...whyShopLivePreviewGridStyle,
+                  gridTemplateColumns: `repeat(${Math.min(4, Math.max(1, Number(sectionSettings.cardsPerRow || 4)))}, minmax(0, 1fr))`
+                }}
+              >
+                {previewItems.length ? previewItems.map((item) => (
+                  <div
+                    key={item.id}
+                    className={`trust-card trust-card-icon-${item.iconPosition}`}
+                    style={{
+                      ...whyShopLiveTrustCardStyle,
+                      background: item.cardBackgroundColor,
+                      borderColor: item.cardBorderColor,
+                      borderRadius: `${item.cardRadius}px`,
+                      color: item.textColor,
+                      flexDirection: item.iconPosition === "top" ? "column" : "row-reverse",
+                      ...(item.iconPosition === "left" ? { flexDirection: "row" } : {})
+                    }}
+                  >
+                    {item.iconUrl ? (
+                      <img src={resolveAdminMediaUrl(item.iconUrl)} alt="" style={{ width: `${item.iconSize}px`, height: `${item.iconSize}px`, objectFit: "contain" }} />
+                    ) : (
+                      <span style={{ ...whyShopIconPlaceholderStyle, width: `${item.iconSize}px`, height: `${item.iconSize}px` }}>Icon</span>
+                    )}
+                    <strong style={{ fontSize: `${item.titleFontSize}px`, color: item.textColor }}>{item.title}</strong>
+                  </div>
+                )) : (
+                  <div style={emptyHomepageCategoryStyle}>No active trust badges to preview.</div>
+                )}
+              </div>
+            </div>
+          </aside>
+        </div>
+
+        <div style={whyShopCssPanelStyle}>
+          <div>
+            <span style={eyebrowStyle}>Advanced Design</span>
+            <h3 style={panelTitleStyle}>Custom CSS</h3>
+            <p style={panelCopyStyle}>Use CSS only and scope selectors under .avyona-why-shop.</p>
+          </div>
+          <textarea
+            value={sectionSettings.customCss || ""}
+            onChange={(event) => updateSectionField("customCss", event.target.value)}
+            placeholder={".avyona-why-shop .trust-card {\n  border-radius: 18px;\n}"}
+            style={{ ...inputStyle, minHeight: "160px", resize: "vertical", fontFamily: "Consolas, monospace" }}
+          />
+        </div>
+
+        <div style={whyShopBottomActionStyle}>
+          <button type="button" onClick={saveAll} disabled={isSaving || isLoading || Boolean(uploadingItemId)} style={saveButtonStyle}>
+            {isSaving ? "Saving..." : "Save Why Shop Section"}
+          </button>
+          <Link to="/dashboard/homepage" style={backButtonStyle}>Back to Homepage Sections</Link>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function IconUploadDropzone({ item, isUploading, onUpload, onRemove }) {
+  const inputId = `why-shop-icon-${item.id}`;
+  const [isDragging, setIsDragging] = React.useState(false);
+
+  const handleFiles = (files) => {
+    const file = files?.[0];
+    if (file) onUpload(file);
+  };
+
+  const preventDefaults = (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+  };
+
+  return (
+    <div
+      style={{
+        ...whyShopDropzoneStyle,
+        ...(isDragging ? whyShopDropzoneActiveStyle : {})
+      }}
+      onDragEnter={(event) => {
+        preventDefaults(event);
+        setIsDragging(true);
+      }}
+      onDragOver={(event) => {
+        preventDefaults(event);
+        setIsDragging(true);
+      }}
+      onDragLeave={(event) => {
+        preventDefaults(event);
+        setIsDragging(false);
+      }}
+      onDrop={(event) => {
+        preventDefaults(event);
+        setIsDragging(false);
+        handleFiles(event.dataTransfer.files);
+      }}
+    >
+      <div style={whyShopIconPreviewFrameStyle}>
+        {item.iconUrl ? (
+          <img src={resolveAdminMediaUrl(item.iconUrl)} alt={`${item.title} icon preview`} style={whyShopIconPreviewImageStyle} />
+        ) : (
+          <span style={whyShopIconPreviewEmptyStyle}>Icon</span>
+        )}
+      </div>
+      <div style={whyShopDropzoneContentStyle}>
+        <span style={labelStyle}>Icon upload</span>
+        <p style={panelCopyStyle}>PNG, JPG, JPEG, WebP, or sanitized SVG. Max 1 MB.</p>
+        <div style={whyShopDropzoneActionsStyle}>
+          <label htmlFor={inputId} style={secondaryButtonStyle}>
+            {item.iconUrl ? "Replace icon" : "Click to upload"}
+          </label>
+          {item.iconUrl ? (
+            <button type="button" onClick={onRemove} style={dangerButtonStyle}>Remove icon</button>
+          ) : null}
+        </div>
+        {isUploading ? <small style={helperTextStyle}>Uploading...</small> : <small style={helperTextStyle}>Drag and drop upload supported.</small>}
+        <input
+          id={inputId}
+          type="file"
+          accept="image/png,image/jpeg,image/webp,image/svg+xml"
+          onChange={(event) => handleFiles(event.target.files)}
+          style={hiddenFileInputStyle}
+        />
+      </div>
+    </div>
+  );
+}
+
+function normalizeProductPaymentIcon(value = {}, index = 0) {
+  const fallback = DEFAULT_APP_SETTINGS.homepage.productPaymentIcons[index] || DEFAULT_APP_SETTINGS.homepage.productPaymentIcons[0] || {};
+
+  return {
+    id: value.id || `payment-icon-${Date.now()}-${index}`,
+    paymentName: String(value.paymentName || value.name || fallback.paymentName || "Payment").trim(),
+    iconUrl: String(value.iconUrl || fallback.iconUrl || "").trim(),
+    altText: String(value.altText || fallback.altText || "").trim(),
+    iconSize: Math.min(120, Math.max(16, Number(value.iconSize || fallback.iconSize || 44))),
+    iconBackgroundColor: String(value.iconBackgroundColor || fallback.iconBackgroundColor || "#ffffff").trim(),
+    iconBorderColor: String(value.iconBorderColor || fallback.iconBorderColor || "#e5e7eb").trim(),
+    iconRadius: Math.min(48, Math.max(0, Number(value.iconRadius ?? fallback.iconRadius ?? 14))),
+    sortOrder: Number.isFinite(Number(value.sortOrder)) ? Math.floor(Number(value.sortOrder)) : index + 1,
+    status: String(value.status || fallback.status || "active").toLowerCase() === "inactive" ? "inactive" : "active"
+  };
+}
+
+function normalizeProductPaymentIcons(settings = DEFAULT_APP_SETTINGS) {
+  const source = Array.isArray(settings.homepage?.productPaymentIcons) && settings.homepage.productPaymentIcons.length
+    ? settings.homepage.productPaymentIcons
+    : DEFAULT_APP_SETTINGS.homepage.productPaymentIcons;
+
+  return source
+    .map(normalizeProductPaymentIcon)
+    .sort((left, right) => Number(left.sortOrder || 0) - Number(right.sortOrder || 0));
+}
+
+function createEmptyProductPaymentIcon(sortOrder) {
+  return normalizeProductPaymentIcon({
+    id: `payment-icon-${Date.now()}`,
+    paymentName: "New Payment",
+    iconUrl: "",
+    altText: "Payment option",
+    iconSize: 44,
+    iconBackgroundColor: "#ffffff",
+    iconBorderColor: "#e5e7eb",
+    iconRadius: 14,
+    sortOrder,
+    status: "active"
+  });
+}
+
+function ProductPaymentIconsConfigure({ section, refreshToken = 0 }) {
+  const settingsKey = "productPaymentIconsSettings";
+  const routeKey = "product-payment-icons";
+  const sectionLabel = "Product Payment Icons";
+  const [settings, setSettings] = React.useState(() => cloneSettings(DEFAULT_APP_SETTINGS));
+  const [sectionSettings, setSectionSettings] = React.useState(() => normalizeHomepageSectionSettings(DEFAULT_APP_SETTINGS.homepage[settingsKey], DEFAULT_APP_SETTINGS.homepage[settingsKey]));
+  const [items, setItems] = React.useState(() => normalizeProductPaymentIcons(DEFAULT_APP_SETTINGS));
+  const [isLoading, setIsLoading] = React.useState(true);
+  const [isSaving, setIsSaving] = React.useState(false);
+  const [uploadingItemId, setUploadingItemId] = React.useState("");
+  const [persistedItemIds, setPersistedItemIds] = React.useState(() => new Set(DEFAULT_APP_SETTINGS.homepage.productPaymentIcons.map((item) => item.id)));
+  const [message, setMessage] = React.useState("");
+  const [messageTone, setMessageTone] = React.useState("success");
+
+  React.useEffect(() => {
+    let isMounted = true;
+
+    async function loadPaymentIcons() {
+      setIsLoading(true);
+      try {
+        const [settingsResponse, sectionResponse] = await Promise.all([
+          fetchAdminSettings(),
+          fetchProductPaymentIconsHomepage()
+        ]);
+        if (!isMounted) return;
+        const mergedSettings = mergeSettings(DEFAULT_APP_SETTINGS, settingsResponse.data?.data || {});
+        const data = sectionResponse.data?.data || {};
+        setSettings(mergedSettings);
+        setSectionSettings(normalizeHomepageSectionSettings(data.settings || mergedSettings.homepage?.[settingsKey], DEFAULT_APP_SETTINGS.homepage[settingsKey]));
+        const loadedItems = Array.isArray(data.items) ? data.items.map(normalizeProductPaymentIcon) : normalizeProductPaymentIcons(mergedSettings);
+        setItems(loadedItems);
+        setPersistedItemIds(new Set(loadedItems.map((item) => item.id)));
+        setMessage(`${sectionLabel} settings loaded.`);
+        setMessageTone("success");
+      } catch {
+        if (!isMounted) return;
+        const fallbackSettings = cloneSettings(DEFAULT_APP_SETTINGS);
+        setSettings(fallbackSettings);
+        setSectionSettings(normalizeHomepageSectionSettings(fallbackSettings.homepage[settingsKey], DEFAULT_APP_SETTINGS.homepage[settingsKey]));
+        setItems(normalizeProductPaymentIcons(fallbackSettings));
+        setPersistedItemIds(new Set(DEFAULT_APP_SETTINGS.homepage.productPaymentIcons.map((item) => item.id)));
+        setMessage("Showing default payment icons. Start backend and sign in as admin to save changes.");
+        setMessageTone("warning");
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
+    }
+
+    loadPaymentIcons();
+    return () => {
+      isMounted = false;
+    };
+  }, [refreshToken]);
+
+  const updateSectionField = (key, value) => {
+    setSectionSettings((current) => ({
+      ...current,
+      [key]: key === "cardsPerRow"
+        ? normalizeCardsPerRow(value)
+        : key === "mobileCardsPerRow"
+          ? normalizeMobileCardsPerRow(value)
+          : key === "sortOrder"
+            ? Number(value || 0)
+            : value
+    }));
+    setMessage("");
+  };
+
+  const updateItem = (itemId, values) => {
+    setItems((current) => current.map((item) => item.id === itemId ? normalizeProductPaymentIcon({ ...item, ...values }) : item));
+    setMessage("");
+  };
+
+  const addItem = () => {
+    const nextSort = Math.max(0, ...items.map((item) => Number(item.sortOrder || 0))) + 1;
+    setItems((current) => [...current, createEmptyProductPaymentIcon(nextSort)]);
+    setMessage("");
+  };
+
+  const removeItem = (itemId) => {
+    setItems((current) => current.filter((item) => item.id !== itemId));
+    setMessage("Payment icon removed from this draft. Save changes to publish it.");
+    setMessageTone("success");
+  };
+
+  const toggleItemStatus = (itemId) => {
+    const existing = items.find((item) => item.id === itemId);
+    const nextStatus = existing?.status === "active" ? "inactive" : "active";
+    setItems((current) => current.map((item) => item.id === itemId ? { ...item, status: nextStatus } : item));
+    setMessage("Payment icon status changed in this draft. Save changes to publish it.");
+    setMessageTone("success");
+  };
+
+  const moveItem = (itemId, direction) => {
+    setItems((current) => {
+      const ordered = [...current].sort((left, right) => Number(left.sortOrder || 0) - Number(right.sortOrder || 0));
+      const currentIndex = ordered.findIndex((item) => item.id === itemId);
+      const targetIndex = currentIndex + direction;
+      if (currentIndex < 0 || targetIndex < 0 || targetIndex >= ordered.length) return current;
+      const [selected] = ordered.splice(currentIndex, 1);
+      ordered.splice(targetIndex, 0, selected);
+      return ordered.map((item, index) => ({ ...item, sortOrder: index + 1 }));
+    });
+    setMessage("");
+  };
+
+  const uploadIcon = async (itemId, file) => {
+    if (!file) return;
+    const allowedTypes = new Set(["image/png", "image/jpeg", "image/webp", "image/svg+xml"]);
+    if (!allowedTypes.has(file.type)) {
+      setMessage("Only PNG, JPG, JPEG, WebP, and sanitized SVG payment icons are allowed.");
+      setMessageTone("warning");
+      return;
+    }
+    if (file.size > 1024 * 1024) {
+      setMessage("Payment icon must be 1 MB or smaller.");
+      setMessageTone("warning");
+      return;
+    }
+    setUploadingItemId(itemId);
+    try {
+      const response = await uploadPaymentIcon(file);
+      updateItem(itemId, { iconUrl: response.data?.data?.url || "" });
+      setMessage("Payment icon uploaded. Save changes to publish it.");
+      setMessageTone("success");
+    } catch (error) {
+      setMessage(error.response?.data?.message || "Payment icon upload failed.");
+      setMessageTone("warning");
+    } finally {
+      setUploadingItemId("");
+    }
+  };
+
+  const removeIcon = (itemId) => {
+    updateItem(itemId, { iconUrl: "" });
+    setMessage("Icon removed. Save changes to publish it.");
+    setMessageTone("success");
+  };
+
+  const saveAll = async () => {
+    const cleanSectionSettings = normalizeHomepageSectionSettings(sectionSettings, DEFAULT_APP_SETTINGS.homepage[settingsKey]);
+    const cleanItems = items.map(normalizeProductPaymentIcon).sort((left, right) => Number(left.sortOrder || 0) - Number(right.sortOrder || 0));
+    const nextSettings = mergeSettings(settings, {
+      homepage: {
+        ...(settings.homepage || {}),
+        [settingsKey]: cleanSectionSettings,
+        productPaymentIcons: cleanItems
+      }
+    });
+
+    setIsSaving(true);
+    try {
+      const saveResponse = await saveProductPaymentIconsHomepage({
+        settings: cleanSectionSettings,
+        items: cleanItems
+      });
+      const data = saveResponse.data?.data || {};
+      const settingsResponse = { data: { data: mergeSettings(nextSettings, {
+        homepage: {
+          productPaymentIconsSettings: data.settings || cleanSectionSettings,
+          productPaymentIcons: data.items || cleanItems
+        }
+      }) } };
+      const savedSettings = mergeSettings(DEFAULT_APP_SETTINGS, settingsResponse.data?.data || nextSettings);
+      setSettings(savedSettings);
+      setSectionSettings(normalizeHomepageSectionSettings(data.settings || sectionResponse.data?.data || cleanSectionSettings, DEFAULT_APP_SETTINGS.homepage[settingsKey]));
+      const refreshedItems = Array.isArray(data.items) ? data.items.map(normalizeProductPaymentIcon) : normalizeProductPaymentIcons(savedSettings);
+      setItems(refreshedItems);
+      setPersistedItemIds(new Set(refreshedItems.map((item) => item.id)));
+      setMessage(`${sectionLabel} settings saved.`);
+      setMessageTone("success");
+    } catch (error) {
+      setMessage(error.response?.data?.message || `${sectionLabel} settings could not be saved.`);
+      setMessageTone("warning");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const activeItems = items.filter((item) => item.status === "active").sort((left, right) => Number(left.sortOrder || 0) - Number(right.sortOrder || 0));
+  const customCssError = getScopedCssValidationError(sectionSettings.customCss, ".avyona-product-payment-icons");
+  const previewCustomCss = customCssError ? "" : String(sectionSettings.customCss || "");
+  const renderPaymentPreviewItems = () => activeItems.length ? activeItems.map((item) => (
+    <div key={item.id} className="payment-icon-card" style={{
+      ...paymentPreviewIconStyle,
+      background: item.iconBackgroundColor,
+      borderColor: item.iconBorderColor,
+      borderRadius: `${item.iconRadius}px`
+    }}>
+      {item.iconUrl ? <img src={resolveAdminMediaUrl(item.iconUrl)} alt={item.altText || item.paymentName} style={{ width: `${item.iconSize}px`, height: `${item.iconSize}px`, objectFit: "contain" }} /> : <strong>{item.paymentName}</strong>}
+    </div>
+  )) : (
+    <div style={emptyHomepageCategoryStyle}>No active payment icons to preview.</div>
+  );
+
+  return (
+    <section className="dashboard-page-shell">
+      <div style={heroStyle}>
+        <span style={eyebrowStyle}>Homepage Configuration</span>
+        <h2 style={titleStyle}>{section.title}</h2>
+        <p style={copyStyle}>{section.description}</p>
+      </div>
+
+      <div style={whyShopPageLayoutStyle}>
+        {message ? (
+          <div style={{ ...feedbackStyle, ...(messageTone === "warning" ? feedbackWarningStyle : feedbackSuccessStyle) }}>
+            {message}
+          </div>
+        ) : null}
+
+        <div style={whyShopTopCardStyle}>
+          <div>
+            <span style={eyebrowStyle}>Section Settings</span>
+            <h3 style={panelTitleStyle}>Product page payment options</h3>
+            <p style={panelCopyStyle}>Control visibility, heading text, icon grid layout, ordering, and section colors.</p>
+          </div>
+
+          <div style={browseSettingsPanelStyle}>
+            <label style={checkboxFieldStyle}>
+              <input type="checkbox" checked={sectionSettings.enabled} onChange={(event) => updateSectionField("enabled", event.target.checked)} />
+              <span>Section Enable / Disable</span>
+            </label>
+            <label style={fieldStyle}>
+              <span style={labelStyle}>Section Title</span>
+              <input value={sectionSettings.title} onChange={(event) => updateSectionField("title", event.target.value)} placeholder="Payment Options" style={inputStyle} />
+            </label>
+            <label style={fieldStyle}>
+              <span style={labelStyle}>Section Subtitle</span>
+              <input value={sectionSettings.subtitle} onChange={(event) => updateSectionField("subtitle", event.target.value)} placeholder="Secure payment methods available" style={inputStyle} />
+            </label>
+            <label style={fieldStyle}>
+              <span style={labelStyle}>Cards/Icon Per Row</span>
+              <input type="number" min="1" max="10" value={sectionSettings.cardsPerRow} onChange={(event) => updateSectionField("cardsPerRow", event.target.value)} style={inputStyle} />
+            </label>
+            <label style={fieldStyle}>
+              <span style={labelStyle}>Mobile Icons Per Row</span>
+              <input type="number" min="1" max="3" value={sectionSettings.mobileCardsPerRow} onChange={(event) => updateSectionField("mobileCardsPerRow", event.target.value)} style={inputStyle} />
+            </label>
+            <label style={fieldStyle}>
+              <span style={labelStyle}>Sort Order</span>
+              <input type="number" value={sectionSettings.sortOrder} onChange={(event) => updateSectionField("sortOrder", event.target.value)} style={inputStyle} />
+            </label>
+            <label style={fieldStyle}>
+              <span style={labelStyle}>Section Background Color</span>
+              <input type="color" value={sectionSettings.backgroundColor || "#ffffff"} onChange={(event) => updateSectionField("backgroundColor", event.target.value)} style={colorInputStyle} />
+            </label>
+            <label style={fieldStyle}>
+              <span style={labelStyle}>Text Color</span>
+              <input type="color" value={sectionSettings.textColor || "#0f172a"} onChange={(event) => updateSectionField("textColor", event.target.value)} style={colorInputStyle} />
+            </label>
+          </div>
+        </div>
+
+        <div style={homepageArrangementBarStyle}>
+          <div>
+            <span style={eyebrowStyle}>Payment Icons</span>
+            <h3 style={panelTitleStyle}>Manage icon items</h3>
+            <p style={panelCopyStyle}>Add, edit, reorder, activate, or remove payment options shown on product detail pages.</p>
+          </div>
+          <button type="button" onClick={addItem} style={secondaryButtonStyle}>Add Icon</button>
+        </div>
+
+        <div style={whyShopMiddleLayoutStyle}>
+          <div style={whyShopItemsColumnStyle}>
+            <div style={paymentIconGridStyle}>
+              {items.map((item, index) => (
+                <div key={item.id} style={whyShopEditorCardStyle}>
+                  <div style={whyShopItemActionBarStyle}>
+                    <span style={whyShopStatusPillStyle}>{item.status === "active" ? "Active" : "Inactive"}</span>
+                    <a href={`#payment-icon-editor-fields-${item.id}`} style={secondaryLinkButtonStyle}>Edit Icon</a>
+                    <a href="#product-payment-icons-preview" style={secondaryLinkButtonStyle}>Preview</a>
+                    <button type="button" onClick={() => toggleItemStatus(item.id)} style={secondaryButtonStyle}>{item.status === "active" ? "Set Inactive" : "Set Active"}</button>
+                    <button type="button" onClick={() => moveItem(item.id, -1)} disabled={index === 0} style={index === 0 ? disabledActionButtonStyle : secondaryButtonStyle}>Move Up</button>
+                    <button type="button" onClick={() => moveItem(item.id, 1)} disabled={index === items.length - 1} style={index === items.length - 1 ? disabledActionButtonStyle : secondaryButtonStyle}>Move Down</button>
+                    <button type="button" onClick={() => removeItem(item.id)} style={dangerButtonStyle}>Delete</button>
+                  </div>
+
+                  <PaymentIconUploadDropzone
+                    item={item}
+                    isUploading={uploadingItemId === item.id}
+                    onUpload={(file) => uploadIcon(item.id, file)}
+                    onRemove={() => removeIcon(item.id)}
+                  />
+
+                  <div id={`payment-icon-editor-fields-${item.id}`} style={whyShopControlsStyle}>
+                    <label style={fieldStyle}>
+                      <span style={labelStyle}>Payment Name</span>
+                      <input value={item.paymentName} onChange={(event) => updateItem(item.id, { paymentName: event.target.value })} style={inputStyle} />
+                    </label>
+                    <label style={fieldStyle}>
+                      <span style={labelStyle}>Icon Alt Text</span>
+                      <input value={item.altText} onChange={(event) => updateItem(item.id, { altText: event.target.value })} style={inputStyle} />
+                    </label>
+                    <label style={fieldStyle}>
+                      <span style={labelStyle}>Icon Size</span>
+                      <input type="number" min="16" max="120" value={item.iconSize} onChange={(event) => updateItem(item.id, { iconSize: event.target.value })} style={inputStyle} />
+                    </label>
+                    <label style={fieldStyle}>
+                      <span style={labelStyle}>Icon Background Color</span>
+                      <input type="color" value={item.iconBackgroundColor} onChange={(event) => updateItem(item.id, { iconBackgroundColor: event.target.value })} style={colorInputStyle} />
+                    </label>
+                    <label style={fieldStyle}>
+                      <span style={labelStyle}>Icon Border Color</span>
+                      <input type="color" value={item.iconBorderColor} onChange={(event) => updateItem(item.id, { iconBorderColor: event.target.value })} style={colorInputStyle} />
+                    </label>
+                    <label style={fieldStyle}>
+                      <span style={labelStyle}>Icon Radius</span>
+                      <input type="number" min="0" max="48" value={item.iconRadius} onChange={(event) => updateItem(item.id, { iconRadius: event.target.value })} style={inputStyle} />
+                    </label>
+                    <label style={fieldStyle}>
+                      <span style={labelStyle}>Sort Order</span>
+                      <input type="number" value={item.sortOrder} onChange={(event) => updateItem(item.id, { sortOrder: event.target.value })} style={inputStyle} />
+                    </label>
+                    <label style={fieldStyle}>
+                      <span style={labelStyle}>Status</span>
+                      <select value={item.status} onChange={(event) => updateItem(item.id, { status: event.target.value })} style={inputStyle}>
+                        <option value="active">Active</option>
+                        <option value="inactive">Inactive</option>
+                      </select>
+                    </label>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <aside id="product-payment-icons-preview" style={whyShopLivePreviewPanelStyle}>
+            <span style={eyebrowStyle}>Live Preview</span>
+            <h3 style={panelTitleStyle}>Product page section</h3>
+            {previewCustomCss ? <style>{previewCustomCss}</style> : null}
+
+            <div style={paymentPreviewStackStyle}>
+              <div>
+                <span style={previewLabelStyle}>Desktop Preview</span>
+                <div className="avyona-product-payment-icons" style={{ ...paymentPreviewSectionStyle, background: sectionSettings.backgroundColor || "#ffffff", color: sectionSettings.textColor || "#0f172a" }}>
+                  <div style={whyShopLivePreviewHeadingStyle}>
+                    <h4>{sectionSettings.title}</h4>
+                    {sectionSettings.subtitle ? <p>{sectionSettings.subtitle}</p> : null}
+                  </div>
+                  <div style={{ ...paymentPreviewGridStyle, gridTemplateColumns: `repeat(${Math.min(10, Math.max(1, Number(sectionSettings.cardsPerRow || 7)))}, minmax(0, 1fr))` }}>
+                    {renderPaymentPreviewItems()}
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <span style={previewLabelStyle}>Mobile Preview</span>
+                <div style={paymentMobilePreviewShellStyle}>
+                  <div className="avyona-product-payment-icons" style={{ ...paymentPreviewSectionStyle, padding: "14px", gap: "12px", background: sectionSettings.backgroundColor || "#ffffff", color: sectionSettings.textColor || "#0f172a" }}>
+                    <div style={whyShopLivePreviewHeadingStyle}>
+                      <h4 style={{ margin: 0, fontSize: "15px", lineHeight: 1.25 }}>{sectionSettings.title}</h4>
+                      {sectionSettings.subtitle ? <p style={{ margin: 0, fontSize: "12px", lineHeight: 1.35 }}>{sectionSettings.subtitle}</p> : null}
+                    </div>
+                    <div style={{ ...paymentPreviewGridStyle, gridTemplateColumns: `repeat(${Math.min(3, Math.max(1, Number(sectionSettings.mobileCardsPerRow || 3)))}, minmax(0, 1fr))`, gap: "8px" }}>
+                      {renderPaymentPreviewItems()}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </aside>
+        </div>
+
+        <div style={whyShopCssPanelStyle}>
+          <div>
+            <span style={eyebrowStyle}>Advanced Design</span>
+            <h3 style={panelTitleStyle}>Custom CSS</h3>
+            <p style={panelCopyStyle}>Use CSS only and scope selectors under .avyona-product-payment-icons.</p>
+          </div>
+          <textarea
+            value={sectionSettings.customCss || ""}
+            onChange={(event) => updateSectionField("customCss", event.target.value)}
+            placeholder={".avyona-product-payment-icons .payment-icon-card {\n  border-radius: 18px;\n}"}
+            style={{ ...inputStyle, minHeight: "160px", resize: "vertical", fontFamily: "Consolas, monospace" }}
+          />
+          {customCssError ? <small style={{ ...helperTextStyle, color: "#b45309" }}>{customCssError}</small> : null}
+        </div>
+
+        <div style={whyShopBottomActionStyle}>
+          <button type="button" onClick={saveAll} disabled={isSaving || isLoading || Boolean(uploadingItemId)} style={saveButtonStyle}>
+            {isSaving ? "Saving..." : "Save Changes"}
+          </button>
+          <Link to="/dashboard/homepage" style={backButtonStyle}>Back to Homepage Sections</Link>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function PaymentIconUploadDropzone({ item, isUploading, onUpload, onRemove }) {
+  const inputId = `payment-icon-upload-${item.id}`;
+  const [isDragging, setIsDragging] = React.useState(false);
+
+  const handleFiles = (files) => {
+    const file = files?.[0];
+    if (file) onUpload(file);
+  };
+
+  const preventDefaults = (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+  };
+
+  return (
+    <div
+      style={{
+        ...whyShopDropzoneStyle,
+        ...(isDragging ? whyShopDropzoneActiveStyle : {})
+      }}
+      onDragEnter={(event) => {
+        preventDefaults(event);
+        setIsDragging(true);
+      }}
+      onDragOver={(event) => {
+        preventDefaults(event);
+        setIsDragging(true);
+      }}
+      onDragLeave={(event) => {
+        preventDefaults(event);
+        setIsDragging(false);
+      }}
+      onDrop={(event) => {
+        preventDefaults(event);
+        setIsDragging(false);
+        handleFiles(event.dataTransfer.files);
+      }}
+    >
+      <div style={whyShopIconPreviewFrameStyle}>
+        {item.iconUrl ? (
+          <img src={resolveAdminMediaUrl(item.iconUrl)} alt={item.altText || item.paymentName} style={whyShopIconPreviewImageStyle} />
+        ) : (
+          <span style={whyShopIconPreviewEmptyStyle}>Icon</span>
+        )}
+      </div>
+      <div style={whyShopDropzoneContentStyle}>
+        <span style={labelStyle}>Payment Icon Upload</span>
+        <p style={panelCopyStyle}>PNG, JPG, JPEG, WebP, or sanitized SVG. Max 1 MB.</p>
+        <div style={whyShopDropzoneActionsStyle}>
+          <label htmlFor={inputId} style={secondaryButtonStyle}>{item.iconUrl ? "Replace Image" : "Click to Upload"}</label>
+          {item.iconUrl ? <button type="button" onClick={onRemove} style={dangerButtonStyle}>Remove Image</button> : null}
+        </div>
+        {isUploading ? <small style={helperTextStyle}>Uploading...</small> : <small style={helperTextStyle}>Drag and drop upload supported.</small>}
+        <input
+          id={inputId}
+          type="file"
+          accept="image/png,image/jpeg,image/webp,image/svg+xml"
+          onChange={(event) => {
+            handleFiles(event.target.files);
+            event.target.value = "";
+          }}
+          style={hiddenFileInputStyle}
+        />
+      </div>
+    </div>
   );
 }
 
@@ -3782,6 +4870,323 @@ const feedbackWarningStyle = {
   background: "#fff7ed",
   color: "#c2410c",
   borderColor: "#fdba74"
+};
+
+const helperTextStyle = {
+  color: "#64748b",
+  fontSize: "12px",
+  fontWeight: 700
+};
+
+const colorInputStyle = {
+  width: "100%",
+  minHeight: "42px",
+  padding: "5px",
+  border: "1px solid #cbd5e1",
+  borderRadius: "10px",
+  background: "#ffffff",
+  boxSizing: "border-box",
+  cursor: "pointer"
+};
+
+const whyShopGridStyle = {
+  display: "grid",
+  gridTemplateColumns: "1fr",
+  gap: "16px"
+};
+
+const whyShopPageLayoutStyle = {
+  display: "grid",
+  gap: "18px"
+};
+
+const whyShopTopCardStyle = {
+  display: "grid",
+  gap: "16px",
+  padding: "18px",
+  borderRadius: "16px",
+  border: "1px solid #dbe6ef",
+  background: "#ffffff",
+  boxShadow: "0 14px 32px rgba(15, 23, 42, 0.06)"
+};
+
+const whyShopMiddleLayoutStyle = {
+  display: "grid",
+  gridTemplateColumns: "minmax(0, 1.35fr) minmax(320px, 0.65fr)",
+  gap: "18px",
+  alignItems: "start"
+};
+
+const whyShopItemsColumnStyle = {
+  display: "grid",
+  gap: "16px",
+  minWidth: 0
+};
+
+const whyShopLivePreviewPanelStyle = {
+  position: "sticky",
+  top: "18px",
+  display: "grid",
+  gap: "12px",
+  padding: "18px",
+  borderRadius: "16px",
+  border: "1px solid #dbe6ef",
+  background: "#ffffff",
+  boxShadow: "0 14px 32px rgba(15, 23, 42, 0.06)",
+  minWidth: 0
+};
+
+const whyShopLivePreviewSectionStyle = {
+  display: "grid",
+  gap: "16px",
+  padding: "20px",
+  borderRadius: "18px",
+  border: "1px solid #e2e8f0",
+  overflow: "hidden"
+};
+
+const whyShopLivePreviewHeadingStyle = {
+  display: "grid",
+  gap: "6px",
+  textAlign: "center"
+};
+
+const whyShopLivePreviewGridStyle = {
+  display: "grid",
+  gap: "12px"
+};
+
+const whyShopLiveTrustCardStyle = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: "10px",
+  minHeight: "92px",
+  padding: "14px",
+  border: "1px solid #e5e7eb",
+  boxShadow: "0 10px 24px rgba(15, 23, 42, 0.07)",
+  textAlign: "center"
+};
+
+const paymentIconGridStyle = {
+  display: "grid",
+  gridTemplateColumns: "1fr",
+  gap: "16px"
+};
+
+const paymentPreviewSectionStyle = {
+  display: "grid",
+  gap: "14px",
+  padding: "18px",
+  borderRadius: "16px",
+  border: "1px solid #e2e8f0",
+  overflow: "hidden"
+};
+
+const paymentPreviewGridStyle = {
+  display: "flex",
+  flexWrap: "nowrap",
+  justifyContent: "center",
+  gap: "10px",
+  alignItems: "center"
+};
+
+const paymentPreviewStackStyle = {
+  display: "grid",
+  gap: "16px"
+};
+
+const paymentMobilePreviewShellStyle = {
+  width: "min(100%, 320px)",
+  margin: "0 auto",
+  padding: "10px",
+  borderRadius: "22px",
+  border: "1px solid #dbe6ef",
+  background: "#f8fafc"
+};
+
+const paymentPreviewIconStyle = {
+  display: "flex",
+  flex: "1 1 0",
+  alignItems: "center",
+  justifyContent: "center",
+  minHeight: "78px",
+  maxWidth: "96px",
+  minWidth: 0,
+  padding: "12px",
+  border: "1px solid #e5e7eb",
+  boxShadow: "0 10px 22px rgba(15, 23, 42, 0.06)",
+  textAlign: "center"
+};
+
+const whyShopCssPanelStyle = {
+  display: "grid",
+  gap: "14px",
+  padding: "18px",
+  borderRadius: "16px",
+  border: "1px solid #dbe6ef",
+  background: "#ffffff"
+};
+
+const whyShopBottomActionStyle = {
+  display: "flex",
+  flexWrap: "wrap",
+  justifyContent: "space-between",
+  gap: "12px",
+  alignItems: "center"
+};
+
+const whyShopEditorCardStyle = {
+  display: "grid",
+  gap: "14px",
+  padding: "16px",
+  borderRadius: "14px",
+  border: "1px solid #dbe6ef",
+  background: "#ffffff"
+};
+
+const whyShopPreviewStyle = {
+  padding: "12px",
+  borderRadius: "12px",
+  background: "#f8fafc",
+  border: "1px dashed #cbd5e1"
+};
+
+const whyShopPreviewCardStyle = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: "12px",
+  minHeight: "112px",
+  padding: "18px",
+  border: "1px solid #e5e7eb",
+  textAlign: "center"
+};
+
+const whyShopIconPlaceholderStyle = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  borderRadius: "999px",
+  background: "#eef2f7",
+  color: "#64748b",
+  fontSize: "11px",
+  fontWeight: 900,
+  textTransform: "uppercase"
+};
+
+const whyShopControlsStyle = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 150px), 1fr))",
+  gap: "12px",
+  alignItems: "end"
+};
+
+const whyShopItemActionBarStyle = {
+  display: "flex",
+  flexWrap: "wrap",
+  gap: "8px",
+  alignItems: "center",
+  justifyContent: "space-between"
+};
+
+const whyShopStatusPillStyle = {
+  minHeight: "32px",
+  display: "inline-flex",
+  alignItems: "center",
+  padding: "0 10px",
+  borderRadius: "999px",
+  background: "#f0fdf4",
+  color: "#166534",
+  border: "1px solid #bbf7d0",
+  fontSize: "12px",
+  fontWeight: 900
+};
+
+const disabledActionButtonStyle = {
+  ...secondaryButtonStyle,
+  opacity: 0.5,
+  cursor: "not-allowed"
+};
+
+const secondaryLinkButtonStyle = {
+  ...secondaryButtonStyle,
+  display: "inline-flex",
+  alignItems: "center",
+  textDecoration: "none",
+  boxSizing: "border-box"
+};
+
+const previewLabelStyle = {
+  display: "block",
+  marginBottom: "8px",
+  color: "#64748b",
+  fontSize: "11px",
+  fontWeight: 900,
+  letterSpacing: "0.08em",
+  textTransform: "uppercase"
+};
+
+const whyShopDropzoneStyle = {
+  display: "grid",
+  gridTemplateColumns: "96px minmax(0, 1fr)",
+  gap: "14px",
+  alignItems: "center",
+  padding: "14px",
+  borderRadius: "14px",
+  border: "1px dashed #cbd5e1",
+  background: "#fbfdff"
+};
+
+const whyShopDropzoneActiveStyle = {
+  borderColor: "#16a34a",
+  background: "#f0fdf4"
+};
+
+const whyShopIconPreviewFrameStyle = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  width: "96px",
+  height: "96px",
+  borderRadius: "12px",
+  border: "1px solid #e2e8f0",
+  background: "#ffffff",
+  overflow: "hidden"
+};
+
+const whyShopIconPreviewImageStyle = {
+  width: "72px",
+  height: "72px",
+  objectFit: "contain"
+};
+
+const whyShopIconPreviewEmptyStyle = {
+  color: "#64748b",
+  fontSize: "12px",
+  fontWeight: 900,
+  textTransform: "uppercase"
+};
+
+const whyShopDropzoneContentStyle = {
+  display: "grid",
+  gap: "8px",
+  minWidth: 0
+};
+
+const whyShopDropzoneActionsStyle = {
+  display: "flex",
+  flexWrap: "wrap",
+  gap: "8px",
+  alignItems: "center"
+};
+
+const hiddenFileInputStyle = {
+  position: "absolute",
+  width: "1px",
+  height: "1px",
+  opacity: 0,
+  pointerEvents: "none"
 };
 
 const bannerListStyle = {

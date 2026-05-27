@@ -23,7 +23,7 @@ const allowedOrigins = new Set(
     ]
 );
 const apiRateLimit = rateLimit({ windowMs: 60_000, max: 900, keyPrefix: "api" });
-const cacheablePublicApiPattern = /^\/api\/v1\/(products(?:\/[^/?]+)?|categories\/tree|settings\/public(?:\/.*)?|coupons|seo\/page)(?:[/?]|$)/;
+const cacheablePublicApiPattern = /^\/api\/v1\/(products(?:\/[^/?]+)?|categories\/tree|settings\/public(?:\/.*)?|coupons|seo\/page|pages(?:\/.*)?)(?:[/?]|$)/;
 
 app.use(cors({
   origin(origin, callback) {

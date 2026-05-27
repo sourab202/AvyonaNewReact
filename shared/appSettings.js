@@ -329,6 +329,28 @@ export const DEFAULT_APP_SETTINGS = {
       mobileCardsPerRow: 2,
       sortOrder: 80
     },
+    whyShopSettings: {
+      enabled: true,
+      title: "Why Shop With Avyona",
+      subtitle: "Trust Avyona for genuine products, flexible payments, secure checkout, and quick delivery.",
+      cardsPerRow: 4,
+      mobileCardsPerRow: 1,
+      sortOrder: 82,
+      backgroundColor: "#f8fafc",
+      textColor: "#0f172a",
+      customCss: ""
+    },
+    productPaymentIconsSettings: {
+      enabled: true,
+      title: "Payment Options",
+      subtitle: "Secure payment methods available",
+      cardsPerRow: 7,
+      mobileCardsPerRow: 3,
+      sortOrder: 20,
+      backgroundColor: "#ffffff",
+      textColor: "#0f172a",
+      customCss: ""
+    },
     newsletterSettings: {
       enabled: true,
       title: "Stay Updated",
@@ -367,7 +389,151 @@ export const DEFAULT_APP_SETTINGS = {
     ],
     bestSellerProducts: [],
     newArrivalProducts: [],
-    featuredBrands: []
+    featuredBrands: [],
+    productPaymentIcons: [
+      {
+        id: "payment-icon-visa",
+        paymentName: "Visa",
+        iconUrl: "",
+        altText: "Visa payment option",
+        iconSize: 44,
+        iconBackgroundColor: "#ffffff",
+        iconBorderColor: "#e5e7eb",
+        iconRadius: 14,
+        sortOrder: 1,
+        status: "active"
+      },
+      {
+        id: "payment-icon-mastercard",
+        paymentName: "Mastercard",
+        iconUrl: "",
+        altText: "Mastercard payment option",
+        iconSize: 44,
+        iconBackgroundColor: "#ffffff",
+        iconBorderColor: "#e5e7eb",
+        iconRadius: 14,
+        sortOrder: 2,
+        status: "active"
+      },
+      {
+        id: "payment-icon-upi",
+        paymentName: "UPI",
+        iconUrl: "",
+        altText: "UPI payment option",
+        iconSize: 44,
+        iconBackgroundColor: "#ffffff",
+        iconBorderColor: "#e5e7eb",
+        iconRadius: 14,
+        sortOrder: 3,
+        status: "active"
+      },
+      {
+        id: "payment-icon-google-pay",
+        paymentName: "Google Pay",
+        iconUrl: "",
+        altText: "Google Pay payment option",
+        iconSize: 44,
+        iconBackgroundColor: "#ffffff",
+        iconBorderColor: "#e5e7eb",
+        iconRadius: 14,
+        sortOrder: 4,
+        status: "active"
+      },
+      {
+        id: "payment-icon-phonepe",
+        paymentName: "PhonePe",
+        iconUrl: "",
+        altText: "PhonePe payment option",
+        iconSize: 44,
+        iconBackgroundColor: "#ffffff",
+        iconBorderColor: "#e5e7eb",
+        iconRadius: 14,
+        sortOrder: 5,
+        status: "active"
+      },
+      {
+        id: "payment-icon-cod",
+        paymentName: "COD",
+        iconUrl: "",
+        altText: "Cash on Delivery payment option",
+        iconSize: 44,
+        iconBackgroundColor: "#ffffff",
+        iconBorderColor: "#e5e7eb",
+        iconRadius: 14,
+        sortOrder: 6,
+        status: "active"
+      },
+      {
+        id: "payment-icon-razorpay",
+        paymentName: "Razorpay",
+        iconUrl: "",
+        altText: "Razorpay payment option",
+        iconSize: 44,
+        iconBackgroundColor: "#ffffff",
+        iconBorderColor: "#e5e7eb",
+        iconRadius: 14,
+        sortOrder: 7,
+        status: "active"
+      }
+    ],
+    whyShopItems: [
+      {
+        id: "why-shop-genuine-products",
+        iconUrl: "",
+        iconPosition: "left",
+        iconSize: 42,
+        title: "Genuine Products",
+        titleFontSize: 18,
+        textColor: "#0f172a",
+        cardBackgroundColor: "#ffffff",
+        cardBorderColor: "#e5e7eb",
+        cardRadius: 16,
+        sortOrder: 1,
+        status: "active"
+      },
+      {
+        id: "why-shop-cod-available",
+        iconUrl: "",
+        iconPosition: "left",
+        iconSize: 42,
+        title: "COD Available",
+        titleFontSize: 18,
+        textColor: "#0f172a",
+        cardBackgroundColor: "#ffffff",
+        cardBorderColor: "#e5e7eb",
+        cardRadius: 16,
+        sortOrder: 2,
+        status: "active"
+      },
+      {
+        id: "why-shop-secure-payments",
+        iconUrl: "",
+        iconPosition: "left",
+        iconSize: 42,
+        title: "Secure Payments",
+        titleFontSize: 18,
+        textColor: "#0f172a",
+        cardBackgroundColor: "#ffffff",
+        cardBorderColor: "#e5e7eb",
+        cardRadius: 16,
+        sortOrder: 3,
+        status: "active"
+      },
+      {
+        id: "why-shop-fast-shipping",
+        iconUrl: "",
+        iconPosition: "left",
+        iconSize: 42,
+        title: "Fast Shipping",
+        titleFontSize: 18,
+        textColor: "#0f172a",
+        cardBackgroundColor: "#ffffff",
+        cardBorderColor: "#e5e7eb",
+        cardRadius: 16,
+        sortOrder: 4,
+        status: "active"
+      }
+    ]
   }
 };
 
@@ -827,6 +993,8 @@ export function getPublicSettings(settings = DEFAULT_APP_SETTINGS) {
       bestSellerProductsSettings: normalizePublicHomepageSectionSettings(settings.homepage?.bestSellerProductsSettings, DEFAULT_APP_SETTINGS.homepage.bestSellerProductsSettings),
       newArrivalProductsSettings: normalizePublicHomepageSectionSettings(settings.homepage?.newArrivalProductsSettings, DEFAULT_APP_SETTINGS.homepage.newArrivalProductsSettings),
       featuredBrandsSettings: normalizePublicHomepageSectionSettings(settings.homepage?.featuredBrandsSettings, DEFAULT_APP_SETTINGS.homepage.featuredBrandsSettings),
+      whyShopSettings: normalizePublicHomepageSectionSettings(settings.homepage?.whyShopSettings, DEFAULT_APP_SETTINGS.homepage.whyShopSettings),
+      productPaymentIconsSettings: normalizePublicHomepageSectionSettings(settings.homepage?.productPaymentIconsSettings, DEFAULT_APP_SETTINGS.homepage.productPaymentIconsSettings),
       newsletterSettings: normalizePublicHomepageSectionSettings(settings.homepage?.newsletterSettings, DEFAULT_APP_SETTINGS.homepage.newsletterSettings),
       blogPostsSettings: normalizePublicHomepageSectionSettings(settings.homepage?.blogPostsSettings, DEFAULT_APP_SETTINGS.homepage.blogPostsSettings),
       creditPointsSettings: normalizePublicHomepageSectionSettings(settings.homepage?.creditPointsSettings, DEFAULT_APP_SETTINGS.homepage.creditPointsSettings),
@@ -847,7 +1015,17 @@ export function getPublicSettings(settings = DEFAULT_APP_SETTINGS) {
         : DEFAULT_APP_SETTINGS.homepage.newArrivalProducts,
       featuredBrands: Array.isArray(settings.homepage?.featuredBrands)
         ? settings.homepage.featuredBrands
-        : DEFAULT_APP_SETTINGS.homepage.featuredBrands
+        : DEFAULT_APP_SETTINGS.homepage.featuredBrands,
+      whyShopItems: Array.isArray(settings.homepage?.whyShopItems)
+        ? settings.homepage.whyShopItems
+            .filter((item) => String(item.status || "active").toLowerCase() === "active")
+            .sort((left, right) => Number(left.sortOrder || 0) - Number(right.sortOrder || 0))
+        : DEFAULT_APP_SETTINGS.homepage.whyShopItems,
+      productPaymentIcons: Array.isArray(settings.homepage?.productPaymentIcons)
+        ? settings.homepage.productPaymentIcons
+            .filter((item) => String(item.status || "active").toLowerCase() === "active")
+            .sort((left, right) => Number(left.sortOrder || 0) - Number(right.sortOrder || 0))
+        : DEFAULT_APP_SETTINGS.homepage.productPaymentIcons
     }
   };
 }

@@ -1019,6 +1019,70 @@ CREATE TABLE IF NOT EXISTS cms_pages (
   CONSTRAINT fk_cms_pages_updated_by FOREIGN KEY (updated_by) REFERENCES admins(id) ON DELETE SET NULL
 );
 
+CREATE TABLE IF NOT EXISTS custom_pages (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  title VARCHAR(220) NOT NULL,
+  slug VARCHAR(220) NOT NULL,
+  page_type ENUM('policy', 'about', 'landing', 'information', 'custom') NOT NULL DEFAULT 'custom',
+  status ENUM('draft', 'active', 'inactive', 'published') NOT NULL DEFAULT 'draft',
+  show_in_header TINYINT(1) NOT NULL DEFAULT 0,
+  show_in_footer TINYINT(1) NOT NULL DEFAULT 0,
+  header_sort_order INT NOT NULL DEFAULT 0,
+  footer_sort_order INT NOT NULL DEFAULT 0,
+  is_live_url_enabled TINYINT(1) NOT NULL DEFAULT 0,
+  published_at DATETIME NULL,
+  meta_title VARCHAR(180) NULL,
+  meta_description TEXT NULL,
+  meta_keywords TEXT NULL,
+  canonical_url VARCHAR(500) NULL,
+  og_title VARCHAR(180) NULL,
+  og_description TEXT NULL,
+  og_image_url VARCHAR(500) NULL,
+  robots ENUM('index/follow', 'noindex/follow', 'noindex/nofollow') NOT NULL DEFAULT 'index/follow',
+  custom_css MEDIUMTEXT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  deleted_at DATETIME NULL,
+  UNIQUE KEY uq_custom_pages_slug (slug),
+  INDEX idx_custom_pages_status_deleted (status, deleted_at),
+  INDEX idx_custom_pages_header_sort (show_in_header, status, header_sort_order),
+  INDEX idx_custom_pages_footer_sort (show_in_footer, status, footer_sort_order),
+  INDEX idx_custom_pages_live_slug (is_live_url_enabled, slug, status),
+  INDEX idx_custom_pages_deleted_updated (deleted_at, updated_at)
+);
+
+ALTER TABLE custom_pages ADD COLUMN custom_css MEDIUMTEXT NULL;
+
+CREATE TABLE IF NOT EXISTS custom_page_blocks (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  page_id BIGINT UNSIGNED NOT NULL,
+  block_type ENUM('text', 'image', 'image_text', 'heading', 'banner', 'two_column', 'faq', 'button') NOT NULL,
+  block_title VARCHAR(220) NULL,
+  content JSON NULL,
+  image_url VARCHAR(500) NULL,
+  image_alt VARCHAR(255) NULL,
+  image_title VARCHAR(255) NULL,
+  image_caption TEXT NULL,
+  layout_position VARCHAR(80) NULL,
+  image_width VARCHAR(20) NULL,
+  border_radius INT NULL,
+  text_alignment ENUM('left', 'center', 'right') NOT NULL DEFAULT 'left',
+  font_size INT NULL,
+  text_color VARCHAR(32) NULL,
+  background_color VARCHAR(32) NULL,
+  button_text VARCHAR(160) NULL,
+  button_link VARCHAR(500) NULL,
+  sort_order INT NOT NULL DEFAULT 0,
+  status ENUM('active', 'inactive') NOT NULL DEFAULT 'active',
+  custom_css_class VARCHAR(160) NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  deleted_at DATETIME NULL,
+  INDEX idx_custom_page_blocks_page_sort (page_id, status, sort_order),
+  INDEX idx_custom_page_blocks_deleted_sort (deleted_at, sort_order),
+  CONSTRAINT fk_custom_page_blocks_page FOREIGN KEY (page_id) REFERENCES custom_pages(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS cms_sections (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
   page_id BIGINT UNSIGNED NULL,
@@ -1274,6 +1338,79 @@ CREATE TABLE IF NOT EXISTS footer_items (
   INDEX idx_footer_items_type_status_sort (item_type, status, sort_order),
   INDEX idx_footer_items_type_sort (item_type, sort_order)
 );
+
+CREATE TABLE IF NOT EXISTS homepage_why_shop_settings (
+  id TINYINT UNSIGNED NOT NULL PRIMARY KEY DEFAULT 1,
+  section_enabled TINYINT(1) NOT NULL DEFAULT 1,
+  section_title VARCHAR(180) NOT NULL DEFAULT 'Why Shop With Avyona',
+  section_subtitle TEXT NULL,
+  cards_per_row INT NOT NULL DEFAULT 4,
+  mobile_cards_per_row INT NOT NULL DEFAULT 1,
+  section_sort_order INT NOT NULL DEFAULT 82,
+  background_color VARCHAR(32) NOT NULL DEFAULT '#f8fafc',
+  text_color VARCHAR(32) NOT NULL DEFAULT '#0f172a',
+  custom_css MEDIUMTEXT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT chk_homepage_why_shop_settings_singleton CHECK (id = 1)
+);
+
+CREATE TABLE IF NOT EXISTS homepage_why_shop_items (
+  id VARCHAR(120) NOT NULL PRIMARY KEY,
+  title VARCHAR(180) NOT NULL,
+  icon_url VARCHAR(500) NULL,
+  icon_position ENUM('left', 'right', 'top') NOT NULL DEFAULT 'left',
+  icon_size INT NOT NULL DEFAULT 42,
+  font_size INT NOT NULL DEFAULT 18,
+  text_color VARCHAR(32) NOT NULL DEFAULT '#0f172a',
+  card_background VARCHAR(32) NOT NULL DEFAULT '#ffffff',
+  card_border_color VARCHAR(32) NOT NULL DEFAULT '#e5e7eb',
+  card_radius INT NOT NULL DEFAULT 16,
+  sort_order INT NOT NULL DEFAULT 0,
+  status ENUM('active', 'inactive') NOT NULL DEFAULT 'active',
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  deleted_at DATETIME NULL,
+  INDEX idx_homepage_why_shop_items_status_sort (status, sort_order),
+  INDEX idx_homepage_why_shop_items_deleted_sort (deleted_at, sort_order)
+);
+
+CREATE TABLE IF NOT EXISTS product_payment_icon_settings (
+  id TINYINT UNSIGNED NOT NULL PRIMARY KEY DEFAULT 1,
+  section_enabled TINYINT(1) NOT NULL DEFAULT 1,
+  section_title VARCHAR(180) NOT NULL DEFAULT 'Payment Options',
+  section_subtitle TEXT NULL,
+  icons_per_row INT NOT NULL DEFAULT 7,
+  mobile_icons_per_row INT NOT NULL DEFAULT 3,
+  sort_order INT NOT NULL DEFAULT 20,
+  background_color VARCHAR(32) NOT NULL DEFAULT '#ffffff',
+  text_color VARCHAR(32) NOT NULL DEFAULT '#0f172a',
+  custom_css MEDIUMTEXT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT chk_product_payment_icon_settings_singleton CHECK (id = 1)
+);
+
+CREATE TABLE IF NOT EXISTS product_payment_icons (
+  id VARCHAR(120) NOT NULL PRIMARY KEY,
+  payment_name VARCHAR(180) NOT NULL,
+  icon_url VARCHAR(500) NULL,
+  icon_alt_text VARCHAR(240) NULL,
+  icon_size INT NOT NULL DEFAULT 44,
+  icon_background_color VARCHAR(32) NOT NULL DEFAULT '#ffffff',
+  icon_border_color VARCHAR(32) NOT NULL DEFAULT '#e5e7eb',
+  icon_radius INT NOT NULL DEFAULT 14,
+  sort_order INT NOT NULL DEFAULT 0,
+  status ENUM('active', 'inactive') NOT NULL DEFAULT 'active',
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  deleted_at DATETIME NULL,
+  INDEX idx_product_payment_icons_status_sort (status, sort_order),
+  INDEX idx_product_payment_icons_deleted_sort (deleted_at, sort_order)
+);
+
+ALTER TABLE custom_page_blocks ADD COLUMN image_width VARCHAR(20) NULL;
+ALTER TABLE custom_page_blocks ADD COLUMN border_radius INT NULL;
 
 CREATE INDEX idx_categories_parent ON categories(parent_id);
 CREATE INDEX idx_categories_status_sort ON categories(status, sort_order);
