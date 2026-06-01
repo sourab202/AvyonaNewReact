@@ -13,7 +13,9 @@ import {
   FaTachometerAlt,
   FaTags,
   FaUsers,
-  FaChevronDown
+  FaChevronDown,
+  FaAngleDoubleLeft,
+  FaAngleDoubleRight
 } from "react-icons/fa";
 import { clearAdminToken } from "../../api/adminApi";
 import { canViewModule } from "../../utils/accessControl";
@@ -44,7 +46,7 @@ const navItems = [
   }
 ];
 
-export default function Sidebar() {
+export default function Sidebar({ isCollapsed = false, onToggleCollapse }) {
   const navigate = useNavigate();
 
   const handleLogout = () => {
@@ -55,9 +57,23 @@ export default function Sidebar() {
   return (
     <aside className="dashboard-sidebar">
       <div className="dashboard-brand-block">
-        <p className="dashboard-eyebrow">Admin Panel</p>
-        <h2>Avyona Admin</h2>
-        <p>Backend control panel for products, orders, customers, and website management.</p>
+        <div className="dashboard-brand-head">
+          <span className="dashboard-brand-mark" aria-hidden="true">A</span>
+          <button
+            type="button"
+            className="dashboard-sidebar-toggle"
+            onClick={onToggleCollapse}
+            aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+          >
+            {isCollapsed ? <FaAngleDoubleRight aria-hidden="true" /> : <FaAngleDoubleLeft aria-hidden="true" />}
+          </button>
+        </div>
+        <div className="dashboard-brand-copy">
+          <p className="dashboard-eyebrow">Admin Panel</p>
+          <h2>Avyona Admin</h2>
+          <p>Backend control panel for products, orders, customers, and website management.</p>
+        </div>
       </div>
 
       <nav className="dashboard-nav" aria-label="Admin navigation">
@@ -72,8 +88,8 @@ export default function Sidebar() {
                   className={({ isActive }) => `dashboard-nav-link${isActive ? " is-active" : ""}`}
                 >
                   <item.icon className="dashboard-nav-icon" aria-hidden="true" />
-                  {item.label}
-                  <FaChevronDown style={{ marginLeft: "auto", fontSize: "11px" }} aria-hidden="true" />
+                  <span className="dashboard-nav-label">{item.label}</span>
+                  <FaChevronDown className="dashboard-nav-chevron" aria-hidden="true" />
                 </NavLink>
                 {visibleChildren.map((child) => (
                   <NavLink
@@ -81,7 +97,7 @@ export default function Sidebar() {
                     to={child.to}
                     className={({ isActive }) => `dashboard-nav-sublink${isActive ? " is-active" : ""}`}
                   >
-                    {child.label}
+                    <span className="dashboard-nav-label">{child.label}</span>
                   </NavLink>
                 ))}
               </div>
@@ -96,14 +112,14 @@ export default function Sidebar() {
               className={({ isActive }) => `dashboard-nav-link${isActive ? " is-active" : ""}`}
             >
               <item.icon className="dashboard-nav-icon" aria-hidden="true" />
-              {item.label}
+              <span className="dashboard-nav-label">{item.label}</span>
             </NavLink>
           );
         })}
 
         <button className="dashboard-nav-link dashboard-nav-button" type="button" onClick={handleLogout}>
           <FaSignOutAlt className="dashboard-nav-icon" aria-hidden="true" />
-          Logout
+          <span className="dashboard-nav-label">Logout</span>
         </button>
       </nav>
     </aside>

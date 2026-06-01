@@ -109,10 +109,24 @@ function getPageMeta(pathname) {
 export default function AdminLayout() {
   const location = useLocation();
   const currentPage = getPageMeta(location.pathname);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = React.useState(() => {
+    if (typeof window === "undefined") return false;
+    return window.localStorage.getItem("avyona-dashboard-sidebar") === "collapsed";
+  });
+
+  const handleToggleSidebar = React.useCallback(() => {
+    setIsSidebarCollapsed((current) => {
+      const next = !current;
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem("avyona-dashboard-sidebar", next ? "collapsed" : "expanded");
+      }
+      return next;
+    });
+  }, []);
 
   return (
-    <div className="dashboard-shell">
-      <Sidebar />
+    <div className={`dashboard-shell${isSidebarCollapsed ? " is-sidebar-collapsed" : ""}`}>
+      <Sidebar isCollapsed={isSidebarCollapsed} onToggleCollapse={handleToggleSidebar} />
       <div className="dashboard-main">
         <Header title={currentPage.title} subtitle={currentPage.subtitle} />
         <main className="dashboard-overview">
