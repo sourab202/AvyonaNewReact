@@ -44,11 +44,16 @@ function getStockBadgeStyle(stockStatus) {
   };
 }
 
+function getStockStatusFromQuantity(stock) {
+  const safeStock = Number(stock || 0);
+  if (safeStock <= 0) return "out-of-stock";
+  if (safeStock <= 5) return "low-stock";
+  return "in-stock";
+}
+
 function normalizeProductRow(product) {
   const stock = Number(product.stockQuantity ?? product.stock ?? 0);
-  let stockStatus = "in-stock";
-  if (stock <= 0 || product.status === "out_of_stock") stockStatus = "out-of-stock";
-  else if (stock <= 5) stockStatus = "low-stock";
+  const stockStatus = product.status === "out_of_stock" ? "out-of-stock" : getStockStatusFromQuantity(stock);
 
   return {
     id: product.id,
@@ -104,6 +109,10 @@ export default function Products() {
   const [bulkProductAction, setBulkProductAction] = React.useState("");
   const [runningBulkAction, setRunningBulkAction] = React.useState(false);
   const [updatingProductId, setUpdatingProductId] = React.useState("");
+  const [priceEditProductId, setPriceEditProductId] = React.useState("");
+  const [priceEditDraft, setPriceEditDraft] = React.useState("");
+  const [stockEditProductId, setStockEditProductId] = React.useState("");
+  const [stockEditDraft, setStockEditDraft] = React.useState("");
   const [draggedProductId, setDraggedProductId] = React.useState("");
   const [facets, setFacets] = React.useState(null);
   const canEditProducts = canAccess("products", "edit");
@@ -311,14 +320,94 @@ export default function Products() {
     }
   };
 
+  const startPriceEdit = (product) => {
+    if (!canEditProducts || updatingProductId === product.id) return;
+    setPriceEditProductId(String(product.id));
+    setPriceEditDraft(String(product.price ?? 0));
+  };
+
+  const discardPriceEdit = () => {
+    setPriceEditProductId("");
+    setPriceEditDraft("");
+  };
+
+  const saveInlinePrice = async (product) => {
+    const nextPrice = Math.max(0, Number(priceEditDraft || 0));
+    if (nextPrice === Number(product.price || 0)) {
+      discardPriceEdit();
+      return;
+    }
+
+    setUpdatingProductId(product.id);
+    try {
+      await updateProduct(product.id, { price: nextPrice });
+      setTableProducts((current) =>
+        current.map((item) =>
+          item.id === product.id
+            ? {
+                ...item,
+                price: nextPrice
+              }
+            : item
+        )
+      );
+      setSourceMessage("Product price saved.");
+      discardPriceEdit();
+      await loadProducts({ showFallbackMessage: false });
+    } catch (error) {
+      setSourceMessage(error.response?.data?.message || "Price update failed. Check permissions and backend connection.");
+    } finally {
+      setUpdatingProductId("");
+    }
+  };
+
+  const startStockEdit = (product) => {
+    if (!canEditProducts || updatingProductId === product.id) return;
+    setStockEditProductId(String(product.id));
+    setStockEditDraft(String(product.stock ?? 0));
+  };
+
+  const discardStockEdit = () => {
+    setStockEditProductId("");
+    setStockEditDraft("");
+  };
+
+  const saveInlineStock = async (product) => {
+    const nextStock = Math.max(0, Math.round(Number(stockEditDraft || 0)));
+    if (nextStock === Number(product.stock || 0)) {
+      discardStockEdit();
+      return;
+    }
+
+    setUpdatingProductId(product.id);
+    try {
+      await updateProduct(product.id, { stockQuantity: nextStock });
+      setTableProducts((current) =>
+        current.map((item) =>
+          item.id === product.id
+            ? {
+                ...item,
+                stock: nextStock,
+                stockStatus: getStockStatusFromQuantity(nextStock)
+              }
+            : item
+        )
+      );
+      setSourceMessage("Product stock saved.");
+      discardStockEdit();
+      await loadProducts({ showFallbackMessage: false });
+    } catch (error) {
+      setSourceMessage(error.response?.data?.message || "Stock update failed. Check permissions and backend connection.");
+    } finally {
+      setUpdatingProductId("");
+    }
+  };
+
   return (
     <section className="dashboard-page-shell dashboard-admin-page">
       <div className="dashboard-page-heading">
         <div>
           <h2 style={{ margin: 0 }}>Products</h2>
-          <p className="dashboard-page-copy">
-            Search, filter, review, and manage your catalog from one table.
-          </p>
           <p className="dashboard-source-message">
             {sourceMessage}
           </p>
@@ -458,8 +547,6 @@ export default function Products() {
               <th>Price</th>
               <th>Stock</th>
               <th>Status</th>
-              <th>Featured</th>
-              <th>Sort Order</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -491,21 +578,70 @@ export default function Products() {
                     <ProductThumbnail src={product.image} alt={product.name} />
                     <div className="dashboard-product-copy">
                       <strong>{product.name}</strong>
-                      <span>{product.slug}</span>
                     </div>
                   </div>
                 </td>
                 <td>{product.brand}</td>
                 <td>{product.category}</td>
                 <td className="dashboard-muted-cell">{product.sku}</td>
-                <td>{formatCurrency(product.price)}</td>
                 <td>
-                  <div className="dashboard-stock-cell">
-                    <strong>{product.stock}</strong>
-                    <span>
-                      {product.stockStatus.replace(/-/g, " ")}
-                    </span>
-                  </div>
+                  {String(priceEditProductId) === String(product.id) ? (
+                    <div className="dashboard-inline-edit-panel">
+                      <label>
+                        <span>Price</span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={priceEditDraft}
+                          onChange={(event) => setPriceEditDraft(event.target.value)}
+                          aria-label={`Price for ${product.name}`}
+                        />
+                      </label>
+                      <div className="dashboard-inline-edit-actions">
+                        <button type="button" className="dashboard-inline-save" onClick={() => saveInlinePrice(product)} disabled={updatingProductId === product.id}>
+                          {updatingProductId === product.id ? "Saving" : "Save"}
+                        </button>
+                        <button type="button" className="dashboard-inline-discard" onClick={discardPriceEdit} disabled={updatingProductId === product.id}>
+                          Discard
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button type="button" className="dashboard-inline-value-button" onClick={() => startPriceEdit(product)} disabled={!canEditProducts}>
+                      {formatCurrency(product.price)}
+                    </button>
+                  )}
+                </td>
+                <td>
+                  {String(stockEditProductId) === String(product.id) ? (
+                    <div className="dashboard-inline-edit-panel">
+                      <label>
+                        <span>Stock</span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="1"
+                          value={stockEditDraft}
+                          onChange={(event) => setStockEditDraft(event.target.value)}
+                          aria-label={`Stock for ${product.name}`}
+                        />
+                      </label>
+                      <div className="dashboard-inline-edit-actions">
+                        <button type="button" className="dashboard-inline-save" onClick={() => saveInlineStock(product)} disabled={updatingProductId === product.id}>
+                          {updatingProductId === product.id ? "Saving" : "Save"}
+                        </button>
+                        <button type="button" className="dashboard-inline-discard" onClick={discardStockEdit} disabled={updatingProductId === product.id}>
+                          Discard
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button type="button" className="dashboard-inline-stock-button" onClick={() => startStockEdit(product)} disabled={!canEditProducts}>
+                      <strong>{product.stock}</strong>
+                      <span>{product.stockStatus.replace(/-/g, " ")}</span>
+                    </button>
+                  )}
                 </td>
                 <td>
                   <span
@@ -525,31 +661,6 @@ export default function Products() {
                     }}
                   >
                     {product.status}
-                  </span>
-                </td>
-                <td>
-                  <input
-                    type="number"
-                    min="0"
-                    defaultValue={product.sortOrder}
-                    className="dashboard-sort-input"
-                    disabled={!canEditProducts || updatingProductId === product.id}
-                    onBlur={(event) => handleProductSortOrderChange(product, event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") event.currentTarget.blur();
-                    }}
-                    aria-label={`Sort order for ${product.name}`}
-                  />
-                </td>
-                <td>
-                  <span
-                    style={{
-                      ...pillBaseStyle,
-                      background: product.featured ? "#dcfce7" : "#e2e8f0",
-                      color: product.featured ? "#166534" : "#475569"
-                    }}
-                  >
-                    {product.featured ? "Featured" : "Standard"}
                   </span>
                 </td>
                 <td>
@@ -586,7 +697,7 @@ export default function Products() {
             ))}
             {!paginatedProducts.length ? (
               <tr>
-                <td colSpan="12" className="dashboard-empty-table-cell">
+                <td colSpan="10" className="dashboard-empty-table-cell">
                   No products found for the selected search and filters.
                 </td>
               </tr>

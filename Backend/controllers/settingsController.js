@@ -1,6 +1,6 @@
 import { query } from "../config/db.js";
 import { ApiError } from "../utils/apiError.js";
-import { DEFAULT_APP_SETTINGS, getPublicSettings, mergeSettings } from "../../shared/appSettings.js";
+import { DEFAULT_APP_SETTINGS, getPublicSettings, mergeSettings } from "../shared/appSettings.js";
 
 const settingsTableName = "app_settings";
 const legacySettingsTableName = "app_settings_legacy_json";
@@ -28,7 +28,23 @@ const generalSettingKeyByPath = {
   "general.supportPhone": "support_phone",
   "general.businessAddress": "business_address",
   "general.gstNumber": "gst_number",
-  "general.workingHours": "working_hours"
+  "general.workingHours": "working_hours",
+  "whatsapp.enabled": "whatsapp_enabled",
+  "whatsapp.number": "whatsapp_number",
+  "whatsapp.defaultMessage": "whatsapp_default_message",
+  "whatsapp.productMessage": "whatsapp_product_message",
+  "whatsapp.orderMessage": "whatsapp_order_message",
+  "whatsapp.position": "whatsapp_position",
+  "whatsapp.iconUrl": "whatsapp_icon_url",
+  "whatsapp.buttonColor": "whatsapp_button_color",
+  "whatsapp.iconSize": "whatsapp_icon_size",
+  "whatsapp.hoverText": "whatsapp_hover_text",
+  "whatsapp.showMobile": "whatsapp_show_mobile",
+  "whatsapp.showDesktop": "whatsapp_show_desktop",
+  "whatsapp.showAllPages": "whatsapp_show_all_pages",
+  "whatsapp.hideCheckout": "whatsapp_hide_checkout",
+  "whatsapp.hideOrderConfirmation": "whatsapp_hide_order_confirmation",
+  "whatsapp.hideAdmin": "whatsapp_hide_admin"
 };
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const phonePattern = /^[+]?[\d\s().-]{7,20}$/;
@@ -212,6 +228,160 @@ function validateThemeColor(value, fieldName = "Color") {
   }
 
   return color;
+}
+
+function normalizeContactText(value, fallback, maxLength, fieldName) {
+  const text = String(value ?? fallback ?? "").trim();
+  if (text.length > maxLength) {
+    throw new ApiError(400, `${fieldName} must be ${maxLength} characters or less.`);
+  }
+  return text;
+}
+
+function normalizeContactNumber(value, fallback, min, max) {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.min(max, Math.max(min, Math.round(number))) : fallback;
+}
+
+function normalizeContactColor(value, fallback, fieldName) {
+  const color = String(value || fallback || "").trim();
+  validateThemeColor(color, fieldName);
+  return color;
+}
+
+const contactBuiltinIcons = new Set(["leaf", "headset", "briefcase", "envelope", "phone", "clock", "location", "lock", "shield", "bolt", "heart"]);
+
+function normalizeContactIconUrl(value, fieldName) {
+  const url = String(value || "").trim();
+  if (url && !publicImageUrlPattern.test(url)) {
+    throw new ApiError(400, `${fieldName} must use an uploaded image or a public HTTPS URL.`);
+  }
+  return url;
+}
+
+function normalizeContactBuiltinIcon(value, fallback) {
+  const icon = String(value || fallback || "").trim().toLowerCase();
+  return contactBuiltinIcons.has(icon) ? icon : fallback;
+}
+
+function normalizeContactPageSettings(payload = {}) {
+  const fallback = DEFAULT_APP_SETTINGS.contactPage;
+  const source = mergeSettings(fallback, payload || {});
+  const enquiryByKey = new Map(
+    (Array.isArray(source.enquiryTypes) ? source.enquiryTypes : []).map((item) => [String(item?.key || ""), item])
+  );
+  const trustByKey = new Map(
+    (Array.isArray(source.trustItems) ? source.trustItems : []).map((item) => [String(item?.key || ""), item])
+  );
+
+  return {
+    enabled: source.enabled !== false,
+    heroTitle: normalizeContactText(source.heroTitle, fallback.heroTitle, 120, "Hero title"),
+    heroLineOne: normalizeContactText(source.heroLineOne, fallback.heroLineOne, 240, "Hero first line"),
+    heroLineTwo: normalizeContactText(source.heroLineTwo, fallback.heroLineTwo, 240, "Hero second line"),
+    sectionTitle: normalizeContactText(source.sectionTitle, fallback.sectionTitle, 160, "Section title"),
+    heroIcons: {
+      left: {
+        enabled: source.heroIcons?.left?.enabled !== false,
+        builtin: normalizeContactBuiltinIcon(source.heroIcons?.left?.builtin, fallback.heroIcons.left.builtin),
+        imageUrl: normalizeContactIconUrl(source.heroIcons?.left?.imageUrl, "Left hero image"),
+        size: normalizeContactNumber(source.heroIcons?.left?.size, fallback.heroIcons.left.size, 32, 240),
+        color: normalizeContactColor(source.heroIcons?.left?.color, fallback.heroIcons.left.color, "Left hero icon color")
+      },
+      right: {
+        enabled: source.heroIcons?.right?.enabled !== false,
+        builtin: normalizeContactBuiltinIcon(source.heroIcons?.right?.builtin, fallback.heroIcons.right.builtin),
+        imageUrl: normalizeContactIconUrl(source.heroIcons?.right?.imageUrl, "Right hero image"),
+        size: normalizeContactNumber(source.heroIcons?.right?.size, fallback.heroIcons.right.size, 32, 240),
+        color: normalizeContactColor(source.heroIcons?.right?.color, fallback.heroIcons.right.color, "Right hero icon color")
+      }
+    },
+    enquiryTypes: fallback.enquiryTypes.map((defaultItem) => {
+      const item = enquiryByKey.get(defaultItem.key) || defaultItem;
+      return {
+        key: defaultItem.key,
+        label: normalizeContactText(item.label, defaultItem.label, 30, `${defaultItem.key} label`),
+        title: normalizeContactText(item.title, defaultItem.title, 100, `${defaultItem.key} title`),
+        description: normalizeContactText(item.description, defaultItem.description, 300, `${defaultItem.key} description`),
+        buttonText: normalizeContactText(item.buttonText, defaultItem.buttonText, 50, `${defaultItem.key} button text`),
+        iconBuiltin: normalizeContactBuiltinIcon(item.iconBuiltin, defaultItem.iconBuiltin),
+        iconUrl: normalizeContactIconUrl(item.iconUrl, `${defaultItem.key} icon image`),
+        iconSize: normalizeContactNumber(item.iconSize, defaultItem.iconSize, 20, 100),
+        iconColor: normalizeContactColor(item.iconColor, defaultItem.iconColor, `${defaultItem.key} icon color`),
+        iconBackground: normalizeContactColor(item.iconBackground, defaultItem.iconBackground, `${defaultItem.key} icon background`),
+        showIcon: item.showIcon !== false,
+        enabled: item.enabled !== false
+      };
+    }),
+    formIntro: normalizeContactText(source.formIntro, fallback.formIntro, 300, "Form introduction"),
+    fullNamePlaceholder: normalizeContactText(source.fullNamePlaceholder, fallback.fullNamePlaceholder, 100, "Full name placeholder"),
+    companyNamePlaceholder: normalizeContactText(source.companyNamePlaceholder, fallback.companyNamePlaceholder, 100, "Company placeholder"),
+    emailPlaceholder: normalizeContactText(source.emailPlaceholder, fallback.emailPlaceholder, 100, "Email placeholder"),
+    phonePlaceholder: normalizeContactText(source.phonePlaceholder, fallback.phonePlaceholder, 100, "Phone placeholder"),
+    orderIdPlaceholder: normalizeContactText(source.orderIdPlaceholder, fallback.orderIdPlaceholder, 100, "Order ID placeholder"),
+    messagePlaceholder: normalizeContactText(source.messagePlaceholder, fallback.messagePlaceholder, 100, "Message placeholder"),
+    submitButtonText: normalizeContactText(source.submitButtonText, fallback.submitButtonText, 80, "Submit button text"),
+    submittingButtonText: normalizeContactText(source.submittingButtonText, fallback.submittingButtonText, 80, "Submitting button text"),
+    successMessage: normalizeContactText(source.successMessage, fallback.successMessage, 300, "Success message"),
+    errorMessage: normalizeContactText(source.errorMessage, fallback.errorMessage, 300, "Error message"),
+    details: {
+      emailLabel: normalizeContactText(source.details?.emailLabel, fallback.details.emailLabel, 60, "Email label"),
+      phoneLabel: normalizeContactText(source.details?.phoneLabel, fallback.details.phoneLabel, 60, "Phone label"),
+      hoursLabel: normalizeContactText(source.details?.hoursLabel, fallback.details.hoursLabel, 60, "Hours label"),
+      addressLabel: normalizeContactText(source.details?.addressLabel, fallback.details.addressLabel, 60, "Address label"),
+      emptyPhoneText: normalizeContactText(source.details?.emptyPhoneText, fallback.details.emptyPhoneText, 100, "Empty phone text"),
+      showEmail: source.details?.showEmail !== false,
+      showPhone: source.details?.showPhone !== false,
+      showHours: source.details?.showHours !== false,
+      showAddress: source.details?.showAddress !== false,
+      icons: Object.fromEntries(Object.entries(fallback.details.icons).map(([key, defaultIcon]) => {
+        const icon = source.details?.icons?.[key] || defaultIcon;
+        return [key, {
+          builtin: normalizeContactBuiltinIcon(icon.builtin, defaultIcon.builtin),
+          imageUrl: normalizeContactIconUrl(icon.imageUrl, `${key} contact detail icon image`),
+          size: normalizeContactNumber(icon.size, defaultIcon.size, 12, 64),
+          color: normalizeContactColor(icon.color, defaultIcon.color, `${key} contact detail icon color`),
+          background: normalizeContactColor(icon.background, defaultIcon.background, `${key} contact detail icon background`),
+          showIcon: icon.showIcon !== false
+        }];
+      }))
+    },
+    trustItems: fallback.trustItems.map((defaultItem) => {
+      const item = trustByKey.get(defaultItem.key) || defaultItem;
+      return {
+        key: defaultItem.key,
+        label: normalizeContactText(item.label, defaultItem.label, 80, `${defaultItem.key} trust label`),
+        iconBuiltin: normalizeContactBuiltinIcon(item.iconBuiltin, defaultItem.iconBuiltin),
+        iconUrl: normalizeContactIconUrl(item.iconUrl, `${defaultItem.key} trust icon image`),
+        iconSize: normalizeContactNumber(item.iconSize, defaultItem.iconSize, 12, 64),
+        iconColor: normalizeContactColor(item.iconColor, defaultItem.iconColor, `${defaultItem.key} trust icon color`),
+        enabled: item.enabled !== false,
+        showIcon: item.showIcon !== false
+      };
+    }),
+    design: {
+      customerAccent: normalizeContactColor(source.design?.customerAccent, fallback.design.customerAccent, "Customer accent"),
+      customerAccentDark: normalizeContactColor(source.design?.customerAccentDark, fallback.design.customerAccentDark, "Customer dark accent"),
+      customerAccentSoft: normalizeContactColor(source.design?.customerAccentSoft, fallback.design.customerAccentSoft, "Customer soft accent"),
+      businessAccent: normalizeContactColor(source.design?.businessAccent, fallback.design.businessAccent, "Business accent"),
+      businessAccentDark: normalizeContactColor(source.design?.businessAccentDark, fallback.design.businessAccentDark, "Business dark accent"),
+      businessAccentSoft: normalizeContactColor(source.design?.businessAccentSoft, fallback.design.businessAccentSoft, "Business soft accent"),
+      pageBackground: normalizeContactColor(source.design?.pageBackground, fallback.design.pageBackground, "Page background"),
+      heroBackground: normalizeContactColor(source.design?.heroBackground, fallback.design.heroBackground, "Hero background"),
+      surfaceColor: normalizeContactColor(source.design?.surfaceColor, fallback.design.surfaceColor, "Surface color"),
+      textColor: normalizeContactColor(source.design?.textColor, fallback.design.textColor, "Text color"),
+      mutedTextColor: normalizeContactColor(source.design?.mutedTextColor, fallback.design.mutedTextColor, "Muted text color"),
+      borderColor: normalizeContactColor(source.design?.borderColor, fallback.design.borderColor, "Border color"),
+      trustBackground: normalizeContactColor(source.design?.trustBackground, fallback.design.trustBackground, "Trust background"),
+      cardRadius: normalizeContactNumber(source.design?.cardRadius, fallback.design.cardRadius, 0, 48),
+      inputRadius: normalizeContactNumber(source.design?.inputRadius, fallback.design.inputRadius, 0, 30),
+      contentMaxWidth: normalizeContactNumber(source.design?.contentMaxWidth, fallback.design.contentMaxWidth, 680, 1440),
+      sectionGap: normalizeContactNumber(source.design?.sectionGap, fallback.design.sectionGap, 12, 80),
+      headingFontSize: normalizeContactNumber(source.design?.headingFontSize, fallback.design.headingFontSize, 28, 84),
+      mobileHeadingFontSize: normalizeContactNumber(source.design?.mobileHeadingFontSize, fallback.design.mobileHeadingFontSize, 24, 56)
+    },
+    customCss: validateCustomCssValue(source.customCss || "", ".contact-page")
+  };
 }
 
 function validateThemeColors(theme = DEFAULT_APP_SETTINGS.theme) {
@@ -1361,8 +1531,36 @@ export async function updateAdminWhyShopItem(request, response) {
   if (!existing) throw new ApiError(404, "Why Shop item not found");
 
   const updatedItem = normalizeWhyShopItemPayload({ ...existing, ...request.body, id: itemId });
-  const nextItems = currentItems.map((item) => item.id === itemId ? updatedItem : item);
-  await replaceHomepageWhyShopItems(nextItems);
+  await query(
+    `UPDATE ${whyShopItemsTableName}
+     SET title = ?,
+         icon_url = ?,
+         icon_position = ?,
+         icon_size = ?,
+         font_size = ?,
+         text_color = ?,
+         card_background = ?,
+         card_border_color = ?,
+         card_radius = ?,
+         sort_order = ?,
+         status = ?,
+         deleted_at = NULL
+     WHERE id = ?`,
+    [
+      updatedItem.title,
+      updatedItem.iconUrl || null,
+      updatedItem.iconPosition,
+      updatedItem.iconSize,
+      updatedItem.titleFontSize,
+      updatedItem.textColor,
+      updatedItem.cardBackgroundColor,
+      updatedItem.cardBorderColor,
+      updatedItem.cardRadius,
+      updatedItem.sortOrder,
+      updatedItem.status,
+      itemId
+    ]
+  );
 
   response.json({
     success: true,
@@ -1392,7 +1590,12 @@ export async function updateAdminWhyShopItemStatus(request, response) {
   const existing = currentItems.find((item) => item.id === itemId);
   if (!existing) throw new ApiError(404, "Why Shop item not found");
   const updatedItem = { ...existing, status };
-  await replaceHomepageWhyShopItems(currentItems.map((item) => item.id === itemId ? updatedItem : item));
+  await query(
+    `UPDATE ${whyShopItemsTableName}
+     SET status = ?
+     WHERE id = ? AND deleted_at IS NULL`,
+    [status, itemId]
+  );
 
   response.json({
     success: true,
@@ -1511,12 +1714,17 @@ async function readStoredSettings() {
 
 async function writeStoredSettings(settings) {
   await createKeyValueSettingsTable();
+  await query(
+    `DELETE FROM ${settingsTableName}
+     WHERE setting_key IN ('shipping__shippingCharges', 'shipping__freeShippingThreshold')`
+  );
   await ensureThemeSettingsTable();
   const productPaymentIconsSettings = settings.homepage?.productPaymentIconsSettings;
   if (productPaymentIconsSettings?.customCss) {
     validateCustomCssValue(productPaymentIconsSettings.customCss, ".avyona-product-payment-icons");
   }
-  const entries = flattenSettings(settings);
+  const obsoleteSettingKeys = new Set(["shipping__shippingCharges", "shipping__freeShippingThreshold"]);
+  const entries = flattenSettings(settings).filter((entry) => !obsoleteSettingKeys.has(entry.key));
   if (!entries.length) return;
 
   await Promise.all(entries.map((entry) => query(
@@ -1860,6 +2068,34 @@ export async function updateAdminGeneralSettings(request, response) {
   });
 }
 
+export async function getAdminContactPageSettings(_request, response) {
+  const storedSettings = await readStoredSettings();
+  const settings = mergeSettings(DEFAULT_APP_SETTINGS, storedSettings || {});
+
+  response.json({
+    success: true,
+    data: normalizeContactPageSettings(settings.contactPage)
+  });
+}
+
+export async function updateAdminContactPageSettings(request, response) {
+  const incomingSettings = request.body?.settings || request.body?.contactPage || request.body;
+  if (!incomingSettings || typeof incomingSettings !== "object" || Array.isArray(incomingSettings)) {
+    throw new ApiError(400, "A valid Contact Page settings object is required");
+  }
+
+  const storedSettings = await readStoredSettings();
+  const currentSettings = mergeSettings(DEFAULT_APP_SETTINGS, storedSettings || {});
+  const contactPage = normalizeContactPageSettings(incomingSettings);
+  await writeStoredSettings(mergeSettings(currentSettings, { contactPage }));
+
+  response.json({
+    success: true,
+    message: "Contact Page settings saved successfully",
+    data: contactPage
+  });
+}
+
 export async function getAdminBrowseCategoriesSettings(_request, response) {
   const storedSettings = await readStoredSettings();
   const settings = mergeSettings(DEFAULT_APP_SETTINGS, storedSettings || {});
@@ -1948,6 +2184,16 @@ export async function getPublicThemeSettings(_request, response) {
   response.json({
     success: true,
     data: publicSettings.theme
+  });
+}
+
+export async function getPublicContactPageSettings(_request, response) {
+  const storedSettings = await readStoredSettings();
+  const settings = mergeSettings(DEFAULT_APP_SETTINGS, storedSettings || {});
+
+  response.json({
+    success: true,
+    data: normalizeContactPageSettings(settings.contactPage)
   });
 }
 

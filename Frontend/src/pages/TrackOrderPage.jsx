@@ -2,7 +2,6 @@ import React from "react";
 import { resolveMediaUrl } from "../utils/media";
 import { formatCurrency } from "../utils/storefront";
 import { trackStorefrontOrder } from "../api/orderApi";
-import trackOrders from "../data/track-orders";
 import { formatOrderStatusLabel, ORDER_STATUS_FLOW } from "../../../shared/orderStatusFlow";
 
 function formatDateTime(value) {
@@ -111,16 +110,6 @@ export default function TrackOrderPage({ context }) {
       setResult(response.data || null);
       return;
     } catch (error) {
-      const matchedOrder = trackOrders.find((entry) => (
-        entry.orderId.toLowerCase() === safeOrderId
-        && (entry.email.toLowerCase() === safeContact || entry.phone.toLowerCase() === safeContact)
-      ));
-
-      if (matchedOrder) {
-        setResult(matchedOrder);
-        return;
-      }
-
       setResult(null);
       setErrorMessage(error.message || "We could not find an order matching that Order ID and email/phone combination.");
     }

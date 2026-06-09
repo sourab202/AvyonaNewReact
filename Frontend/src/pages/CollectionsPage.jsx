@@ -1,6 +1,6 @@
 import React from "react";
 import { Link } from "react-router-dom";
-import { flattenCategoryTree, fallbackCategoryTree } from "../data/category-data";
+import { flattenCategoryTree } from "../data/category-data";
 import { resolveMediaUrl } from "../utils/media";
 
 function handleCategoryImageError(event) {
@@ -9,7 +9,7 @@ function handleCategoryImageError(event) {
 }
 
 export default function CollectionsPage({ context }) {
-  const categories = flattenCategoryTree(context?.siteCategories || fallbackCategoryTree)
+  const categories = flattenCategoryTree(Array.isArray(context?.siteCategories) ? context.siteCategories : [])
     .filter((category) => !category.parentId && category.status === "active")
     .sort((left, right) => Number(left.sortOrder || 0) - Number(right.sortOrder || 0));
 

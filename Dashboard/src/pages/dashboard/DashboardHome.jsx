@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { fetchDashboardAnalytics, fetchDashboardSummary } from "../../api/adminApi";
+import { resolveAdminMediaUrl } from "../../utils/media";
 import { formatCurrency } from "../../utils/storefront";
 import products from "../../data/products";
 import orders from "../../data/orders";
@@ -414,7 +415,7 @@ export default function DashboardHome({ context, allProducts }) {
             {lowStockProducts.length ? lowStockProducts.map((product) => (
               <div key={product.slug} style={listItemStyle}>
                 <div style={productRowStyle}>
-                  <img src={product.image} alt={product.name} style={productImageStyle} />
+                  <img src={resolveAdminMediaUrl(product.image)} alt={product.name} style={productImageStyle} />
                   <div>
                     <strong>{product.name}</strong>
                     <p style={mutedTextStyle}>{`${product.sku} - ${product.stockStatus.replace(/-/g, " ")}`}</p>

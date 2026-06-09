@@ -2,11 +2,11 @@ import React, { Suspense, lazy, useEffect, useRef, useState } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import SeoManager from "./components/layout/SeoManager";
 import StoreLayout from "./components/layout/StoreLayout";
+import FloatingWhatsAppButton from "./components/common/FloatingWhatsAppButton";
 import { trackAnalyticsEvent } from "./api/analyticsApi";
 import { fetchCategoryTree } from "./api/categoryApi";
 import { fetchStorefrontCoupons } from "./api/couponApi";
-import { fallbackCategoryTree } from "./data/category-data";
-import { fetchGeneralSettings, fetchPublicSettings, fetchPublicThemeSettings } from "./api/settingsApi";
+import { fetchGeneralSettings, fetchPublicPaymentSettings, fetchPublicSettings, fetchPublicThemeSettings } from "./api/settingsApi";
 import { fetchStorefrontProducts } from "./api/productApi";
 import { clearCustomerToken, fetchCurrentCustomer, fetchCustomerCart, fetchCustomerOrders, fetchCustomerWishlist, getCustomerToken, syncCustomerCart, syncCustomerWishlist } from "./api/customerApi";
 import { couponRules } from "../../shared/coupons";
@@ -27,6 +27,7 @@ const Home = lazy(() => import("./pages/Home"));
 const NotFoundPage = lazy(() => import("./pages/NotFoundPage"));
 const OffersPage = lazy(() => import("./pages/OffersPage"));
 const OrderConfirmationPage = lazy(() => import("./pages/OrderConfirmationPage"));
+const PaymentFailedPage = lazy(() => import("./pages/PaymentFailedPage"));
 const ProductPage = lazy(() => import("./pages/ProductPage"));
 const ProfilePage = lazy(() => import("./pages/ProfilePage"));
 const SearchPage = lazy(() => import("./pages/SearchPage"));
@@ -65,6 +66,10 @@ function normalizePublicSettingsPayload(payload = {}) {
     thankYouPage: {
       ...(settings.thankYouPage || {}),
       customIconUrl: resolveSettingsMediaUrl(settings.thankYouPage?.customIconUrl)
+    },
+    whatsapp: {
+      ...(settings.whatsapp || DEFAULT_APP_SETTINGS.whatsapp),
+      iconUrl: resolveSettingsMediaUrl(settings.whatsapp?.iconUrl)
     }
   };
 }
@@ -198,12 +203,13 @@ function normalizeBackendProduct(product) {
   const discount = mrp > price && price > 0 ? Math.round(((mrp - price) / mrp) * 100) : 0;
   const collectionSlug = product.categorySlug || String(product.categoryName || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
   const gallery = resolveMediaList(product.galleryUrls);
+  const videoUrls = resolveMediaList(product.videoUrls);
   const primaryImage = gallery[0] || resolveMediaUrl(product.imageUrl);
 
   return {
     id: product.id,
     asin: product.asin,
-    sku: product.asin,
+    sku: product.sku || product.asin,
     slug: product.slug,
     name: product.name,
     brand: product.brand,
@@ -213,9 +219,12 @@ function normalizeBackendProduct(product) {
     mrp,
     discount,
     image: primaryImage,
-    gallery,
-    highlights: [product.shortDescription || "New Avyona product"].filter(Boolean),
-    description: product.description ? String(product.description).split(/\n+/).filter(Boolean) : [product.shortDescription || "Product details will be updated soon."],
+    gallery: [...gallery, ...videoUrls],
+    video: videoUrls[0] || "",
+    videoUrls,
+    videoPoster: primaryImage,
+    highlights: [product.shortDescription].filter(Boolean),
+    description: product.description ? String(product.description).split(/\n+/).filter(Boolean) : [product.shortDescription].filter(Boolean),
     rating: Number(product.rating || 0),
     reviewCount: Number(product.reviewCount || 0),
     availableStock: stockQuantity,
@@ -355,7 +364,7 @@ function App() {
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [cartAnimation, setCartAnimation] = useState(null);
   const [siteSettings, setSiteSettings] = useState(() => getPublicSettings(DEFAULT_APP_SETTINGS));
-  const [siteCategories, setSiteCategories] = useState(fallbackCategoryTree);
+  const [siteCategories, setSiteCategories] = useState([]);
   const [storefrontProducts, setStorefrontProducts] = useState([]);
   const [storefrontCoupons, setStorefrontCoupons] = useState(couponRules);
   const [isProductCatalogLoading, setIsProductCatalogLoading] = useState(true);
@@ -384,12 +393,22 @@ function App() {
         if (!isMounted) return;
         const customer = response.data?.customer;
         if (customer) {
-          setAuthUser({ id: customer.id, fullName: customer.fullName, email: customer.email, mobile: customer.mobile });
+          const businessDetails = customer.businessDetails || {
+            isBusinessAccount: Boolean(customer.isBusinessAccount || customer.businessName || customer.gstNumber),
+            businessName: customer.businessName || "",
+            gstNumber: customer.gstNumber || ""
+          };
+          setAuthUser({ id: customer.id, fullName: customer.fullName, email: customer.email, mobile: customer.mobile, businessDetails });
           setCustomerProfile({
             firstName: customer.firstName,
             lastName: customer.lastName,
             contact: customer.email,
-            phone: customer.mobile
+            email: customer.email,
+            phone: customer.mobile,
+            businessDetails,
+            isBusinessAccount: businessDetails.isBusinessAccount,
+            businessName: businessDetails.businessName,
+            gstNumber: businessDetails.gstNumber
           });
         }
       } catch {
@@ -489,10 +508,11 @@ function App() {
     let isMounted = true;
 
     async function loadPublicSettings() {
-      const [settingsResult, generalResult, themeResult] = await Promise.allSettled([
+      const [settingsResult, generalResult, themeResult, paymentResult] = await Promise.allSettled([
         fetchPublicSettings(),
         fetchGeneralSettings(),
-        fetchPublicThemeSettings()
+        fetchPublicThemeSettings(),
+        fetchPublicPaymentSettings()
       ]);
 
       if (!isMounted) return;
@@ -504,12 +524,18 @@ function App() {
             ? (generalResult.value.data?.data || generalResult.value.data || {})
             : GENERAL_SETTINGS_FALLBACK
         );
-        setSiteSettings(mergeThemeIntoSiteSettings(
+        const nextSettings = mergeThemeIntoSiteSettings(
           settingsWithGeneral,
           themeResult.status === "fulfilled"
             ? (themeResult.value.data?.data || themeResult.value.data || {})
             : DEFAULT_APP_SETTINGS.theme
-        ));
+        );
+        setSiteSettings({
+          ...nextSettings,
+          razorpayPayment: paymentResult.status === "fulfilled"
+            ? (paymentResult.value.data || {})
+            : { enabled: false }
+        });
       } else {
         setSiteSettings(mergeThemeIntoSiteSettings(
           mergeGeneralIntoSiteSettings(
@@ -679,10 +705,10 @@ function App() {
       try {
         const response = await fetchCategoryTree();
         if (!isMounted) return;
-        setSiteCategories(Array.isArray(response.data) && response.data.length ? response.data : fallbackCategoryTree);
+        setSiteCategories(Array.isArray(response.data) ? response.data : []);
       } catch {
         if (isMounted) {
-          setSiteCategories(fallbackCategoryTree);
+          setSiteCategories([]);
         }
       } finally {
         if (isMounted) {
@@ -941,7 +967,7 @@ function App() {
   return (
     <div className="app-shell avyona-theme" style={themeCssVariables}>
       {scopedCustomCss ? <style>{scopedCustomCss}</style> : null}
-      <SeoManager siteSettings={siteSettings} />
+      <SeoManager siteSettings={siteSettings} products={storefrontProducts} categories={siteCategories} />
       <Suspense fallback={<div className="route-loading">Loading...</div>}>
         <Routes>
           <Route
@@ -970,6 +996,7 @@ function App() {
           <Route path="/account" element={<AccountPage context={context} />} />
           <Route path="/profile" element={<ProtectedRoute allow={Boolean(authUser)}><ProfilePage context={context} /></ProtectedRoute>} />
           <Route path="/checkout" element={<CheckoutPage context={context} />} />
+          <Route path="/payment-failed/:orderNumber" element={<StoreLayout context={context} allProducts={storefrontProducts}><PaymentFailedPage context={context} /></StoreLayout>} />
           <Route path="/order-confirmation/:orderNumber" element={<StoreLayout context={context} allProducts={storefrontProducts}><OrderConfirmationPage context={context} /></StoreLayout>} />
           <Route path="*" element={<StoreLayout context={context} allProducts={storefrontProducts}><NotFoundPage /></StoreLayout>} />
         </Routes>
@@ -1002,6 +1029,7 @@ function App() {
           <img src={cartAnimation.image} alt="" />
         </div>
       ) : null}
+      <FloatingWhatsAppButton context={context} />
     </div>
   );
 }

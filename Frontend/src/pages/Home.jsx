@@ -4,13 +4,7 @@ import ProductCard from "../components/product/ProductCard";
 import { fetchHomepageBlogs } from "../api/blogApi";
 import { fetchHomepageOffers } from "../api/couponApi";
 import { fetchPublicWhyShop } from "../api/settingsApi";
-import { flattenCategoryTree, fallbackCategoryTree } from "../data/category-data";
-import {
-  arrivalProducts,
-  featuredBrands,
-  featuredProducts,
-  frameProducts
-} from "../data/storefront-content";
+import { flattenCategoryTree } from "../data/category-data";
 import { resolveMediaUrl } from "../utils/media";
 import { copyText } from "../utils/storefront";
 
@@ -96,7 +90,7 @@ function isActiveProduct(product) {
   return String(product?.status || "active").toLowerCase() === "active";
 }
 
-function getLiveSectionProducts(productCatalog, predicate, fallbackProducts) {
+function getLiveSectionProducts(productCatalog, predicate) {
   const liveProducts = productCatalog.filter((product) => isActiveProduct(product) && (!predicate || predicate(product)));
   if (liveProducts.length) return liveProducts;
   return productCatalog.filter(isActiveProduct);
@@ -247,7 +241,7 @@ function getVideoMimeType(url) {
 
 export default function Home({ context }) {
   const productCatalog = Array.isArray(context.allProducts) && context.allProducts.length ? context.allProducts : [];
-  const siteCategories = context.siteCategories && context.siteCategories.length ? context.siteCategories : fallbackCategoryTree;
+  const siteCategories = Array.isArray(context.siteCategories) ? context.siteCategories : [];
   const [activeCategory, setActiveCategory] = useState("all");
   const [bannerIndex, setBannerIndex] = useState(0);
   const [isHeroPaused, setIsHeroPaused] = useState(false);
@@ -396,17 +390,32 @@ export default function Home({ context }) {
   useEffect(() => {
     let isMounted = true;
 
-    fetchPublicWhyShop()
-      .then((response) => {
-        if (!isMounted) return;
-        setWhyShopSection(normalizeWhyShopSection(response));
-      })
-      .catch(() => {
-        if (isMounted) setWhyShopSection({ enabled: false, section: {}, items: [] });
-      });
+    const loadWhyShop = () => {
+      fetchPublicWhyShop()
+        .then((response) => {
+          if (!isMounted) return;
+          setWhyShopSection(normalizeWhyShopSection(response));
+        })
+        .catch(() => {
+          if (isMounted) setWhyShopSection({ enabled: false, section: {}, items: [] });
+        });
+    };
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") loadWhyShop();
+    };
+    const refreshFromDashboard = (event) => {
+      if (event.key === "avyonaWhyShopUpdatedAt") loadWhyShop();
+    };
 
+    loadWhyShop();
+    window.addEventListener("focus", loadWhyShop);
+    window.addEventListener("storage", refreshFromDashboard);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
     return () => {
       isMounted = false;
+      window.removeEventListener("focus", loadWhyShop);
+      window.removeEventListener("storage", refreshFromDashboard);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
     };
   }, []);
 
@@ -457,13 +466,12 @@ export default function Home({ context }) {
     : [];
   const ourProductsFallback = getLiveSectionProducts(
     productCatalog,
-    (product) => String(product.collectionSlug || "").toLowerCase() === "digital-photo-frames",
-    frameProducts
+    (product) => String(product.collectionSlug || "").toLowerCase() === "digital-photo-frames"
   );
   const homepageOurProducts = (configuredOurProducts.length ? configuredOurProducts : ourProductsFallback)
     .filter((product) => isActiveProduct(product) && product.showInOurProducts !== false);
   const configuredBestSellerProducts = getConfiguredHomepageProducts("bestSellerProducts");
-  const liveBestSellerFallback = getLiveSectionProducts(productCatalog, null, featuredProducts);
+  const liveBestSellerFallback = getLiveSectionProducts(productCatalog, null);
   const allowBestSellerCategory = (product) =>
     !hasBestSellerCategoryConfig ||
     selectedBestSellerCategories.includes(product.collectionSlug) ||
@@ -478,7 +486,7 @@ export default function Home({ context }) {
     ? bestSellerSourceProducts
     : bestSellerSourceProducts.filter((product) => product.collectionSlug === activeCategory);
   const configuredNewArrivalProducts = getConfiguredHomepageProducts("newArrivalProducts");
-  const liveArrivalFallback = getLiveSectionProducts(productCatalog, null, arrivalProducts);
+  const liveArrivalFallback = getLiveSectionProducts(productCatalog, null);
   const homepageNewArrivalProducts = (configuredNewArrivalProducts.length ? configuredNewArrivalProducts : liveArrivalFallback)
     .filter((product) => isActiveProduct(product) && product.newArrival !== false);
   const configuredFeaturedBrands = Array.isArray(homepageSettings.featuredBrands)
@@ -486,14 +494,7 @@ export default function Home({ context }) {
         .filter((brand) => brand.status !== "inactive" && (brand.logoUrl || brand.name))
         .sort((left, right) => Number(left.sortOrder || 0) - Number(right.sortOrder || 0))
     : [];
-  const homepageFeaturedBrands = configuredFeaturedBrands.length
-    ? configuredFeaturedBrands
-    : featuredBrands.map((brand, index) => ({
-        id: `fallback-brand-${brand}`,
-        name: brand,
-        logoUrl: "",
-        sortOrder: index + 1
-      }));
+  const homepageFeaturedBrands = configuredFeaturedBrands;
 
   useEffect(() => {
     if (activeCategory === "all") return;
@@ -820,7 +821,7 @@ export default function Home({ context }) {
           <div className="brand-track">
             {[...homepageFeaturedBrands, ...homepageFeaturedBrands].map((brand, index) => (
               <div key={`${brand.id || brand.name}-${index}`} className="brand-logo-card" aria-hidden={index >= homepageFeaturedBrands.length}>
-                {brand.logoUrl ? <img src={brand.logoUrl} alt={index >= homepageFeaturedBrands.length ? "" : brand.name} loading="lazy" decoding="async" /> : <span>{brand.name}</span>}
+                {brand.logoUrl ? <img src={resolveStorefrontMediaUrl(brand.logoUrl)} alt={index >= homepageFeaturedBrands.length ? "" : brand.name} loading="lazy" decoding="async" /> : <span>{brand.name}</span>}
               </div>
             ))}
           </div>

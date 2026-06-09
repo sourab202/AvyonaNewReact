@@ -27,6 +27,19 @@ export async function fetchStorefrontProduct(productId) {
   return fetchJson(`${API_BASE_URL}/products/${encodeURIComponent(productId)}`);
 }
 
+export async function checkDeliveryPincode(pincode) {
+  const response = await fetch(`${API_BASE_URL}/delivery-pincodes/check/${encodeURIComponent(pincode)}?_=${Date.now()}`, {
+    cache: "no-store"
+  });
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(body.message || "Unable to check delivery availability");
+  }
+
+  return response.json();
+}
+
 export async function fetchStorefrontProductReviews(productId, token = "", params = {}) {
   const searchParams = new URLSearchParams();
   Object.entries(params).forEach(([key, value]) => {

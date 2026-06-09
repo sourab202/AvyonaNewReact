@@ -1,4 +1,4 @@
-import { REVIEW_TYPES, REVIEW_VISIBILITY_STATUSES } from "../../shared/reviewTypes.js";
+import { REVIEW_TYPES, REVIEW_VISIBILITY_STATUSES } from "../shared/reviewTypes.js";
 import {
   createCustomerReview,
   createGuestReview,

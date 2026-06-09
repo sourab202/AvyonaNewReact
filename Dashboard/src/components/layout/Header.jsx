@@ -6,7 +6,7 @@ export default function Header({ title, subtitle, actions = null }) {
       <div>
         <p className="dashboard-eyebrow">Backend Control Panel</p>
         <h1>{title || "Admin Dashboard"}</h1>
-        <p className="dashboard-hero-copy">{subtitle || "Manage your ecommerce backend from one place."}</p>
+        {subtitle ? <p className="dashboard-hero-copy">{subtitle}</p> : null}
       </div>
       <div className="dashboard-hero-actions">
         <div className="header-user-pill">

@@ -7,3 +7,7 @@ export function fetchCustomers() {
 export function fetchCustomerById(customerId) {
   return adminApi.get(`/customers/${customerId}`);
 }
+
+export function updateCustomerBusinessDetails(customerId, payload) {
+  return adminApi.patch(`/customers/${customerId}/business-details`, payload);
+}

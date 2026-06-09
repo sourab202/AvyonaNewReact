@@ -37,7 +37,6 @@ function ProductCard({ product, context, eyebrow, actionLabel = "Add to Cart", a
         </div>
         <p className="product-topline">{eyebrow || product.brand}</p>
         <h3>{product.name}</h3>
-        <p>{product.highlights?.[0] || product.feature}</p>
       </Link>
       <div className="product-card-footer">
         <div className="card-pricing">

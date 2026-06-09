@@ -20,6 +20,13 @@ function formatOrderDate(value) {
   });
 }
 
+function formatPaymentGateway(value) {
+  const gateway = String(value || "").trim();
+  if (!gateway) return "-";
+  if (gateway.toLowerCase() === "razorpay") return "Razorpay";
+  return gateway;
+}
+
 function getOrderStatusStyle(status) {
   if (status === "pending") return { background: "#fef3c7", color: "#9a6700" };
   if (status === "confirmed") return { background: "#dbeafe", color: "#2563eb" };
@@ -33,20 +40,19 @@ function getOrderStatusStyle(status) {
 }
 
 function getPaymentStatusStyle(status) {
-  const normalizedStatus = getPaymentBadgeLabel(status);
-
-  if (normalizedStatus === "Paid") return { background: "#dcfce7", color: "#16a34a" };
-  if (normalizedStatus === "Unpaid") return { background: "#fee2e2", color: "#ef4444" };
-  if (normalizedStatus === "Partial") return { background: "#ffedd5", color: "#ea580c" };
-  if (normalizedStatus === "Refunded") return { background: "#e5e7eb", color: "#6b7280" };
+  if (status === "pending" || status === "cod_pending") return { background: "#fef3c7", color: "#9a6700" };
+  if (status === "paid" || status === "authorized") return { background: "#dcfce7", color: "#16a34a" };
+  if (status === "failed") return { background: "#fee2e2", color: "#dc2626" };
+  if (status === "refunded" || status === "partially_refunded") return { background: "#dbeafe", color: "#2563eb" };
   return { background: "#f8fafc", color: "#475569" };
 }
 
 function getPaymentBadgeLabel(status) {
   if (status === "paid" || status === "authorized") return "Paid";
-  if (status === "partially-refunded") return "Partial";
+  if (status === "partially_refunded" || status === "partially-refunded") return "Partially Refunded";
   if (status === "refunded") return "Refunded";
-  if (status === "pending" || status === "failed" || status === "cod-pending" || status === "cod_pending") return "Unpaid";
+  if (status === "failed") return "Failed";
+  if (status === "pending" || status === "cod-pending" || status === "cod_pending") return "Pending";
   return status;
 }
 
@@ -69,7 +75,10 @@ function normalizeOrderRow(order) {
       grandTotal: totalAmount
     },
     payment: {
-      method: order.paymentMethod || order.payment?.method || "Not selected"
+      method: order.paymentMethod || order.payment?.method || "Not selected",
+      gateway: order.paymentGateway || order.payment?.gateway || "-",
+      paidAt: order.paidAt || order.payment?.paidAt || null,
+      razorpayPaymentId: order.razorpayPaymentId || order.payment?.razorpayPaymentId || ""
     },
     products: Array.from({ length: Math.max(1, Number(order.itemCount || order.products?.length || 1)) }, (_, index) => ({ id: index }))
   };
@@ -298,7 +307,7 @@ export default function Orders() {
       ) : null}
 
       <div style={tableCardStyle}>
-        <table className="dashboard-data-table dashboard-orders-admin-table" style={{ width: "100%", borderCollapse: "separate", borderSpacing: 0, tableLayout: "fixed" }}>
+        <table className="dashboard-data-table dashboard-orders-admin-table" style={{ width: "100%", minWidth: "1880px", borderCollapse: "separate", borderSpacing: 0, tableLayout: "auto" }}>
           <thead>
             <tr style={{ background: "#f8fafc" }}>
               <th style={tableHeaderStyle}>
@@ -310,6 +319,9 @@ export default function Orders() {
               <th style={tableHeaderStyle}>Total Amount</th>
               <th style={tableHeaderStyle}>Payment Method</th>
               <th style={tableHeaderStyle}>Payment Status</th>
+              <th style={tableHeaderStyle}>Payment Gateway</th>
+              <th style={tableHeaderStyle}>Paid Date</th>
+              <th style={tableHeaderStyle}>Razorpay Payment ID</th>
               <th style={tableHeaderStyle}>Order Status</th>
               <th style={tableHeaderStyle}>Items Count</th>
               <th style={tableHeaderStyle}>Actions</th>
@@ -320,6 +332,11 @@ export default function Orders() {
               <tr key={order.id} style={tableRowStyle}>
                 <td style={tableCellStyle}>
                   <input type="checkbox" checked={selectedOrderIds.includes(String(order.id))} onChange={() => toggleSelectedOrder(order.id)} aria-label={`Select order ${order.orderNumber}`} />
+                </td>
+                <td style={tableCellStyle}>{formatPaymentGateway(order.payment.gateway)}</td>
+                <td style={tableCellStyle}>{order.payment.paidAt ? formatOrderDate(order.payment.paidAt) : "-"}</td>
+                <td style={tableCellStyle}>
+                  <span style={{ ...mutedTextStyle, overflowWrap: "anywhere" }}>{order.payment.razorpayPaymentId || "-"}</span>
                 </td>
                 <td style={tableCellStyle}>
                   <div style={{ display: "grid", gap: "4px" }}>
@@ -390,7 +407,7 @@ export default function Orders() {
             ))}
             {!paginatedOrders.length ? (
               <tr>
-                <td colSpan="10" style={{ ...tableCellStyle, textAlign: "center", color: "#64748b", padding: "28px 16px" }}>
+                <td colSpan="13" style={{ ...tableCellStyle, textAlign: "center", color: "#64748b", padding: "28px 16px" }}>
                   No orders matched the current search and filters.
                 </td>
               </tr>

@@ -1,5 +1,5 @@
 import { pool } from "../config/db.js";
-import { REVIEW_TYPES, REVIEW_VISIBILITY_STATUSES, isValidReviewType, isValidReviewVisibilityStatus } from "../../shared/reviewTypes.js";
+import { REVIEW_TYPES, REVIEW_VISIBILITY_STATUSES, isValidReviewType, isValidReviewVisibilityStatus } from "../shared/reviewTypes.js";
 import { ApiError } from "../utils/apiError.js";
 import { resolveVerifiedPurchaseStatus } from "./reviewVerificationService.js";
 

@@ -1,5 +1,14 @@
 import React from "react";
-import { fetchAdminSettings, fetchGeneralSettings, updateAdminSettings, updateGeneralSettings, uploadSettingsAsset } from "../../api/adminApi";
+import {
+  fetchAdminSettings,
+  fetchGeneralSettings,
+  fetchPaymentSettings,
+  testPaymentConnection,
+  updateAdminSettings,
+  updateGeneralSettings,
+  updatePaymentSettings,
+  uploadSettingsAsset
+} from "../../api/adminApi";
 import { resolveAdminMediaUrl, toStoredUploadUrl } from "../../utils/media";
 import {
   cloneSettings,
@@ -82,6 +91,8 @@ const faviconMaxSizeBytes = 1 * 1024 * 1024;
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const phonePattern = /^[+]?[\d\s().-]{7,20}$/;
 const gstPattern = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/i;
+const whatsappPhonePattern = /^\+?\d{10,15}$/;
+const whatsappIconMaxSizeBytes = 1 * 1024 * 1024;
 
 function getMediaPreviewUrl(value) {
   return resolveAdminMediaUrl(value);
@@ -112,6 +123,17 @@ function validateGeneralSettings(general = {}) {
   if (String(general.businessAddress || "").length > 500) return "Business Address must be 500 characters or less.";
   if (String(general.workingHours || "").length > 200) return "Working Hours must be 200 characters or less.";
   if (String(general.brandTagline || "").length > 160) return "Brand Tagline must be 160 characters or less.";
+  return "";
+}
+
+function validateWhatsAppSettings(whatsapp = {}) {
+  const number = String(whatsapp.number || "").replace(/[^\d+]/g, "");
+  if (whatsapp.enabled && !whatsappPhonePattern.test(number)) return "WhatsApp Number must include country code, for example +919876543210.";
+  if (String(whatsapp.defaultMessage || "").trim().length > 300) return "Default WhatsApp Message must be 300 characters or less.";
+  if (String(whatsapp.productMessage || "").trim().length > 500) return "Product WhatsApp Message must be 500 characters or less.";
+  if (String(whatsapp.orderMessage || "").trim().length > 300) return "Order WhatsApp Message must be 300 characters or less.";
+  if (!["bottom-right", "bottom-left"].includes(String(whatsapp.position || ""))) return "Choose a valid WhatsApp Button Position.";
+  if (Number(whatsapp.iconSize) < 20 || Number(whatsapp.iconSize) > 44) return "WhatsApp Icon Size must be between 20 and 44.";
   return "";
 }
 
@@ -213,6 +235,380 @@ function GeneralSettingsPanel({ settings, isSaving, isLoading, uploadStates, onF
 
       <GeneralSettingsPreview general={general} />
     </>
+  );
+}
+
+function WhatsAppAccessPanel({ whatsapp = {}, isSaving, isLoading, uploadState, onFieldChange, onSave, onUpload, onClearUploadError }) {
+  const iconPreviewUrl = getMediaPreviewUrl(whatsapp.iconUrl);
+
+  return (
+    <section style={savedDetailsPanelStyle}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: "14px", flexWrap: "wrap", alignItems: "center" }}>
+        <div style={{ display: "grid", gap: "6px" }}>
+          <span style={eyebrowStyle}>WhatsApp Access</span>
+          <h4 style={{ margin: 0, color: "#0f172a", fontSize: "20px" }}>Floating Support Button</h4>
+          <p style={{ margin: 0, color: "#526377", maxWidth: "720px" }}>
+            Control the WhatsApp chat button shown on frontend pages. Product and order pages can use smart messages automatically.
+          </p>
+        </div>
+        <button type="button" onClick={onSave} disabled={isSaving || isLoading} style={saveButtonStyle}>
+          {isSaving ? "Saving..." : "Save WhatsApp"}
+        </button>
+      </div>
+
+      <div style={contentGridStyle}>
+        <article style={panelStyle}>
+          <h4 style={{ margin: 0, color: "#0f172a", fontSize: "18px" }}>Basic Controls</h4>
+          <div style={{ display: "grid", gap: "14px" }}>
+            <BooleanSetting label="Enable WhatsApp Button" value={whatsapp.enabled} onChange={(value) => onFieldChange("whatsapp.enabled", value)} />
+            <label style={settingRowStyle}>
+              <span style={settingLabelStyle}>WhatsApp Number</span>
+              <input value={whatsapp.number || ""} onChange={(event) => onFieldChange("whatsapp.number", event.target.value)} placeholder="+919876543210" style={inputStyle} />
+              <small style={settingValueStyle}>Include country code. Spaces are removed before opening WhatsApp.</small>
+            </label>
+            <label style={settingRowStyle}>
+              <span style={settingLabelStyle}>Default Message</span>
+              <textarea value={whatsapp.defaultMessage || ""} onChange={(event) => onFieldChange("whatsapp.defaultMessage", event.target.value)} rows={3} style={textareaStyle} />
+            </label>
+            <label style={settingRowStyle}>
+              <span style={settingLabelStyle}>Button Position</span>
+              <select value={whatsapp.position || "bottom-right"} onChange={(event) => onFieldChange("whatsapp.position", event.target.value)} style={inputStyle}>
+                <option value="bottom-right">Bottom Right</option>
+                <option value="bottom-left">Bottom Left</option>
+              </select>
+            </label>
+            <BooleanSetting label="Show on Mobile" value={whatsapp.showMobile} onChange={(value) => onFieldChange("whatsapp.showMobile", value)} />
+            <BooleanSetting label="Show on Desktop" value={whatsapp.showDesktop} onChange={(value) => onFieldChange("whatsapp.showDesktop", value)} />
+          </div>
+        </article>
+
+        <article style={panelStyle}>
+          <h4 style={{ margin: 0, color: "#0f172a", fontSize: "18px" }}>Icon Controls</h4>
+          <div style={{ display: "grid", gap: "14px" }}>
+            <label style={settingRowStyle}>
+              <span style={settingLabelStyle}>Default WhatsApp Icon</span>
+              <strong style={detailValueStyle}>Enabled when no custom icon is uploaded.</strong>
+            </label>
+            <ImageUploadSetting
+              label="Custom Icon Upload"
+              value={whatsapp.iconUrl || ""}
+              onChange={(value) => onFieldChange("whatsapp.iconUrl", value)}
+              onUpload={(file) => onUpload("whatsapp.iconUrl", file)}
+              onRemove={() => onFieldChange("whatsapp.iconUrl", "")}
+              uploadState={uploadState}
+              onClearError={(error = "") => onClearUploadError("whatsapp.iconUrl", error)}
+              maxSizeBytes={whatsappIconMaxSizeBytes}
+              helper="PNG, JPG, JPEG, WebP, or SVG. Max 1 MB."
+              compact
+            />
+            {iconPreviewUrl ? <img src={iconPreviewUrl} alt="WhatsApp icon preview" style={faviconPreviewStyle} /> : null}
+            <label style={settingRowStyle}>
+              <span style={settingLabelStyle}>Icon Size</span>
+              <input type="number" min="20" max="44" value={whatsapp.iconSize || 28} onChange={(event) => onFieldChange("whatsapp.iconSize", Number(event.target.value))} style={inputStyle} />
+            </label>
+            <label style={settingRowStyle}>
+              <span style={settingLabelStyle}>Button Color</span>
+              <input type="color" value={whatsapp.buttonColor || "#25D366"} onChange={(event) => onFieldChange("whatsapp.buttonColor", event.target.value)} style={{ ...inputStyle, padding: "4px 8px" }} />
+            </label>
+            <label style={settingRowStyle}>
+              <span style={settingLabelStyle}>Hover Text</span>
+              <input value={whatsapp.hoverText || ""} onChange={(event) => onFieldChange("whatsapp.hoverText", event.target.value)} style={inputStyle} />
+            </label>
+          </div>
+        </article>
+
+        <article style={panelStyle}>
+          <h4 style={{ margin: 0, color: "#0f172a", fontSize: "18px" }}>Page Controls</h4>
+          <div style={{ display: "grid", gap: "14px" }}>
+            <BooleanSetting label="Show on All Pages" value={whatsapp.showAllPages} onChange={(value) => onFieldChange("whatsapp.showAllPages", value)} />
+            <BooleanSetting label="Hide on Checkout" value={whatsapp.hideCheckout} onChange={(value) => onFieldChange("whatsapp.hideCheckout", value)} />
+            <BooleanSetting label="Hide on Order Confirmation" value={whatsapp.hideOrderConfirmation} onChange={(value) => onFieldChange("whatsapp.hideOrderConfirmation", value)} />
+            <BooleanSetting label="Hide on Admin/Dashboard" value={whatsapp.hideAdmin} onChange={(value) => onFieldChange("whatsapp.hideAdmin", value)} />
+          </div>
+        </article>
+
+        <article style={panelStyle}>
+          <h4 style={{ margin: 0, color: "#0f172a", fontSize: "18px" }}>Smart Messages</h4>
+          <div style={{ display: "grid", gap: "14px" }}>
+            <label style={settingRowStyle}>
+              <span style={settingLabelStyle}>Product Page Message</span>
+              <textarea value={whatsapp.productMessage || ""} onChange={(event) => onFieldChange("whatsapp.productMessage", event.target.value)} rows={4} style={textareaStyle} />
+              <small style={settingValueStyle}>Supported: {"{{productName}}"} and {"{{productUrl}}"}</small>
+            </label>
+            <label style={settingRowStyle}>
+              <span style={settingLabelStyle}>Order Page Message</span>
+              <textarea value={whatsapp.orderMessage || ""} onChange={(event) => onFieldChange("whatsapp.orderMessage", event.target.value)} rows={3} style={textareaStyle} />
+              <small style={settingValueStyle}>Supported: {"{{orderId}}"}</small>
+            </label>
+          </div>
+        </article>
+      </div>
+    </section>
+  );
+}
+
+function BooleanSetting({ label, value, onChange }) {
+  return (
+    <label style={settingRowStyle}>
+      <span style={settingLabelStyle}>{label}</span>
+      {renderFieldControl({ type: "boolean" }, Boolean(value), onChange)}
+    </label>
+  );
+}
+
+const defaultPaymentSettings = {
+  provider: "razorpay",
+  enabled: false,
+  mode: "test",
+  testKeyId: "",
+  testKeySecret: "",
+  testWebhookSecret: "",
+  liveKeyId: "",
+  liveKeySecret: "",
+  liveWebhookSecret: "",
+  currency: "INR",
+  buttonText: "Pay Now",
+  description: "Order Payment"
+};
+
+function PaymentSecretField({ label, value, configured, onChange }) {
+  return (
+    <label style={settingRowStyle}>
+      <span style={settingLabelStyle}>{label}</span>
+      <input
+        type="password"
+        value={value || ""}
+        onChange={(event) => onChange(event.target.value)}
+        autoComplete="new-password"
+        placeholder={configured ? "Stored securely. Enter a new value only to replace it." : "Enter secret"}
+        style={inputStyle}
+      />
+      <small style={settingValueStyle}>
+        {configured ? "Encrypted secret is configured." : "Not configured."}
+      </small>
+    </label>
+  );
+}
+
+function PaymentSettingsPanel({
+  settings,
+  isLoading,
+  isSaving,
+  isTesting,
+  onChange,
+  onSave,
+  onTest
+}) {
+  const update = (key, value) => onChange({ ...settings, [key]: value });
+
+  return (
+    <div style={{ display: "grid", gap: "18px" }}>
+      <section style={heroCardStyle}>
+        <span style={eyebrowStyle}>Main Settings / Payment</span>
+        <h3 style={{ margin: 0, fontSize: "32px", color: "#0f172a" }}>Razorpay Payment Settings</h3>
+        <p style={{ margin: 0, color: "#526377", maxWidth: "760px" }}>
+          Control online payments, test and live credentials, webhook secrets, and checkout display text.
+        </p>
+      </section>
+
+      <div style={contentGridStyle}>
+        <article style={panelStyle}>
+          <h4 style={{ margin: 0, color: "#0f172a", fontSize: "20px" }}>General</h4>
+          <BooleanSetting label="Enable Online Payment" value={settings.enabled} onChange={(value) => update("enabled", value)} />
+          <label style={settingRowStyle}>
+            <span style={settingLabelStyle}>Mode</span>
+            <select value={settings.mode || "test"} onChange={(event) => update("mode", event.target.value)} style={inputStyle}>
+              <option value="test">Test</option>
+              <option value="live">Live</option>
+            </select>
+          </label>
+          <label style={settingRowStyle}>
+            <span style={settingLabelStyle}>Currency</span>
+            <input value={settings.currency || "INR"} readOnly style={{ ...inputStyle, background: "#f8fafc" }} />
+          </label>
+        </article>
+
+        <article style={panelStyle}>
+          <h4 style={{ margin: 0, color: "#0f172a", fontSize: "20px" }}>Test Razorpay Keys</h4>
+          <label style={settingRowStyle}>
+            <span style={settingLabelStyle}>Test Key ID</span>
+            <input value={settings.testKeyId || ""} onChange={(event) => update("testKeyId", event.target.value)} style={inputStyle} />
+          </label>
+          <PaymentSecretField label="Test Key Secret" value={settings.testKeySecret} configured={settings.testKeySecretConfigured} onChange={(value) => update("testKeySecret", value)} />
+          <PaymentSecretField label="Test Webhook Secret" value={settings.testWebhookSecret} configured={settings.testWebhookSecretConfigured} onChange={(value) => update("testWebhookSecret", value)} />
+        </article>
+
+        <article style={panelStyle}>
+          <h4 style={{ margin: 0, color: "#0f172a", fontSize: "20px" }}>Live Razorpay Keys</h4>
+          <label style={settingRowStyle}>
+            <span style={settingLabelStyle}>Live Key ID</span>
+            <input value={settings.liveKeyId || ""} onChange={(event) => update("liveKeyId", event.target.value)} style={inputStyle} />
+          </label>
+          <PaymentSecretField label="Live Key Secret" value={settings.liveKeySecret} configured={settings.liveKeySecretConfigured} onChange={(value) => update("liveKeySecret", value)} />
+          <PaymentSecretField label="Live Webhook Secret" value={settings.liveWebhookSecret} configured={settings.liveWebhookSecretConfigured} onChange={(value) => update("liveWebhookSecret", value)} />
+        </article>
+
+        <article style={panelStyle}>
+          <h4 style={{ margin: 0, color: "#0f172a", fontSize: "20px" }}>Checkout Display</h4>
+          <label style={settingRowStyle}>
+            <span style={settingLabelStyle}>Payment Button Text</span>
+            <input value={settings.buttonText || ""} onChange={(event) => update("buttonText", event.target.value)} style={inputStyle} />
+          </label>
+          <label style={settingRowStyle}>
+            <span style={settingLabelStyle}>Checkout Description</span>
+            <textarea value={settings.description || ""} onChange={(event) => update("description", event.target.value)} rows={3} style={textareaStyle} />
+          </label>
+        </article>
+      </div>
+
+      <section style={sectionActionBarStyle}>
+        <div style={{ display: "grid", gap: "4px" }}>
+          <span style={eyebrowStyle}>Actions</span>
+          <strong style={{ color: "#0f172a", fontSize: "18px" }}>
+            Secrets remain encrypted and are never returned in plain text.
+          </strong>
+        </div>
+        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+          <button type="button" onClick={onTest} disabled={isTesting || isLoading || isSaving} style={secondaryButtonStyle}>
+            {isTesting ? "Testing Connection..." : "Test Connection"}
+          </button>
+          <button type="button" onClick={onSave} disabled={isSaving || isLoading || isTesting} style={saveButtonStyle}>
+            {isSaving ? "Saving Payment..." : "Save Payment"}
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function NumberSetting({ label, value, min = 0, max = 1000, step = 1, onChange }) {
+  return (
+    <label style={settingRowStyle}>
+      <span style={settingLabelStyle}>{label}</span>
+      <input
+        type="number"
+        min={min}
+        max={max}
+        step={step}
+        value={value ?? ""}
+        onChange={(event) => onChange(Number(event.target.value))}
+        style={inputStyle}
+      />
+    </label>
+  );
+}
+
+function ColorSetting({ label, value, onChange }) {
+  return (
+    <label style={settingRowStyle}>
+      <span style={settingLabelStyle}>{label}</span>
+      <input type="color" value={value || "#ffffff"} onChange={(event) => onChange(event.target.value)} style={{ ...inputStyle, padding: "4px 8px" }} />
+    </label>
+  );
+}
+
+function TextSetting({ label, value, onChange, placeholder = "" }) {
+  return (
+    <label style={settingRowStyle}>
+      <span style={settingLabelStyle}>{label}</span>
+      <input value={value || ""} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} style={inputStyle} />
+    </label>
+  );
+}
+
+function HeaderControlsPanel({ header = {}, isSaving, isLoading, onFieldChange, onSave }) {
+  const field = (key) => `header.${key}`;
+
+  return (
+    <section style={savedDetailsPanelStyle}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: "14px", flexWrap: "wrap", alignItems: "center" }}>
+        <div style={{ display: "grid", gap: "6px" }}>
+          <span style={eyebrowStyle}>Header Manual Controls</span>
+          <h4 style={{ margin: 0, color: "#0f172a", fontSize: "20px" }}>Logo, Search, Account and Cart</h4>
+          <p style={{ margin: 0, color: "#526377", maxWidth: "760px" }}>
+            Control the storefront header sizing, text, colors, spacing, search icon, account action, wishlist action, and cart styling from one dashboard card.
+          </p>
+        </div>
+        <button type="button" onClick={onSave} disabled={isSaving || isLoading} style={saveButtonStyle}>
+          {isSaving ? "Saving Header..." : "Save Header"}
+        </button>
+      </div>
+
+      <div style={contentGridStyle}>
+        <article style={panelStyle}>
+          <h4 style={{ margin: 0, color: "#0f172a", fontSize: "18px" }}>Logo and Header Layout</h4>
+          <div style={{ display: "grid", gap: "14px" }}>
+            <NumberSetting label="Logo Width" value={header.logoWidth} min={60} max={360} onChange={(value) => onFieldChange(field("logoWidth"), value)} />
+            <NumberSetting label="Logo Height" value={header.logoHeight} min={18} max={120} onChange={(value) => onFieldChange(field("logoHeight"), value)} />
+            <NumberSetting label="Logo Max Width" value={header.logoMaxWidth} min={80} max={420} onChange={(value) => onFieldChange(field("logoMaxWidth"), value)} />
+            <NumberSetting label="Brand Text Size" value={header.brandTextSize} min={14} max={48} onChange={(value) => onFieldChange(field("brandTextSize"), value)} />
+            <NumberSetting label="Header Top Padding" value={header.headerTopPadding} min={0} max={60} onChange={(value) => onFieldChange(field("headerTopPadding"), value)} />
+            <NumberSetting label="Header Bottom Padding" value={header.headerBottomPadding} min={0} max={60} onChange={(value) => onFieldChange(field("headerBottomPadding"), value)} />
+            <NumberSetting label="Header Gap" value={header.headerGap} min={0} max={80} onChange={(value) => onFieldChange(field("headerGap"), value)} />
+          </div>
+        </article>
+
+        <article style={panelStyle}>
+          <h4 style={{ margin: 0, color: "#0f172a", fontSize: "18px" }}>Header Colors</h4>
+          <div style={{ display: "grid", gap: "14px" }}>
+            <ColorSetting label="Header Background" value={header.headerBackground} onChange={(value) => onFieldChange(field("headerBackground"), value)} />
+            <ColorSetting label="Header Text Color" value={header.headerTextColor} onChange={(value) => onFieldChange(field("headerTextColor"), value)} />
+            <ColorSetting label="Header Border Color" value={header.headerBorderColor} onChange={(value) => onFieldChange(field("headerBorderColor"), value)} />
+            <TextSetting label="Header Shadow CSS" value={header.headerShadow} onChange={(value) => onFieldChange(field("headerShadow"), value)} placeholder="0 10px 24px rgba(...)" />
+          </div>
+        </article>
+
+        <article style={panelStyle}>
+          <h4 style={{ margin: 0, color: "#0f172a", fontSize: "18px" }}>Search Bar</h4>
+          <div style={{ display: "grid", gap: "14px" }}>
+            <TextSetting label="Search Placeholder" value={header.searchPlaceholder} onChange={(value) => onFieldChange(field("searchPlaceholder"), value)} />
+            <TextSetting label="Search Icon Text / Symbol" value={header.searchIconText} onChange={(value) => onFieldChange(field("searchIconText"), value)} placeholder="⌕" />
+            <NumberSetting label="Search Max Width" value={header.searchMaxWidth} min={220} max={1200} onChange={(value) => onFieldChange(field("searchMaxWidth"), value)} />
+            <NumberSetting label="Search Height" value={header.searchHeight} min={32} max={72} onChange={(value) => onFieldChange(field("searchHeight"), value)} />
+            <NumberSetting label="Search Border Radius" value={header.searchRadius} min={0} max={999} onChange={(value) => onFieldChange(field("searchRadius"), value)} />
+            <NumberSetting label="Search Icon Size" value={header.searchIconSize} min={10} max={32} onChange={(value) => onFieldChange(field("searchIconSize"), value)} />
+            <ColorSetting label="Search Background" value={header.searchBackground} onChange={(value) => onFieldChange(field("searchBackground"), value)} />
+            <ColorSetting label="Search Text Color" value={header.searchTextColor} onChange={(value) => onFieldChange(field("searchTextColor"), value)} />
+            <ColorSetting label="Search Border Color" value={header.searchBorderColor} onChange={(value) => onFieldChange(field("searchBorderColor"), value)} />
+            <ColorSetting label="Search Icon Color" value={header.searchIconColor} onChange={(value) => onFieldChange(field("searchIconColor"), value)} />
+          </div>
+        </article>
+
+        <article style={panelStyle}>
+          <h4 style={{ margin: 0, color: "#0f172a", fontSize: "18px" }}>Sign In and Wishlist</h4>
+          <div style={{ display: "grid", gap: "14px" }}>
+            <TextSetting label="Sign In Text" value={header.accountText} onChange={(value) => onFieldChange(field("accountText"), value)} />
+            <BooleanSetting label="Show Sign In Text" value={header.showAccountText} onChange={(value) => onFieldChange(field("showAccountText"), value)} />
+            <NumberSetting label="Sign In Icon Size" value={header.accountIconSize} min={12} max={42} onChange={(value) => onFieldChange(field("accountIconSize"), value)} />
+            <NumberSetting label="Sign In Button Size" value={header.accountButtonSize} min={28} max={72} onChange={(value) => onFieldChange(field("accountButtonSize"), value)} />
+            <NumberSetting label="Sign In Radius" value={header.accountRadius} min={0} max={999} onChange={(value) => onFieldChange(field("accountRadius"), value)} />
+            <ColorSetting label="Sign In Color" value={header.accountColor} onChange={(value) => onFieldChange(field("accountColor"), value)} />
+            <ColorSetting label="Sign In Background" value={header.accountBackground} onChange={(value) => onFieldChange(field("accountBackground"), value)} />
+            <NumberSetting label="Wishlist Icon Size" value={header.wishlistIconSize} min={12} max={42} onChange={(value) => onFieldChange(field("wishlistIconSize"), value)} />
+            <NumberSetting label="Wishlist Button Size" value={header.wishlistButtonSize} min={28} max={72} onChange={(value) => onFieldChange(field("wishlistButtonSize"), value)} />
+            <ColorSetting label="Wishlist Color" value={header.wishlistColor} onChange={(value) => onFieldChange(field("wishlistColor"), value)} />
+            <ColorSetting label="Wishlist Background" value={header.wishlistBackground} onChange={(value) => onFieldChange(field("wishlistBackground"), value)} />
+          </div>
+        </article>
+
+        <article style={panelStyle}>
+          <h4 style={{ margin: 0, color: "#0f172a", fontSize: "18px" }}>Cart Button</h4>
+          <div style={{ display: "grid", gap: "14px" }}>
+            <TextSetting label="Cart Text" value={header.cartText} onChange={(value) => onFieldChange(field("cartText"), value)} />
+            <BooleanSetting label="Show Cart Text" value={header.showCartText} onChange={(value) => onFieldChange(field("showCartText"), value)} />
+            <NumberSetting label="Cart Icon Size" value={header.cartIconSize} min={12} max={42} onChange={(value) => onFieldChange(field("cartIconSize"), value)} />
+            <NumberSetting label="Cart Button Height" value={header.cartButtonHeight} min={28} max={78} onChange={(value) => onFieldChange(field("cartButtonHeight"), value)} />
+            <NumberSetting label="Cart Horizontal Padding" value={header.cartButtonPaddingX} min={4} max={40} onChange={(value) => onFieldChange(field("cartButtonPaddingX"), value)} />
+            <NumberSetting label="Cart Radius" value={header.cartRadius} min={0} max={999} onChange={(value) => onFieldChange(field("cartRadius"), value)} />
+            <ColorSetting label="Cart Background" value={header.cartBackground} onChange={(value) => onFieldChange(field("cartBackground"), value)} />
+            <ColorSetting label="Cart Text Color" value={header.cartTextColor} onChange={(value) => onFieldChange(field("cartTextColor"), value)} />
+            <ColorSetting label="Cart Badge Background" value={header.cartBadgeBackground} onChange={(value) => onFieldChange(field("cartBadgeBackground"), value)} />
+            <ColorSetting label="Cart Badge Text Color" value={header.cartBadgeTextColor} onChange={(value) => onFieldChange(field("cartBadgeTextColor"), value)} />
+            <NumberSetting label="Utility Gap" value={header.utilityGap} min={0} max={48} onChange={(value) => onFieldChange(field("utilityGap"), value)} />
+          </div>
+        </article>
+      </div>
+    </section>
   );
 }
 
@@ -355,6 +751,8 @@ export default function Settings({ initialSection = SETTINGS_SECTIONS[0].id }) {
   const [statusMessage, setStatusMessage] = React.useState("");
   const [usingFallback, setUsingFallback] = React.useState(false);
   const [uploadStates, setUploadStates] = React.useState({});
+  const [paymentSettings, setPaymentSettings] = React.useState(defaultPaymentSettings);
+  const [isTestingPayment, setIsTestingPayment] = React.useState(false);
 
   const currentSection = React.useMemo(
     () => SETTINGS_NAV_SECTIONS.find((section) => section.id === activeSection) || SETTINGS_SECTIONS[0],
@@ -376,16 +774,20 @@ export default function Settings({ initialSection = SETTINGS_SECTIONS[0].id }) {
       setIsLoading(true);
 
       try {
-        const [settingsResult, generalResult] = await Promise.allSettled([
+        const [settingsResult, generalResult, paymentResult] = await Promise.allSettled([
           fetchAdminSettings(),
-          fetchGeneralSettings()
+          fetchGeneralSettings(),
+          fetchPaymentSettings()
         ]);
         if (!isMounted) return;
         const settingsData = settingsResult.status === "fulfilled" ? settingsResult.value.data?.data || {} : {};
         const generalData = generalResult.status === "fulfilled" ? generalResult.value.data?.data || {} : {};
         const mergedSettings = mergeSettings(DEFAULT_APP_SETTINGS, settingsData);
         setSettings(mergeSettings(mergedSettings, { general: generalData }));
-        setUsingFallback(settingsResult.status === "rejected" || generalResult.status === "rejected");
+        if (paymentResult.status === "fulfilled") {
+          setPaymentSettings({ ...defaultPaymentSettings, ...(paymentResult.value.data?.data || {}) });
+        }
+        setUsingFallback(settingsResult.status === "rejected" || generalResult.status === "rejected" || paymentResult.status === "rejected");
         setStatusMessage(
           settingsResult.status === "fulfilled" && generalResult.status === "fulfilled"
             ? "Settings loaded from backend."
@@ -426,7 +828,10 @@ export default function Settings({ initialSection = SETTINGS_SECTIONS[0].id }) {
 
   const handleGeneralUpload = async (fieldKey, file) => {
     setStatusMessage("");
-    const validationMessage = validateBrandAssetFile(file, fieldKey.endsWith("faviconUrl") ? faviconMaxSizeBytes : logoMaxSizeBytes);
+    const validationMessage = validateBrandAssetFile(
+      file,
+      fieldKey === "whatsapp.iconUrl" ? whatsappIconMaxSizeBytes : fieldKey.endsWith("faviconUrl") ? faviconMaxSizeBytes : logoMaxSizeBytes
+    );
     if (validationMessage) {
       setUploadState(fieldKey, { status: "error", error: validationMessage });
       setUsingFallback(true);
@@ -436,12 +841,12 @@ export default function Settings({ initialSection = SETTINGS_SECTIONS[0].id }) {
 
     try {
       setUploadState(fieldKey, { status: "uploading", error: "" });
-      const response = await uploadSettingsAsset(file, fieldKey.endsWith("faviconUrl") ? "favicon" : "logo");
+      const response = await uploadSettingsAsset(file, fieldKey === "whatsapp.iconUrl" ? "whatsapp-icon" : fieldKey.endsWith("faviconUrl") ? "favicon" : "logo");
       const uploadedUrl = getStoredMediaUrl(response.data?.data?.url || "");
       setSettings((current) => setSettingValue(current, fieldKey, uploadedUrl));
       setUploadState(fieldKey, { status: "success", error: "" });
       setUsingFallback(false);
-      setStatusMessage(`${fieldKey.endsWith("faviconUrl") ? "Favicon" : "Store logo"} uploaded. Save General to publish it.`);
+      setStatusMessage(`${fieldKey === "whatsapp.iconUrl" ? "WhatsApp icon" : fieldKey.endsWith("faviconUrl") ? "Favicon" : "Store logo"} uploaded. Save General to publish it.`);
     } catch (error) {
       setUploadState(fieldKey, { status: "error", error: error.response?.data?.message || "Upload failed." });
       setUsingFallback(true);
@@ -450,6 +855,22 @@ export default function Settings({ initialSection = SETTINGS_SECTIONS[0].id }) {
   };
 
   const handleSave = async () => {
+    if (activeSection === "payment") {
+      setIsSaving(true);
+      try {
+        const response = await updatePaymentSettings({ settings: paymentSettings });
+        setPaymentSettings({ ...defaultPaymentSettings, ...(response.data?.data || paymentSettings) });
+        setUsingFallback(false);
+        setStatusMessage("Payment settings saved successfully.");
+      } catch (error) {
+        setUsingFallback(true);
+        setStatusMessage(error.response?.data?.message || "Unable to save payment settings.");
+      } finally {
+        setIsSaving(false);
+      }
+      return;
+    }
+
     if (activeSection === "general") {
       const validationMessage = validateGeneralSettings(settings.general || {});
       if (validationMessage) {
@@ -459,16 +880,20 @@ export default function Settings({ initialSection = SETTINGS_SECTIONS[0].id }) {
       }
     }
 
+    if (activeSection === "whatsapp") {
+      const whatsappValidationMessage = validateWhatsAppSettings(settings.whatsapp || {});
+      if (whatsappValidationMessage) {
+        setUsingFallback(true);
+        setStatusMessage(whatsappValidationMessage);
+        return;
+      }
+    }
+
     setIsSaving(true);
 
     try {
-      const response = activeSection === "general"
-        ? await updateGeneralSettings(settings.general || {})
-        : await updateAdminSettings({ settings });
+      const response = await updateAdminSettings({ settings });
       setSettings((current) => {
-        if (activeSection === "general") {
-          return mergeSettings(current, { general: response.data?.data || current.general || {} });
-        }
         return mergeSettings(DEFAULT_APP_SETTINGS, response.data?.data || settings);
       });
       setUsingFallback(false);
@@ -478,6 +903,20 @@ export default function Settings({ initialSection = SETTINGS_SECTIONS[0].id }) {
       setStatusMessage(error.response?.data?.message || "Settings updated locally for preview. Sign in as admin to persist them to backend.");
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleTestPaymentConnection = async () => {
+    setIsTestingPayment(true);
+    try {
+      const response = await testPaymentConnection();
+      setUsingFallback(false);
+      setStatusMessage(response.data?.message || "Razorpay connection is working.");
+    } catch (error) {
+      setUsingFallback(true);
+      setStatusMessage(error.response?.data?.message || "Razorpay connection test failed.");
+    } finally {
+      setIsTestingPayment(false);
     }
   };
 
@@ -529,7 +968,7 @@ export default function Settings({ initialSection = SETTINGS_SECTIONS[0].id }) {
                 <p style={{ margin: 0, color: "#526377", maxWidth: "760px" }}>{currentSection.description}</p>
               </section>
 
-              <section style={sectionActionBarStyle}>
+              {activeSection !== "payment" ? <section style={sectionActionBarStyle}>
                 <div style={{ display: "grid", gap: "4px" }}>
                   <span style={eyebrowStyle}>Active Tab</span>
                   <strong style={{ color: "#0f172a", fontSize: "18px" }}>{getTabLabel(currentSection.id, currentSection.label)}</strong>
@@ -537,7 +976,7 @@ export default function Settings({ initialSection = SETTINGS_SECTIONS[0].id }) {
                 <button type="button" onClick={handleSave} disabled={isSaving || isLoading} style={saveButtonStyle}>
                   {isSaving ? `Saving ${getTabLabel(currentSection.id, currentSection.label)}...` : `Save ${getTabLabel(currentSection.id, currentSection.label)}`}
                 </button>
-              </section>
+              </section> : null}
 
               {currentStatusMessage ? (
                 <section style={{ ...feedbackStyle, ...currentStatusMessage.style }}>
@@ -555,6 +994,35 @@ export default function Settings({ initialSection = SETTINGS_SECTIONS[0].id }) {
                   onSave={handleSave}
                   onUpload={handleGeneralUpload}
                   onClearUploadError={(fieldKey, error = "") => setUploadState(fieldKey, { status: error ? "error" : "", error })}
+                />
+              ) : activeSection === "payment" ? (
+                <PaymentSettingsPanel
+                  settings={paymentSettings}
+                  isLoading={isLoading}
+                  isSaving={isSaving}
+                  isTesting={isTestingPayment}
+                  onChange={setPaymentSettings}
+                  onSave={handleSave}
+                  onTest={handleTestPaymentConnection}
+                />
+              ) : activeSection === "whatsapp" ? (
+                <WhatsAppAccessPanel
+                  whatsapp={settings.whatsapp || DEFAULT_APP_SETTINGS.whatsapp}
+                  isSaving={isSaving}
+                  isLoading={isLoading}
+                  uploadState={uploadStates["whatsapp.iconUrl"]}
+                  onFieldChange={handleFieldChange}
+                  onSave={handleSave}
+                  onUpload={handleGeneralUpload}
+                  onClearUploadError={(fieldKey, error = "") => setUploadState(fieldKey, { status: error ? "error" : "", error })}
+                />
+              ) : activeSection === "header" ? (
+                <HeaderControlsPanel
+                  header={settings.header || DEFAULT_APP_SETTINGS.header}
+                  isSaving={isSaving}
+                  isLoading={isLoading}
+                  onFieldChange={handleFieldChange}
+                  onSave={handleSave}
                 />
               ) : (
                 <>
@@ -610,7 +1078,7 @@ export default function Settings({ initialSection = SETTINGS_SECTIONS[0].id }) {
 function getTabLabel(sectionId, fallbackLabel) {
   if (sectionId === "general") return "General";
   if (sectionId === "store") return "Store";
-  if (sectionId === "payment") return "Payments";
+  if (sectionId === "payment") return "Payment";
   if (sectionId === "shipping") return "Shipping";
   if (sectionId === "tracking") return "Orders & Tracking";
   if (sectionId === "notifications") return "Notifications";
@@ -631,6 +1099,17 @@ const feedbackStyle = {
   padding: "14px 16px",
   border: "1px solid transparent",
   fontWeight: 600
+};
+
+const secondaryButtonStyle = {
+  minHeight: "42px",
+  padding: "0 16px",
+  borderRadius: "10px",
+  border: "1px solid #cbd5e1",
+  background: "#ffffff",
+  color: "#334155",
+  fontWeight: 800,
+  cursor: "pointer"
 };
 
 const feedbackSuccessStyle = {

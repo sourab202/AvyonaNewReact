@@ -368,6 +368,19 @@ ALTER TABLE customers ADD COLUMN password_hash VARCHAR(255) NULL;
 ALTER TABLE customers ADD COLUMN status ENUM('active', 'inactive', 'blocked') NOT NULL DEFAULT 'active';
 ALTER TABLE customers ADD COLUMN last_login_at DATETIME NULL;
 
+CREATE TABLE IF NOT EXISTS customer_business_details (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  customer_id INT UNSIGNED NOT NULL,
+  is_business_account TINYINT(1) NOT NULL DEFAULT 0,
+  business_name VARCHAR(180) NULL,
+  gst_number VARCHAR(20) NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_customer_business_customer (customer_id),
+  INDEX idx_customer_business_gst (gst_number),
+  CONSTRAINT fk_customer_business_customer FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS customer_password_resets (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
   customer_id INT UNSIGNED NOT NULL,
@@ -472,6 +485,12 @@ CREATE TABLE IF NOT EXISTS orders (
   status ENUM('pending', 'confirmed', 'packed', 'shipped', 'out_for_delivery', 'delivered', 'cancelled', 'returned') NOT NULL DEFAULT 'pending',
   payment_status ENUM('pending', 'authorized', 'paid', 'failed', 'refunded', 'partially_refunded', 'cod_pending') NOT NULL DEFAULT 'pending',
   payment_method VARCHAR(50) NOT NULL,
+  payment_gateway VARCHAR(50) NULL,
+  razorpay_order_id VARCHAR(160) NULL,
+  razorpay_payment_id VARCHAR(160) NULL,
+  payment_signature VARCHAR(255) NULL,
+  paid_at DATETIME NULL,
+  payment_error TEXT NULL,
   courier_name VARCHAR(120) NULL,
   expected_delivery_date DATETIME NULL,
   subtotal DECIMAL(12, 2) NOT NULL DEFAULT 0,
@@ -501,7 +520,7 @@ CREATE TABLE IF NOT EXISTS order_items (
 
 CREATE TABLE IF NOT EXISTS order_addresses (
   id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-  order_id INT UNSIGNED NOT NULL UNIQUE,
+  order_id INT UNSIGNED NOT NULL,
   address_type ENUM('delivery', 'billing') NOT NULL DEFAULT 'delivery',
   full_name VARCHAR(120) NOT NULL,
   email VARCHAR(160) NULL,
@@ -515,7 +534,21 @@ CREATE TABLE IF NOT EXISTS order_addresses (
   country VARCHAR(80) NOT NULL DEFAULT 'India',
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_order_addresses_order_type (order_id, address_type),
   CONSTRAINT fk_order_addresses_order FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS order_business_details (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  order_id INT UNSIGNED NOT NULL,
+  customer_id INT UNSIGNED NULL,
+  business_name VARCHAR(180) NULL,
+  gst_number VARCHAR(20) NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_order_business_order (order_id),
+  INDEX idx_order_business_customer (customer_id),
+  CONSTRAINT fk_order_business_order FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE,
+  CONSTRAINT fk_order_business_customer FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS order_status_timeline (
@@ -874,6 +907,12 @@ ALTER TABLE daily_funnel_metrics ADD COLUMN users BIGINT UNSIGNED NOT NULL DEFAU
 ALTER TABLE orders ADD COLUMN coupon_code VARCHAR(50) NULL;
 ALTER TABLE orders ADD COLUMN coupon_discount DECIMAL(12, 2) NOT NULL DEFAULT 0;
 ALTER TABLE orders ADD COLUMN credit_discount DECIMAL(12, 2) NOT NULL DEFAULT 0;
+ALTER TABLE orders ADD COLUMN payment_gateway VARCHAR(50) NULL;
+ALTER TABLE orders ADD COLUMN razorpay_order_id VARCHAR(160) NULL;
+ALTER TABLE orders ADD COLUMN razorpay_payment_id VARCHAR(160) NULL;
+ALTER TABLE orders ADD COLUMN payment_signature VARCHAR(255) NULL;
+ALTER TABLE orders ADD COLUMN paid_at DATETIME NULL;
+ALTER TABLE orders ADD COLUMN payment_error TEXT NULL;
 ALTER TABLE order_items ADD COLUMN product_mrp DECIMAL(10, 2) NULL;
 
 CREATE TABLE IF NOT EXISTS payments (
@@ -890,7 +929,25 @@ CREATE TABLE IF NOT EXISTS payments (
   gateway_response_json JSON NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_payments_order_gateway (order_id, gateway_name),
   CONSTRAINT fk_payments_order FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
+);
+
+ALTER TABLE payments ADD UNIQUE KEY uq_payments_order_gateway (order_id, gateway_name);
+
+CREATE TABLE IF NOT EXISTS payment_webhook_events (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  provider VARCHAR(30) NOT NULL DEFAULT 'razorpay',
+  event_id VARCHAR(160) NOT NULL,
+  event_type VARCHAR(100) NOT NULL,
+  processing_status ENUM('processing', 'processed', 'ignored', 'failed') NOT NULL DEFAULT 'processing',
+  payload_json JSON NOT NULL,
+  processing_error VARCHAR(500) NULL,
+  processed_at DATETIME NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_payment_webhook_provider_event (provider, event_id),
+  INDEX idx_payment_webhook_type_status (event_type, processing_status)
 );
 
 CREATE TABLE IF NOT EXISTS shipments (
@@ -1280,6 +1337,30 @@ CREATE TABLE IF NOT EXISTS app_settings (
   INDEX idx_app_settings_group (setting_group)
 );
 
+CREATE TABLE IF NOT EXISTS payment_gateway_settings (
+  id TINYINT UNSIGNED NOT NULL PRIMARY KEY DEFAULT 1,
+  provider VARCHAR(30) NOT NULL DEFAULT 'razorpay',
+  enabled TINYINT(1) NOT NULL DEFAULT 0,
+  mode ENUM('test', 'live') NOT NULL DEFAULT 'test',
+  test_key_id VARCHAR(255) NULL,
+  test_key_secret_encrypted TEXT NULL,
+  test_webhook_secret_encrypted TEXT NULL,
+  live_key_id VARCHAR(255) NULL,
+  live_key_secret_encrypted TEXT NULL,
+  live_webhook_secret_encrypted TEXT NULL,
+  currency CHAR(3) NOT NULL DEFAULT 'INR',
+  button_text VARCHAR(80) NOT NULL DEFAULT 'Pay Now',
+  description VARCHAR(180) NOT NULL DEFAULT 'Order Payment',
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT chk_payment_gateway_settings_singleton CHECK (id = 1)
+);
+
+INSERT IGNORE INTO payment_gateway_settings
+  (id, provider, enabled, mode, currency, button_text, description)
+VALUES
+  (1, 'razorpay', 0, 'test', 'INR', 'Pay Now', 'Order Payment');
+
 CREATE TABLE IF NOT EXISTS theme_settings (
   id TINYINT UNSIGNED NOT NULL PRIMARY KEY DEFAULT 1,
   primary_color VARCHAR(7) NOT NULL DEFAULT '#22C55E',
@@ -1444,6 +1525,8 @@ CREATE INDEX idx_products_visibility ON products(status, is_visible, is_deleted)
 CREATE INDEX idx_products_sort_order ON products(sort_order, created_at);
 CREATE INDEX idx_orders_number ON orders(order_number);
 CREATE INDEX idx_orders_status_created ON orders(status, created_at);
+CREATE INDEX idx_orders_razorpay_order ON orders(razorpay_order_id);
+CREATE INDEX idx_orders_razorpay_payment ON orders(razorpay_payment_id);
 CREATE INDEX idx_customers_email ON customers(email);
 CREATE INDEX idx_product_media_product_sort ON product_media(product_id, sort_order);
 CREATE INDEX idx_product_variants_product_sort ON product_variants(product_id, sort_order);
@@ -1657,3 +1740,22 @@ SET referral_status = 'pending',
     referred_at = COALESCE(referred_at, created_at)
 WHERE referred_by_code IS NOT NULL
   AND referral_status = 'none';
+
+CREATE TABLE IF NOT EXISTS delivery_pincodes (
+  id              BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  state           VARCHAR(120) NOT NULL,
+  pincode         VARCHAR(6) NOT NULL,
+  cod_available   TINYINT(1) NOT NULL DEFAULT 0,
+  status          ENUM('active', 'inactive') NOT NULL DEFAULT 'active',
+  created_by      INT UNSIGNED NULL,
+  updated_by      INT UNSIGNED NULL,
+  created_by_name VARCHAR(160) NULL,
+  updated_by_name VARCHAR(160) NULL,
+  created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_delivery_pincodes_pincode (pincode),
+  INDEX idx_delivery_pincodes_state (state),
+  INDEX idx_delivery_pincodes_status_cod (status, cod_available),
+  CONSTRAINT fk_delivery_pincodes_created_by FOREIGN KEY (created_by) REFERENCES admins(id) ON DELETE SET NULL,
+  CONSTRAINT fk_delivery_pincodes_updated_by FOREIGN KEY (updated_by) REFERENCES admins(id) ON DELETE SET NULL
+);

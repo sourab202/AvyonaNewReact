@@ -12,14 +12,21 @@ body.product-page.product-zoom-active {
 }
 
 .product-page-main {
-  padding-bottom: 7rem;
+  padding-top: clamp(8.25rem, 10.5vw, 9.6rem) !important;
+  padding-bottom: 6rem;
   max-width: 100%;
   overflow-x: clip;
 }
 
+.site-header + main.product-page-main {
+  padding-top: clamp(8.25rem, 10.5vw, 9.6rem) !important;
+}
+
 .product-breadcrumb {
-  margin-bottom: 1.5rem;
+  margin-bottom: clamp(0.7rem, 1.1vw, 1rem);
   color: #5b6473;
+  font-size: clamp(0.9rem, 1vw, 1rem);
+  line-height: 1.35;
 }
 
 .product-breadcrumb a:hover {
@@ -28,8 +35,8 @@ body.product-page.product-zoom-active {
 
 .avy-product-hero {
   display: grid;
-  grid-template-columns: minmax(0, 1.08fr) minmax(360px, 0.92fr);
-  gap: 2rem;
+  grid-template-columns: minmax(360px, 0.92fr) minmax(420px, 1.08fr);
+  gap: clamp(1.1rem, 2vw, 1.7rem);
   align-items: start;
   min-width: 0;
   max-width: 100%;
@@ -47,7 +54,9 @@ body.product-page.product-zoom-active {
 }
 
 .avy-product-gallery-card {
-  padding: 1.1rem;
+  position: sticky;
+  top: clamp(7rem, 12vh, 9.25rem);
+  padding: clamp(0.75rem, 1vw, 0.95rem);
   overflow: visible;
 }
 
@@ -70,7 +79,7 @@ body.product-page.product-zoom-active {
 
 .avy-gallery-meta {
   justify-content: space-between;
-  margin-bottom: 0.9rem;
+  margin-bottom: 0.55rem;
 }
 
 .avy-gallery-count,
@@ -81,10 +90,10 @@ body.product-page.product-zoom-active {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 1.9rem;
-  padding: 0 0.8rem;
+  min-height: 1.65rem;
+  padding: 0 0.68rem;
   border-radius: 999px;
-  font-size: 0.8rem;
+  font-size: 0.74rem;
   font-weight: 700;
 }
 
@@ -121,10 +130,10 @@ body.product-page.product-zoom-active {
   place-items: center;
   aspect-ratio: 1 / 1;
   height: auto;
-  max-height: 34rem;
+  max-height: min(30rem, calc(100vh - 17rem));
   min-height: 0;
-  padding: 0.75rem;
-  border-radius: 24px;
+  padding: 0.55rem;
+  border-radius: 20px;
   background:
     radial-gradient(circle at top left, rgba(255, 177, 66, 0.14), transparent 28%),
     linear-gradient(180deg, #f4fbf5 0%, #ffffff 100%);
@@ -255,6 +264,10 @@ body.product-page.product-zoom-active {
   white-space: nowrap;
 }
 
+.avy-gallery-zoom-hint-mobile {
+  display: none;
+}
+
 .avy-gallery-zoom-panel {
   position: absolute;
   top: 0;
@@ -299,10 +312,10 @@ body.product-page.product-zoom-active {
 
 .avy-gallery-strip {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(82px, 96px));
+  grid-template-columns: repeat(auto-fill, minmax(66px, 78px));
   justify-content: start;
-  gap: 0.85rem;
-  margin-top: 1rem;
+  gap: 0.55rem;
+  margin-top: 0.7rem;
   max-width: 100%;
 }
 
@@ -311,9 +324,9 @@ body.product-page.product-zoom-active {
   width: 100%;
   aspect-ratio: 1 / 1;
   border: 1px solid rgba(93, 180, 103, 0.24);
-  border-radius: 18px;
+  border-radius: 14px;
   background: #fff;
-  padding: 0.55rem;
+  padding: 0.35rem;
   cursor: pointer;
   transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
 }
@@ -347,10 +360,9 @@ body.product-page.product-zoom-active {
 
 .avy-summary-card {
   display: grid;
-  gap: 1.2rem;
-  padding: 1.6rem;
-  position: sticky;
-  top: 7rem;
+  gap: clamp(0.7rem, 1vw, 0.95rem);
+  padding: clamp(1rem, 1.4vw, 1.25rem);
+  position: static;
 }
 
 .avy-product-summary,
@@ -383,7 +395,7 @@ body.product-page.product-zoom-active {
 
 .avy-brand-actions {
   display: flex;
-  gap: 1rem;
+  gap: 0.75rem;
   flex-wrap: wrap;
 }
 
@@ -394,9 +406,18 @@ body.product-page.product-zoom-active {
 .avy-product-title {
   margin: 0;
   color: #10182b;
-  font-size: clamp(1.9rem, 3vw, 2.7rem);
+  max-width: 46rem;
+  font-size: clamp(1.45rem, 1.55vw, 1.9rem);
   line-height: 1.16;
+  font-weight: 700;
   overflow-wrap: anywhere;
+}
+
+@media (min-width: 1440px) {
+  .avy-product-title {
+    font-size: clamp(1.55rem, 1.35vw, 1.85rem);
+    line-height: 1.18;
+  }
 }
 
 .avy-review-row {
@@ -433,7 +454,7 @@ body.product-page.product-zoom-active {
 
 .avy-price-line strong {
   color: var(--brand-dark);
-  font-size: clamp(2rem, 3vw, 2.8rem);
+  font-size: clamp(1.65rem, 2.45vw, 2.35rem);
   font-weight: 800;
 }
 
@@ -451,8 +472,8 @@ body.product-page.product-zoom-active {
 .avy-stock-chip {
   display: grid;
   gap: 0.18rem;
-  padding: 0.72rem 0.95rem;
-  border-radius: 16px;
+  padding: 0.58rem 0.8rem;
+  border-radius: 14px;
   border: 1px solid rgba(93, 180, 103, 0.24);
 }
 
@@ -483,7 +504,7 @@ body.product-page.product-zoom-active {
 
 .avy-block {
   display: grid;
-  gap: 0.9rem;
+  gap: 0.62rem;
 }
 
 .avy-block-title {
@@ -506,20 +527,20 @@ body.product-page.product-zoom-active {
 
 .avy-variant-list {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(86px, max-content));
-  gap: 0.48rem;
+  grid-template-columns: repeat(auto-fit, minmax(76px, max-content));
+  gap: 0.4rem;
   min-width: 0;
   max-width: 100%;
 }
 
 .avy-variant-chip {
   min-width: 0;
-  width: 92px;
+  width: 82px;
   max-width: 100%;
   display: grid;
   justify-items: center;
   gap: 0.22rem;
-  padding: 0.38rem 0.34rem;
+  padding: 0.32rem 0.28rem;
   border: 1px solid rgba(93, 180, 103, 0.24);
   border-radius: 7px;
   background: #fff;
@@ -530,8 +551,8 @@ body.product-page.product-zoom-active {
 }
 
 .avy-variant-media {
-  width: 3.15rem;
-  height: 3.15rem;
+  width: 2.55rem;
+  height: 2.55rem;
   display: grid;
   place-items: center;
   border-radius: 6px;
@@ -602,8 +623,8 @@ body.product-page.product-zoom-active {
 }
 
 .avy-quantity-stepper button {
-  width: 2.5rem;
-  height: 2.5rem;
+  width: 2.2rem;
+  height: 2.2rem;
   border: 0;
   background: rgba(93, 180, 103, 0.08);
   color: var(--brand);
@@ -611,14 +632,14 @@ body.product-page.product-zoom-active {
 }
 
 .avy-quantity-stepper span {
-  min-width: 2.9rem;
+  min-width: 2.55rem;
   text-align: center;
   font-weight: 800;
 }
 
 .avy-bullet-list {
   display: grid;
-  gap: 0.65rem;
+  gap: 0.45rem;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -626,8 +647,10 @@ body.product-page.product-zoom-active {
 
 .avy-bullet-list li {
   position: relative;
-  padding-left: 1.8rem;
+  padding-left: 1.45rem;
   color: #273142;
+  font-size: 0.95rem;
+  line-height: 1.38;
 }
 
 .avy-bullet-list li::before,
@@ -646,7 +669,7 @@ body.product-page.product-zoom-active {
 .avy-accordion {
   overflow: hidden;
   border: 1px solid rgba(93, 180, 103, 0.24);
-  border-radius: 22px;
+  border-radius: 16px;
   background: #fff;
 }
 
@@ -654,7 +677,7 @@ body.product-page.product-zoom-active {
   position: relative;
   list-style: none;
   cursor: pointer;
-  padding: 0.9rem 1.1rem;
+  padding: 0.68rem 0.9rem;
   color: #111827;
   font-weight: 800;
 }
@@ -679,7 +702,7 @@ body.product-page.product-zoom-active {
 }
 
 .avy-accordion-body {
-  padding: 0 1.1rem 0.95rem;
+  padding: 0 0.9rem 0.75rem;
 }
 
 .avy-delivery-lines {
@@ -690,10 +713,10 @@ body.product-page.product-zoom-active {
 
 .avy-delivery-check {
   display: grid;
-  gap: 0.7rem;
-  padding: 0.95rem 1rem;
+  gap: 0.55rem;
+  padding: 0.75rem 0.82rem;
   border: 1px solid rgba(93, 180, 103, 0.2);
-  border-radius: 18px;
+  border-radius: 14px;
   background: linear-gradient(180deg, #fbfefa 0%, #f4faf4 100%);
 }
 
@@ -757,7 +780,7 @@ body.product-page.product-zoom-active {
 }
 
 .avy-pincode-form.compact input {
-  min-height: 2.85rem;
+  min-height: 2.45rem;
   padding: 0 0.9rem;
   border-radius: 12px;
 }
@@ -773,9 +796,9 @@ body.avy-modal-open {
 .avy-pincode-form button,
 .avy-button-primary,
 .avy-button-secondary {
-  border-radius: 16px;
-  min-height: 3.2rem;
-  padding: 0.85rem 1.2rem;
+  border-radius: 14px;
+  min-height: 2.75rem;
+  padding: 0.68rem 1rem;
   font-weight: 800;
   transition: transform 160ms ease, box-shadow 160ms ease, background-color 160ms ease, border-color 160ms ease;
 }
@@ -789,8 +812,8 @@ body.avy-modal-open {
 }
 
 .avy-pincode-form.compact button {
-  min-height: 2.85rem;
-  padding: 0.7rem 1rem;
+  min-height: 2.45rem;
+  padding: 0.55rem 0.85rem;
   border-radius: 12px;
   box-shadow: none;
   white-space: nowrap;
@@ -830,14 +853,15 @@ body.avy-modal-open {
 .avy-delivery-message {
   font-size: 0.86rem;
   line-height: 1.5;
+  white-space: pre-line;
 }
 
 .avy-payment-card {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.8rem;
-  padding: 1.1rem 1.2rem;
+  gap: 0.58rem;
+  padding: 0.82rem 0.95rem;
   border-radius: 18px;
   border: 1px solid rgba(93, 180, 103, 0.2);
   background: linear-gradient(180deg, #fbfefa 0%, #f1f8f1 100%);
@@ -904,11 +928,11 @@ body.avy-modal-open {
 .avy-trust-strip {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 0.8rem;
+  gap: 0.5rem;
 }
 
 .avy-product-section {
-  margin-top: 2rem;
+  margin-top: 1.55rem;
   overflow-x: clip;
 }
 
@@ -1763,6 +1787,85 @@ body.avy-modal-open {
   right: 1rem;
 }
 
+@media (min-width: 1101px) and (max-height: 860px) {
+  .product-page-main {
+    padding-top: 7.65rem !important;
+  }
+
+  .site-header + main.product-page-main {
+    padding-top: 7.65rem !important;
+  }
+
+  .product-breadcrumb {
+    margin-bottom: 0.55rem;
+    font-size: 0.88rem;
+  }
+
+  .avy-product-hero {
+    grid-template-columns: minmax(330px, 0.88fr) minmax(420px, 1.12fr);
+    gap: 1rem;
+  }
+
+  .avy-product-gallery-card {
+    top: 8.6rem;
+    padding: 0.65rem;
+  }
+
+  .avy-gallery-stage {
+    max-height: min(25rem, calc(100vh - 16rem));
+    padding: 0.35rem;
+    border-radius: 18px;
+  }
+
+  .avy-gallery-strip {
+    grid-template-columns: repeat(auto-fill, minmax(56px, 66px));
+    gap: 0.42rem;
+    margin-top: 0.5rem;
+  }
+
+  .avy-gallery-thumb {
+    border-radius: 12px;
+    padding: 0.28rem;
+  }
+
+  .avy-summary-card {
+    gap: 0.62rem;
+    padding: 0.9rem;
+    border-radius: 22px;
+  }
+
+  .avy-product-title {
+    font-size: clamp(1.36rem, 1.65vw, 1.72rem);
+    line-height: 1.16;
+  }
+
+  .avy-price-line strong {
+    font-size: clamp(1.48rem, 2vw, 2rem);
+  }
+
+  .avy-review-row,
+  .avy-price-line,
+  .avy-brand-row,
+  .avy-quantity-row,
+  .avy-quick-assurance,
+  .avy-meta-strip {
+    gap: 0.5rem;
+  }
+
+  .avy-payment-card {
+    padding: 0.65rem;
+  }
+
+  .avy-payment-icon {
+    min-height: 2.25rem;
+  }
+
+  .avy-trust-strip,
+  .avy-meta-strip {
+    font-size: 0.86rem;
+  }
+}
+
 @media (max-width: 1100px) {
   .avy-product-hero,
   .avy-reviews-layout {
@@ -1777,11 +1880,20 @@ body.avy-modal-open {
     display: none;
   }
 
+  .avy-gallery-zoom-hint-desktop {
+    display: none;
+  }
+
+  .avy-gallery-zoom-hint-mobile {
+    display: inline;
+  }
+
   .avy-product-section-narrow {
     width: 100%;
   }
 
   .avy-summary-card,
+  .avy-product-gallery-card,
   .avy-review-summary {
     position: static;
   }
@@ -1845,10 +1957,15 @@ body.avy-modal-open {
 
 @media (max-width: 780px) {
   .product-page-main {
+    padding-top: 164px !important;
     padding-bottom: 7.5rem;
     width: 100%;
     max-width: 100%;
     overflow-x: clip;
+  }
+
+  .site-header + main.product-page-main {
+    padding-top: 164px !important;
   }
 
   .product-breadcrumb {
@@ -2053,7 +2170,12 @@ body.avy-modal-open {
   }
 
   .avy-gallery-zoom-hint {
-    display: none;
+    right: 0.75rem;
+    bottom: 0.75rem;
+    min-height: 1.8rem;
+    padding: 0 0.7rem;
+    font-size: 0.72rem;
+    display: inline-flex;
   }
 
   .avy-gallery-strip {
@@ -2188,6 +2310,11 @@ body.avy-modal-open {
 }
 
 @media (max-width: 560px) {
+  .product-page-main,
+  .site-header + main.product-page-main {
+    padding-top: 156px !important;
+  }
+
   .product-breadcrumb {
     font-size: 0.85rem;
     max-width: 100%;
@@ -2529,20 +2656,20 @@ body.avy-modal-open {
 }
 
 .avy-product-coupon-box {
-  padding: 14px;
+  padding: 10px;
   border: 1px solid rgba(203, 213, 225, 0.86);
-  border-radius: 18px;
+  border-radius: 14px;
   background: #f8fafc;
 }
 
 .avy-product-coupon-form {
   display: grid;
-  gap: 8px;
+  gap: 6px;
 }
 
 .avy-product-coupon-form label {
   display: grid;
-  gap: 8px;
+  gap: 6px;
   color: #0f172a;
   font-weight: 900;
 }
@@ -2554,8 +2681,8 @@ body.avy-modal-open {
 }
 
 .avy-product-coupon-row input {
-  min-height: 44px;
-  padding: 0 13px;
+  min-height: 38px;
+  padding: 0 11px;
   border: 1px solid #cbd5e1;
   border-radius: 12px;
   background: #ffffff;
@@ -2565,8 +2692,8 @@ body.avy-modal-open {
 }
 
 .avy-product-coupon-row button {
-  min-height: 44px;
-  padding: 0 18px;
+  min-height: 38px;
+  padding: 0 14px;
   border: 0;
   border-radius: 12px;
   background: var(--brand);
@@ -2588,14 +2715,14 @@ body.avy-modal-open {
 
 .avy-product-offers {
   display: grid;
-  gap: 10px;
-  margin-top: 10px;
+  gap: 7px;
+  margin-top: 7px;
 }
 
 .avy-product-offers-toggle {
-  min-height: 40px;
+  min-height: 34px;
   width: max-content;
-  padding: 0 14px;
+  padding: 0 12px;
   border: 1px solid #cbd5e1;
   border-radius: 12px;
   background: #fff;
@@ -2619,9 +2746,9 @@ body.avy-modal-open {
 .avy-product-offer-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 12px;
+  gap: 9px;
   align-items: center;
-  padding: 12px;
+  padding: 9px;
   border: 1px solid #e2e8f0;
   border-radius: 14px;
   background: #fff;

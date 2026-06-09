@@ -75,8 +75,8 @@ adminApi.interceptors.response.use(
   (error) => {
     if (error.response?.status === 401 && getAdminToken()) {
       clearAdminToken();
-      if (window.location.pathname !== "/login") {
-        window.location.assign("/login");
+      if (window.location.pathname !== "/dashboard/login") {
+        window.location.assign("/dashboard/login");
       }
     }
 
@@ -107,6 +107,47 @@ export function fetchBackendHealth() {
   return adminApi.get("/health");
 }
 
+export function fetchDeliveryPincodes(params) {
+  return adminApi.get("/delivery-pincodes/admin", { params });
+}
+
+export function fetchDeliveryPincodeMessageSettings() {
+  return adminApi.get("/delivery-pincodes/admin/message-settings");
+}
+
+export function updateDeliveryPincodeMessageSettings(payload) {
+  return adminApi.put("/delivery-pincodes/admin/message-settings", payload);
+}
+
+export function createDeliveryPincode(payload) {
+  return adminApi.post("/delivery-pincodes/admin", payload);
+}
+
+export function updateDeliveryPincode(id, payload) {
+  return adminApi.put(`/delivery-pincodes/admin/${id}`, payload);
+}
+
+export function updateDeliveryPincodeStatus(id, status) {
+  return adminApi.patch(`/delivery-pincodes/admin/${id}/status`, { status });
+}
+
+export function deleteDeliveryPincode(id) {
+  return adminApi.delete(`/delivery-pincodes/admin/${id}`);
+}
+
+export function bulkUpdateDeliveryPincodes(ids, action) {
+  return adminApi.post("/delivery-pincodes/admin/bulk", { ids, action });
+}
+
+export function importDeliveryPincodes(file, mode) {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("mode", mode);
+  return adminApi.post("/delivery-pincodes/admin/import", formData, {
+    headers: { "Content-Type": "multipart/form-data" }
+  });
+}
+
 export function fetchDashboardSummary(params) {
   return adminApi.get("/dashboard/summary", { params });
 }
@@ -135,8 +176,28 @@ export function fetchGeneralSettings() {
   return adminApi.get("/settings/general");
 }
 
+export function fetchPaymentSettings() {
+  return adminApi.get("/settings/payment");
+}
+
+export function updatePaymentSettings(payload) {
+  return adminApi.put("/settings/payment", payload);
+}
+
+export function testPaymentConnection() {
+  return adminApi.post("/settings/payment/test-connection");
+}
+
 export function updateGeneralSettings(payload) {
   return adminApi.put("/settings/general", payload);
+}
+
+export function fetchContactPageSettings() {
+  return adminApi.get("/settings/contact-page");
+}
+
+export function updateContactPageSettings(payload) {
+  return adminApi.put("/settings/contact-page", payload);
 }
 
 export function fetchBrowseCategoriesSettings() {
@@ -433,6 +494,10 @@ export function deleteContactEnquiry(enquiryId) {
 
 export function fetchOrders() {
   return adminApi.get("/orders");
+}
+
+export function fetchOrder(orderId) {
+  return adminApi.get(`/orders/${orderId}`);
 }
 
 export function fetchAdminInvoicePreview(withPrint = false) {

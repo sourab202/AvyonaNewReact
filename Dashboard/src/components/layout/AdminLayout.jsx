@@ -28,7 +28,7 @@ const pageMeta = [
   {
     path: "/dashboard/products",
     title: "Products",
-    subtitle: "Manage your catalog, pricing, inventory, and product visibility."
+    subtitle: ""
   },
   {
     path: "/dashboard/variations",

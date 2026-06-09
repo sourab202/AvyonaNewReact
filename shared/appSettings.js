@@ -11,6 +11,103 @@ export const DEFAULT_APP_SETTINGS = {
     gstNumber: "29ABCDE1234F1Z5",
     workingHours: "Monday to Saturday, 10:00 AM to 7:00 PM"
   },
+  contactPage: {
+    enabled: true,
+    heroTitle: "Contact Us",
+    heroLineOne: "Need help with an order or business enquiry?",
+    heroLineTwo: "We're here to help.",
+    sectionTitle: "How can we help you?",
+    heroIcons: {
+      left: { enabled: true, builtin: "leaf", imageUrl: "", size: 124, color: "#1f7a34" },
+      right: { enabled: true, builtin: "headset", imageUrl: "", size: 150, color: "#1f2937" }
+    },
+    enquiryTypes: [
+      {
+        key: "b2c",
+        label: "B2C",
+        title: "Customer Support",
+        description: "Order help, returns, warranty, delivery support.",
+        buttonText: "Continue",
+        iconBuiltin: "headset",
+        iconUrl: "",
+        iconSize: 44,
+        iconColor: "#1479b8",
+        iconBackground: "#eaf5ff",
+        showIcon: true,
+        enabled: true
+      },
+      {
+        key: "b2b",
+        label: "B2B",
+        title: "Business Enquiry",
+        description: "Bulk orders, dealership, partnerships, corporate enquiries.",
+        buttonText: "Continue",
+        iconBuiltin: "briefcase",
+        iconUrl: "",
+        iconSize: 44,
+        iconColor: "#155aa8",
+        iconBackground: "#dcefff",
+        showIcon: true,
+        enabled: true
+      }
+    ],
+    formIntro: "Fill in the details below and our team will get back to you.",
+    fullNamePlaceholder: "Full Name *",
+    companyNamePlaceholder: "Company Name *",
+    emailPlaceholder: "Email Address *",
+    phonePlaceholder: "Phone Number *",
+    orderIdPlaceholder: "Order ID (Optional)",
+    messagePlaceholder: "Message *",
+    submitButtonText: "Submit Enquiry",
+    submittingButtonText: "Submitting...",
+    successMessage: "Thank you. Our team will contact you shortly.",
+    errorMessage: "Unable to submit contact enquiry",
+    details: {
+      emailLabel: "Email Us",
+      phoneLabel: "Call Us",
+      hoursLabel: "Working Hours",
+      addressLabel: "Our Address",
+      emptyPhoneText: "Phone support coming soon",
+      showEmail: true,
+      showPhone: true,
+      showHours: true,
+      showAddress: true,
+      icons: {
+        email: { builtin: "envelope", imageUrl: "", size: 18, color: "#18794e", background: "#eaf7ee", showIcon: true },
+        phone: { builtin: "phone", imageUrl: "", size: 18, color: "#18794e", background: "#eaf7ee", showIcon: true },
+        hours: { builtin: "clock", imageUrl: "", size: 18, color: "#18794e", background: "#eaf7ee", showIcon: true },
+        address: { builtin: "location", imageUrl: "", size: 18, color: "#18794e", background: "#eaf7ee", showIcon: true }
+      }
+    },
+    trustItems: [
+      { key: "fast-response", label: "Fast Response", iconBuiltin: "bolt", iconUrl: "", iconSize: 18, iconColor: "#16a34a", enabled: true, showIcon: true },
+      { key: "secure-safe", label: "Secure & Safe", iconBuiltin: "lock", iconUrl: "", iconSize: 18, iconColor: "#16a34a", enabled: true, showIcon: true },
+      { key: "privacy", label: "100% Privacy", iconBuiltin: "shield", iconUrl: "", iconSize: 18, iconColor: "#16a34a", enabled: true, showIcon: true },
+      { key: "customer-first", label: "Customer First", iconBuiltin: "heart", iconUrl: "", iconSize: 18, iconColor: "#16a34a", enabled: true, showIcon: true }
+    ],
+    design: {
+      customerAccent: "#198754",
+      customerAccentDark: "#146c43",
+      customerAccentSoft: "#eef9f0",
+      businessAccent: "#1f8fce",
+      businessAccentDark: "#1479b8",
+      businessAccentSoft: "#eef7ff",
+      pageBackground: "#ffffff",
+      heroBackground: "#f7fbf8",
+      surfaceColor: "#ffffff",
+      textColor: "#111827",
+      mutedTextColor: "#52606b",
+      borderColor: "#cbd5e1",
+      trustBackground: "#f8faf9",
+      cardRadius: 12,
+      inputRadius: 6,
+      contentMaxWidth: 980,
+      sectionGap: 32,
+      headingFontSize: 56,
+      mobileHeadingFontSize: 35
+    },
+    customCss: ""
+  },
   store: {
     defaultCurrency: "INR",
     currencyFormat: "INR 1,999.00",
@@ -30,8 +127,6 @@ export const DEFAULT_APP_SETTINGS = {
     refundSettings: "Manual review before refund approval"
   },
   shipping: {
-    shippingCharges: "INR 79 standard shipping",
-    freeShippingThreshold: "INR 999",
     deliveryZones: "India-wide with metro priority zones",
     deliveryTime: "3 to 5 business days",
     dispatchTime: "24 to 48 hours",
@@ -64,6 +159,70 @@ export const DEFAULT_APP_SETTINGS = {
     settingsAccess: "Restricted to Super Admin",
     passwordRules: "Strong password policy required",
     sessionTimeout: "30 minutes of inactivity"
+  },
+  whatsapp: {
+    enabled: false,
+    number: "+919876543210",
+    defaultMessage: "Hi Avyona, I need help.",
+    productMessage: "Hi Avyona, I need help with this product: {{productName}} - {{productUrl}}",
+    orderMessage: "Hi Avyona, I need help with my order: {{orderId}}",
+    position: "bottom-right",
+    iconUrl: "",
+    buttonColor: "#25D366",
+    iconSize: 28,
+    hoverText: "Need Help? Chat with us",
+    showMobile: true,
+    showDesktop: true,
+    showAllPages: true,
+    hideCheckout: false,
+    hideOrderConfirmation: false,
+    hideAdmin: true
+  },
+  header: {
+    logoWidth: 150,
+    logoHeight: 30,
+    logoMaxWidth: 180,
+    brandTextSize: 24,
+    headerBackground: "#FFFFFF",
+    headerTextColor: "#111827",
+    headerBorderColor: "#E5E7EB",
+    headerShadow: "0 10px 24px rgba(15, 23, 42, 0.08)",
+    headerTopPadding: 24,
+    headerBottomPadding: 22,
+    headerGap: 28,
+    searchMaxWidth: 760,
+    searchHeight: 42,
+    searchRadius: 999,
+    searchBackground: "#FFFFFF",
+    searchTextColor: "#111827",
+    searchBorderColor: "#E5E7EB",
+    searchPlaceholder: "Search products, brands, ASIN, SKU, features",
+    searchIconText: "⌕",
+    searchIconSize: 14,
+    searchIconColor: "#6B7280",
+    utilityGap: 12,
+    accountText: "Sign In",
+    showAccountText: false,
+    accountIconSize: 17,
+    accountButtonSize: 38,
+    accountColor: "#111827",
+    accountBackground: "#FFFFFF",
+    accountRadius: 999,
+    wishlistIconSize: 17,
+    wishlistButtonSize: 38,
+    wishlistColor: "#111827",
+    wishlistBackground: "#FFFFFF",
+    wishlistRadius: 999,
+    cartText: "Cart",
+    showCartText: false,
+    cartIconSize: 17,
+    cartButtonHeight: 30,
+    cartButtonPaddingX: 10,
+    cartBackground: "#22C55E",
+    cartTextColor: "#FFFFFF",
+    cartRadius: 8,
+    cartBadgeBackground: "#FFFFFF",
+    cartBadgeTextColor: "#16A34A"
   },
   theme: {
     colors: {
@@ -211,6 +370,26 @@ export const DEFAULT_APP_SETTINGS = {
     showDownloadInvoiceButton: false,
     downloadInvoiceButtonText: "Download Invoice",
     downloadInvoiceButtonStyle: "secondary"
+  },
+  invoiceDesigner: {
+    showLogo: true,
+    logoSource: "",
+    businessName: "",
+    address: "",
+    supportPhone: "",
+    supportEmail: "",
+    gstNumber: "",
+    footerThankYouNote: "Thank you for shopping with us!",
+    computerGeneratedNote: "Computer-generated invoice. No signature required.",
+    supportContactNote: "",
+    websiteUrl: "",
+    showWatermark: true,
+    watermarkUrl: "",
+    showQrCode: true,
+    qrCodeUrl: "",
+    bottomNoteText: "",
+    showCreditPoints: true,
+    showFooterNote: true
   },
   homepage: {
     heroBanners: [
@@ -646,15 +825,13 @@ export const SETTINGS_SECTIONS = [
     impact: {
       eyebrow: "Delivery Impact",
       title: "Shipping settings define what customers see before purchase and what the business promises after checkout.",
-      description: "This module controls delivery charges, free shipping logic, zone coverage, dispatch speed, and expected delivery timing used across the storefront and tracking flow.",
+      description: "This module controls free-shipping messaging, zone coverage, dispatch speed, and expected delivery timing used across the storefront and tracking flow.",
       items: ["Product page delivery info", "Checkout delivery calculation", "Track order expected delivery"]
     },
     groups: [
       {
-        title: "Shipping Rules",
+        title: "Free Shipping & Delivery",
         fields: [
-          { key: "shipping.shippingCharges", label: "Shipping Charges", type: "text" },
-          { key: "shipping.freeShippingThreshold", label: "Free Shipping Threshold", type: "text" },
           { key: "shipping.deliveryZones", label: "Delivery Zones", type: "textarea" },
           { key: "shipping.deliveryTime", label: "Delivery Time", type: "text" }
         ]
@@ -729,8 +906,32 @@ export const SETTINGS_SECTIONS = [
       }
     ]
   },
-  {
-    id: "security",
+    {
+      id: "whatsapp",
+      label: "WhatsApp Access",
+      description: "Manage the floating WhatsApp support button shown on the storefront, including visibility, message templates, icon styling, and page rules.",
+    impact: {
+      eyebrow: "Support Impact",
+      title: "WhatsApp Access helps customers reach support faster from product, order, and checkout journeys.",
+      description: "This module controls the floating support button, mobile and desktop visibility, smart messages, and where the button appears across the storefront.",
+      items: ["Product support", "Order help", "Customer trust", "Faster response"]
+    },
+      groups: []
+    },
+    {
+      id: "header",
+      label: "Header Controls",
+      description: "Manually control the storefront header logo, search bar, account icon, wishlist icon, cart button, text, colors, sizing, and spacing.",
+      impact: {
+        eyebrow: "Header Impact",
+        title: "Header controls affect the first navigation area customers use on every storefront page.",
+        description: "Use these settings to fine tune brand logo sizing, search experience, account and cart action styling, spacing, and color balance.",
+        items: ["Storefront header", "Search bar", "Account and cart actions", "Mobile header"]
+      },
+      groups: []
+    },
+    {
+      id: "security",
     label: "Security & Admin Control",
     description: "Manage dashboard access, role permissions, password protection, and session security across the admin system.",
     impact: {
@@ -864,6 +1065,7 @@ export function getPublicSettings(settings = DEFAULT_APP_SETTINGS) {
       gstNumber: settings.general.gstNumber,
       workingHours: settings.general.workingHours
     },
+    contactPage: settings.contactPage,
     store: {
       defaultCurrency: settings.store.defaultCurrency,
       currencyFormat: settings.store.currencyFormat,
@@ -880,8 +1082,6 @@ export function getPublicSettings(settings = DEFAULT_APP_SETTINGS) {
       upiWalletEnabled: settings.payment.upiWalletEnabled
     },
     shipping: {
-      shippingCharges: settings.shipping.shippingCharges,
-      freeShippingThreshold: settings.shipping.freeShippingThreshold,
       deliveryZones: settings.shipping.deliveryZones,
       deliveryTime: settings.shipping.deliveryTime,
       dispatchTime: settings.shipping.dispatchTime,
@@ -901,6 +1101,14 @@ export function getPublicSettings(settings = DEFAULT_APP_SETTINGS) {
       orderDeliveredEmailEnabled: settings.notifications.orderDeliveredEmailEnabled,
       whatsappNotificationsEnabled: settings.notifications.whatsappNotificationsEnabled,
       smsNotificationsEnabled: settings.notifications.smsNotificationsEnabled
+    },
+    whatsapp: {
+      ...DEFAULT_APP_SETTINGS.whatsapp,
+      ...(settings.whatsapp || {})
+    },
+    header: {
+      ...DEFAULT_APP_SETTINGS.header,
+      ...(settings.header || {})
     },
     theme: {
       ...DEFAULT_APP_SETTINGS.theme,

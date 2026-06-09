@@ -259,8 +259,6 @@ VALUES
   ('payment__razorpayEnabled', 'true', 'payment'),
   ('payment__stripeEnabled', 'false', 'payment'),
   ('payment__upiWalletEnabled', 'true', 'payment'),
-  ('shipping__shippingCharges', 'INR 79 standard shipping', 'shipping'),
-  ('shipping__freeShippingThreshold', 'INR 999', 'shipping'),
   ('shipping__deliveryZones', 'India-wide with metro priority zones', 'shipping'),
   ('shipping__deliveryTime', '3 to 5 business days', 'shipping'),
   ('shipping__dispatchTime', '24 to 48 hours', 'shipping'),
@@ -268,6 +266,9 @@ VALUES
 ON DUPLICATE KEY UPDATE
   setting_value = VALUES(setting_value),
   setting_group = VALUES(setting_group);
+
+DELETE FROM app_settings
+WHERE setting_key IN ('shipping__shippingCharges', 'shipping__freeShippingThreshold');
 
 INSERT INTO categories (
   name,
@@ -523,7 +524,7 @@ ON DUPLICATE KEY UPDATE
 
 INSERT INTO orders
   (customer_id, order_number, status, payment_status, payment_method, courier_name, expected_delivery_date, subtotal, shipping_fee, total_amount)
-SELECT c.id, 'AVY-1002', 'confirmed', 'cod_pending', 'Cash on Delivery', NULL, '2026-04-27 20:00:00', 8346, 99, 8445
+SELECT c.id, 'AVY-1002', 'confirmed', 'cod_pending', 'Cash on Delivery', NULL, '2026-04-27 20:00:00', 8346, 0, 8346
 FROM customers c
 WHERE c.email = 'priya@example.com'
 ON DUPLICATE KEY UPDATE

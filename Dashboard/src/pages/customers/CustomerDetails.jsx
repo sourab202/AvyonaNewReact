@@ -1,9 +1,11 @@
 import React from "react";
 import { Link, useParams } from "react-router-dom";
-import { fetchCustomerById } from "../../api/customerApi";
+import { fetchCustomerById, updateCustomerBusinessDetails } from "../../api/customerApi";
 import { formatCurrency } from "../../utils/storefront";
 import fallbackCustomers from "../../data/customers";
 import { formatOrderStatusLabel } from "../../../../shared/orderStatusFlow";
+
+const GST_NUMBER_PATTERN = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/i;
 
 function DetailCard({ title, children }) {
   return (
@@ -108,6 +110,8 @@ export default function CustomerDetails() {
   const [emailVerified, setEmailVerified] = React.useState(false);
   const [phoneVerified, setPhoneVerified] = React.useState(false);
   const [statusMessage, setStatusMessage] = React.useState("");
+  const [businessForm, setBusinessForm] = React.useState({ isBusinessAccount: false, businessName: "", gstNumber: "" });
+  const [businessMessage, setBusinessMessage] = React.useState("");
 
   React.useEffect(() => {
     let isMounted = true;
@@ -127,7 +131,13 @@ export default function CustomerDetails() {
         setAccountStatus(nextCustomer?.accountStatus || "inactive");
         setEmailVerified(Boolean(nextCustomer?.emailVerified));
         setPhoneVerified(Boolean(nextCustomer?.phoneVerified));
+        setBusinessForm({
+          isBusinessAccount: Boolean(nextCustomer?.businessDetails?.isBusinessAccount || nextCustomer?.isBusinessAccount || nextCustomer?.businessName || nextCustomer?.gstNumber),
+          businessName: nextCustomer?.businessDetails?.businessName || nextCustomer?.businessName || "",
+          gstNumber: nextCustomer?.businessDetails?.gstNumber || nextCustomer?.gstNumber || ""
+        });
         setStatusMessage("");
+        setBusinessMessage("");
       } catch (error) {
         if (!isMounted) return;
 
@@ -140,7 +150,9 @@ export default function CustomerDetails() {
           setAccountStatus(fallbackCustomer.accountStatus || "inactive");
           setEmailVerified(Boolean(fallbackCustomer.emailVerified));
           setPhoneVerified(Boolean(fallbackCustomer.phoneVerified));
+          setBusinessForm({ isBusinessAccount: false, businessName: "", gstNumber: "" });
           setStatusMessage("");
+          setBusinessMessage("");
           setErrorMessage(error.response?.data?.message || "Backend customer details are unavailable right now. Showing demo preview data.");
           return;
         }
@@ -171,6 +183,56 @@ export default function CustomerDetails() {
     ));
 
     setStatusMessage("Account settings updated locally for this dashboard preview.");
+  };
+
+  const saveBusinessDetails = async () => {
+    const payload = {
+      isBusinessAccount: Boolean(businessForm.isBusinessAccount || businessForm.businessName || businessForm.gstNumber),
+      businessName: String(businessForm.businessName || "").trim(),
+      gstNumber: String(businessForm.gstNumber || "").trim().toUpperCase()
+    };
+
+    if (payload.gstNumber && !GST_NUMBER_PATTERN.test(payload.gstNumber)) {
+      setBusinessMessage("GST Number format is invalid.");
+      return;
+    }
+
+    try {
+      const response = await updateCustomerBusinessDetails(customer.id, payload);
+      const next = response.data?.data || payload;
+      setBusinessForm({
+        isBusinessAccount: Boolean(next.businessDetails?.isBusinessAccount || next.isBusinessAccount || next.businessName || next.gstNumber),
+        businessName: next.businessDetails?.businessName || next.businessName || "",
+        gstNumber: next.businessDetails?.gstNumber || next.gstNumber || ""
+      });
+      setCustomer((current) => current ? {
+        ...current,
+        businessDetails: next.businessDetails || payload,
+        isBusinessAccount: Boolean(next.businessDetails?.isBusinessAccount || next.isBusinessAccount || next.businessName || next.gstNumber),
+        businessName: next.businessDetails?.businessName || next.businessName || "",
+        gstNumber: next.businessDetails?.gstNumber || next.gstNumber || ""
+      } : current);
+      setBusinessMessage(response.data?.message || "Business details updated.");
+    } catch (error) {
+      setBusinessMessage(error.response?.data?.message || "Could not update business details.");
+    }
+  };
+
+  const removeBusinessDetails = async () => {
+    try {
+      const response = await updateCustomerBusinessDetails(customer.id, { isBusinessAccount: false, businessName: "", gstNumber: "" });
+      setBusinessForm({ isBusinessAccount: false, businessName: "", gstNumber: "" });
+      setCustomer((current) => current ? {
+        ...current,
+        businessDetails: { isBusinessAccount: false, businessName: "", gstNumber: "" },
+        isBusinessAccount: false,
+        businessName: "",
+        gstNumber: ""
+      } : current);
+      setBusinessMessage(response.data?.message || "Business details removed.");
+    } catch (error) {
+      setBusinessMessage(error.response?.data?.message || "Could not remove business details.");
+    }
   };
 
   if (isLoading) {
@@ -337,6 +399,64 @@ export default function CustomerDetails() {
           </div>
         </DetailCard>
       </div>
+
+      <DetailCard title="Business / GST Details">
+        <div style={detailStackStyle}>
+          <div style={summaryGridStyle}>
+            <div style={detailItemStyle}>
+              <span>Business Account</span>
+              <strong>{businessForm.isBusinessAccount || businessForm.businessName || businessForm.gstNumber ? "Yes" : "No"}</strong>
+            </div>
+            <div style={detailItemStyle}>
+              <span>Business Name</span>
+              <strong>{businessForm.businessName || "Not available"}</strong>
+            </div>
+            <div style={detailItemStyle}>
+              <span>GST Number</span>
+              <strong>{businessForm.gstNumber || "Not available"}</strong>
+            </div>
+          </div>
+          <div style={twoColumnGridStyle}>
+            <label style={detailItemStyle}>
+              <span>Business Account</span>
+              <span style={checkboxRowStyle}>
+                <input
+                  type="checkbox"
+                  checked={Boolean(businessForm.isBusinessAccount)}
+                  onChange={(event) => setBusinessForm((current) => ({ ...current, isBusinessAccount: event.target.checked }))}
+                />
+                <strong>{businessForm.isBusinessAccount ? "Enabled" : "Disabled"}</strong>
+              </span>
+            </label>
+            <label style={detailItemStyle}>
+              <span>Business Name</span>
+              <input
+                value={businessForm.businessName}
+                onChange={(event) => setBusinessForm((current) => ({ ...current, businessName: event.target.value }))}
+                style={inputStyle}
+                placeholder="Optional"
+              />
+            </label>
+            <label style={detailItemStyle}>
+              <span>GST Number</span>
+              <input
+                value={businessForm.gstNumber}
+                onChange={(event) => setBusinessForm((current) => ({ ...current, gstNumber: event.target.value.toUpperCase() }))}
+                style={inputStyle}
+                placeholder="Optional"
+              />
+            </label>
+            <div style={detailItemStyle}>
+              <span>Admin Action</span>
+              <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                <button type="button" style={primaryButtonStyle} onClick={saveBusinessDetails}>Save GST Details</button>
+                <button type="button" style={dangerButtonStyle} onClick={removeBusinessDetails}>Remove GST Details</button>
+              </div>
+              <span style={mutedTextStyle}>{businessMessage || "Business fields are optional and appear on invoices only when GST is available."}</span>
+            </div>
+          </div>
+        </div>
+      </DetailCard>
 
       <DetailCard title="Saved Addresses">
         {customer.savedAddresses?.length ? (
@@ -604,6 +724,18 @@ const primaryButtonStyle = {
   cursor: "pointer",
   fontSize: "14px",
   boxShadow: "0 8px 18px rgba(15, 23, 42, 0.18)"
+};
+
+const dangerButtonStyle = {
+  minHeight: "36px",
+  padding: "0 16px",
+  borderRadius: "10px",
+  border: "1px solid #fecaca",
+  background: "#fff1f2",
+  color: "#dc2626",
+  fontWeight: 700,
+  cursor: "pointer",
+  fontSize: "14px"
 };
 
 const secondaryLinkStyle = {

@@ -2,13 +2,10 @@ import React, { useEffect } from "react";
 import { useLocation } from "react-router-dom";
 import { fetchStorefrontBlog } from "../../api/blogApi";
 import { fetchPageSeo } from "../../api/seoApi";
-import { flattenCategoryTree, fallbackCategoryTree } from "../../data/category-data";
+import { flattenCategoryTree } from "../../data/category-data";
 import {
   blogEntries,
-  blogEntriesBySlug,
-  collectionData,
-  getProductByIdentifier,
-  productData
+  blogEntriesBySlug
 } from "../../data/storefront-content";
 import { buildProductPath, getOptimizedAssetPath, getProductVariantByKey } from "../../utils/storefront";
 
@@ -335,12 +332,12 @@ function applySeo(seo, siteName = SITE_NAME) {
   setSchemaMarkup(Array.isArray(seo.schema) ? seo.schema : []);
 }
 
-function getSeoData(location, siteSettings = {}) {
+function getSeoData(location, siteSettings = {}, products = [], categoryTree = []) {
   const brand = getSeoBrand(siteSettings);
   const { pathname, search } = location;
   const searchParams = new URLSearchParams(search);
   const pathSegments = pathname.split("/").filter(Boolean);
-  const categories = flattenCategoryTree(fallbackCategoryTree);
+  const categories = flattenCategoryTree(categoryTree);
   const base = {
     title: brand.defaultTitle,
     description: brand.defaultDescription,
@@ -365,7 +362,7 @@ function getSeoData(location, siteSettings = {}) {
         websiteSchema(brand.siteName),
         pageSchema(brand.defaultTitle, "/", brand.defaultDescription),
         breadcrumbSchema([{ name: "Home", path: "/" }]),
-        collectionItemListSchema("Featured products", "/", Object.values(productData).slice(0, 8))
+        collectionItemListSchema("Featured products", "/", products.slice(0, 8))
       ]
     };
   }
@@ -373,7 +370,6 @@ function getSeoData(location, siteSettings = {}) {
   if (pathname === "/collections") {
     const title = "Avyona | All Collections";
     const description = "Explore all Avyona collections across personal audio, professional audio, cameras, frames, security devices, and reading lights.";
-    const products = Object.values(productData);
     return {
       ...base,
       title,
@@ -394,41 +390,12 @@ function getSeoData(location, siteSettings = {}) {
     };
   }
 
-  if (pathSegments[0] === "collection" && pathSegments[1]) {
-    const collection = collectionData[pathSegments[1]];
-    if (collection) {
-      const products = (collection.products || []).map((item) => productData[item.slug]).filter(Boolean);
-      const title = `Avyona | ${collection.title}`;
-      const description = truncate(collection.description);
-      const path = `/collection/${pathSegments[1]}`;
-      return {
-        ...base,
-        title,
-        description,
-        keywords: `${DEFAULT_KEYWORDS}, ${collection.title}, ${collection.title.toLowerCase()}`,
-        canonical: toAbsoluteUrl(path),
-        image: ensureImage(collection.bannerImage),
-        type: "website",
-        schema: [
-          organizationSchema(),
-          pageSchema(title, path, description),
-          breadcrumbSchema([
-            { name: "Home", path: "/" },
-            { name: "Collections", path: "/collections" },
-            { name: collection.title, path }
-          ]),
-          collectionItemListSchema(collection.title, path, products)
-        ]
-      };
-    }
-  }
-
-  if (pathSegments[0] === "category" && pathSegments[1]) {
+  if (["category", "collection"].includes(pathSegments[0]) && pathSegments[1]) {
     const category = categories.find((item) => item.slug === pathSegments[1] && item.status === "active");
 
     if (category) {
-      const path = `/category/${category.slug}`;
-      const products = Object.values(productData).filter((product) => {
+      const path = `/${pathSegments[0]}/${category.slug}`;
+      const categoryProducts = products.filter((product) => {
         if (Array.isArray(category.productSlugs) && category.productSlugs.includes(product.slug)) return true;
         return !category.parentId && product.collectionSlug === category.slug;
       });
@@ -451,14 +418,19 @@ function getSeoData(location, siteSettings = {}) {
             { name: "Collections", path: "/collections" },
             { name: category.name, path }
           ]),
-          categoryPageSchema(category, path, products)
+          categoryPageSchema(category, path, categoryProducts)
         ]
       };
     }
   }
 
   if (pathSegments[0] === "product" && pathSegments[1]) {
-    const product = getProductByIdentifier(pathSegments[1]);
+    const identifier = String(pathSegments[1] || "").toLowerCase();
+    const product = products.find((item) =>
+      [item.slug, item.asin, item.sku]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase() === identifier)
+    );
     if (product) {
       const variant = getProductVariantByKey(product, pathSegments[2]);
       const path = buildProductPath(product, variant);
@@ -715,13 +687,13 @@ async function getDynamicBlogSeoData(location, siteSettings = {}) {
   };
 }
 
-export default function SeoManager({ siteSettings }) {
+export default function SeoManager({ siteSettings, products = [], categories = [] }) {
   const location = useLocation();
   const brand = getSeoBrand(siteSettings);
 
   useEffect(() => {
     let isMounted = true;
-    const fallbackSeo = getSeoData(location, siteSettings);
+    const fallbackSeo = getSeoData(location, siteSettings, products, categories);
     applySeo(fallbackSeo, brand.siteName);
 
     const isBlogSeoPath = location.pathname === "/blogs" || /^\/blogs?\/[^/]+/.test(location.pathname);
@@ -759,7 +731,7 @@ export default function SeoManager({ siteSettings }) {
     return () => {
       isMounted = false;
     };
-  }, [location, siteSettings, brand.siteName]);
+  }, [location, siteSettings, brand.siteName, products, categories]);
 
   return null;
 }

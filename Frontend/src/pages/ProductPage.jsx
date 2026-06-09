@@ -3,6 +3,7 @@ import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { trackAnalyticsEvent } from "../api/analyticsApi";
 import { fetchProductOffers } from "../api/couponApi";
 import {
+  checkDeliveryPincode,
   fetchProductReviewMediaGallery,
   fetchProductReviewSummary,
   fetchStorefrontProduct,
@@ -68,6 +69,13 @@ const REVIEWER_FILTER_OPTIONS = [
   { label: "Verified purchase only", value: "verified" }
 ];
 
+function renderDeliveryTemplate(template, values) {
+  return Object.entries(values).reduce(
+    (message, [key, value]) => message.replaceAll(`{${key}}`, String(value || "")),
+    String(template || "")
+  );
+}
+
 function formatOfferDiscount(offer) {
   if (offer.discountType === "fixed") return `Rs. ${Number(offer.discountValue || 0).toLocaleString("en-IN")} off`;
   return `${Number(offer.discountValue || 0).toLocaleString("en-IN")}% off`;
@@ -102,6 +110,8 @@ function normalizeBackendProduct(product) {
   const stockQuantity = Number(product.stockQuantity || 0);
   const discount = mrp > price && price > 0 ? Math.round(((mrp - price) / mrp) * 100) : 0;
   const gallery = resolveMediaList(product.galleryUrls).filter(hasMediaUrl);
+  const videoUrls = resolveMediaList(product.videoUrls).filter(hasMediaUrl);
+  const primaryImage = gallery[0] || resolveMediaUrl(product.imageUrl);
 
   return {
     id: product.id,
@@ -115,10 +125,13 @@ function normalizeBackendProduct(product) {
     price,
     mrp,
     discount,
-    image: gallery[0] || resolveMediaUrl(product.imageUrl),
-    gallery,
-    highlights: [product.shortDescription || "New Avyona product"].filter(Boolean),
-    description: product.description ? String(product.description).split(/\n+/).filter(Boolean) : [product.shortDescription || "Product details will be updated soon."],
+    image: primaryImage,
+    gallery: [...gallery, ...videoUrls],
+    video: videoUrls[0] || "",
+    videoUrls,
+    videoPoster: primaryImage,
+    highlights: [product.shortDescription].filter(Boolean),
+    description: product.description ? String(product.description).split(/\n+/).filter(Boolean) : [product.shortDescription].filter(Boolean),
     rating: Number(product.rating || 0),
     reviewCount: Number(product.reviewCount || 0),
     availableStock: stockQuantity,
@@ -162,7 +175,7 @@ function getVariantDisplayLabel(source, fallback = "") {
 }
 
 function isVideoUrl(value) {
-  return /\.(mp4|webm|ogg)(\?.*)?$/i.test(String(value || "").trim());
+  return /\.(mp4|webm|ogg|mov)(\?.*)?$/i.test(String(value || "").trim());
 }
 
 function ProductMediaFallback({ compact = false }) {
@@ -386,6 +399,7 @@ export default function ProductPage({ context }) {
   });
   const [pincode, setPincode] = useState("");
   const [deliveryMessage, setDeliveryMessage] = useState("");
+  const [isCheckingDelivery, setIsCheckingDelivery] = useState(false);
   const [reviewFormOpen, setReviewFormOpen] = useState(false);
   const [guestReviewName, setGuestReviewName] = useState("");
   const [guestReviewEmail, setGuestReviewEmail] = useState("");
@@ -782,9 +796,7 @@ export default function ProductPage({ context }) {
     });
   const dynamicDeliveryText = `Estimated Delivery: ${shippingSettings.deliveryTime || "3 to 5 business days"}`;
   const dynamicDispatchText = `Dispatch Time: ${shippingSettings.dispatchTime || "24 to 48 hours"}`;
-  const dynamicShippingText = shippingSettings.shippingCharges
-    ? `Shipping: ${shippingSettings.shippingCharges}`
-    : (product.shippingText || "Shipping: Secure packaging with safe handling");
+  const dynamicShippingText = "Shipping: Free";
   const dynamicCodText = paymentSettings.codEnabled
     ? "COD: Available for eligible locations"
     : "COD: Currently disabled for this store";
@@ -876,14 +888,44 @@ export default function ProductPage({ context }) {
     navigate("/checkout");
   };
 
-  const handlePincodeCheck = (event) => {
+  const handlePincodeCheck = async (event) => {
     event.preventDefault();
     const trimmed = pincode.trim();
     if (!/^\d{6}$/.test(trimmed)) {
       setDeliveryMessage("Enter a valid 6-digit pincode to check delivery.");
       return;
     }
-    setDeliveryMessage(`Delivery to ${trimmed} is available in ${shippingSettings.deliveryTime || "3 to 5 business days"}. Dispatch starts within ${shippingSettings.dispatchTime || "24 to 48 hours"}.`);
+
+    setIsCheckingDelivery(true);
+    setDeliveryMessage("");
+    try {
+      const response = await checkDeliveryPincode(trimmed);
+      const result = response.data || {};
+      const templates = response.messageTemplates || {};
+      const deliveryTime = shippingSettings.deliveryTime || "3 to 5 business days";
+      const templateValues = {
+        pincode: trimmed,
+        state: result.state || "",
+        delivery_time: deliveryTime
+      };
+
+      if (!result.available) {
+        setDeliveryMessage(renderDeliveryTemplate(
+          templates.unavailable || "Delivery Unavailable for {pincode}.",
+          templateValues
+        ));
+        return;
+      }
+
+      const template = result.codAvailable
+        ? templates.availableCod || "Delivery Available for {pincode} ({state}). Cash on Delivery Available. Estimated delivery: {delivery_time}."
+        : templates.availableNoCod || "Delivery Available for {pincode} ({state}). Cash on Delivery Not Available. Estimated delivery: {delivery_time}.";
+      setDeliveryMessage(renderDeliveryTemplate(template, templateValues));
+    } catch (error) {
+      setDeliveryMessage(error.message || "Unable to check delivery availability. Please try again.");
+    } finally {
+      setIsCheckingDelivery(false);
+    }
   };
 
   const loadMoreReviews = () => {
@@ -1300,7 +1342,7 @@ export default function ProductPage({ context }) {
             {activeMedia.type === "placeholder" ? (
               <ProductMediaFallback />
             ) : activeMedia.type === "video" ? (
-              <video controls poster={product.videoPoster || product.image} src={activeMedia.src} />
+              <video controls poster={resolveMediaUrl(product.videoPoster || product.image)} src={activeMedia.src} />
             ) : (
               <>
                 <img
@@ -1323,7 +1365,16 @@ export default function ProductPage({ context }) {
                     height: zoomMetrics.lensHeight ? `${zoomMetrics.lensHeight}px` : undefined
                   }}
                 />
-                <span className="avy-gallery-zoom-hint">{mobileZoomActive ? "Release to close zoom" : "Hover or press and hold to zoom"}</span>
+                <span className="avy-gallery-zoom-hint">
+                  {mobileZoomActive ? (
+                    "Release to close zoom"
+                  ) : (
+                    <>
+                      <span className="avy-gallery-zoom-hint-desktop">Hover to zoom</span>
+                      <span className="avy-gallery-zoom-hint-mobile">Press and hold to zoom</span>
+                    </>
+                  )}
+                </span>
               </>
             )}
             </div>
@@ -1362,7 +1413,7 @@ export default function ProductPage({ context }) {
                 {item.type === "placeholder" ? (
                   <ProductMediaFallback compact />
                 ) : (
-                  <img src={item.thumb || item.src} alt={item.alt} />
+                  <img src={resolveMediaUrl(item.thumb || item.src)} alt={item.alt} />
                 )}
                 {item.type === "video" ? <span className="avy-gallery-badge">Video</span> : null}
               </button>
@@ -1480,7 +1531,7 @@ export default function ProductPage({ context }) {
                       >
                         <span className="avy-variant-media">
                           {hasMediaUrl(groupProduct.image) ? (
-                            <img src={groupProduct.image} alt={groupProduct.variantValue || groupProduct.name} />
+                            <img src={resolveMediaUrl(groupProduct.image)} alt={groupProduct.variantValue || groupProduct.name} />
                           ) : (
                             <ProductMediaFallback compact />
                           )}
@@ -1511,7 +1562,7 @@ export default function ProductPage({ context }) {
                     >
                       <span className="avy-variant-media">
                         {hasMediaUrl(variant.image || product.image) ? (
-                          <img src={variant.image || product.image} alt={variant.label} />
+                          <img src={resolveMediaUrl(variant.image || product.image)} alt={variant.label} />
                         ) : (
                           <ProductMediaFallback compact />
                         )}
@@ -1586,7 +1637,7 @@ export default function ProductPage({ context }) {
                   value={pincode}
                   onChange={(event) => setPincode(event.target.value.replace(/\D+/g, ""))}
                 />
-                <button type="submit">Check</button>
+                <button type="submit" disabled={isCheckingDelivery}>{isCheckingDelivery ? "Checking..." : "Check"}</button>
               </form>
               {deliveryMessage ? <p className="avy-helper-note avy-delivery-message">{deliveryMessage}</p> : null}
             </div>
@@ -1801,7 +1852,7 @@ export default function ProductPage({ context }) {
                   <button key={item.key} type="button" className="avy-media-card avy-media-card-button" onClick={() => setReviewMediaPreviewIndex(index)}>
                     {item.type === "video" ? (
                       <>
-                        <video muted playsInline poster={product.videoPoster || product.image} src={item.src} />
+                        <video muted playsInline poster={resolveMediaUrl(product.videoPoster || product.image)} src={item.src} />
                         <span className="avy-media-play-icon" aria-hidden="true">▶</span>
                       </>
                     ) : (
@@ -2035,7 +2086,7 @@ export default function ProductPage({ context }) {
                 >
                   {item.type === "video" ? (
                     <>
-                      <video muted playsInline poster={product.videoPoster || product.image} src={item.src} />
+                      <video muted playsInline poster={resolveMediaUrl(product.videoPoster || product.image)} src={item.src} />
                       <span className="avy-media-play-icon" aria-hidden="true">▶</span>
                     </>
                   ) : (
@@ -2098,7 +2149,7 @@ export default function ProductPage({ context }) {
             {activeMedia.type === "placeholder" ? (
               <ProductMediaFallback />
             ) : activeMedia.type === "video" ? (
-              <video controls autoPlay poster={product.videoPoster || product.image} src={activeMedia.src} />
+              <video controls autoPlay poster={resolveMediaUrl(product.videoPoster || product.image)} src={activeMedia.src} />
             ) : (
               <img src={activeMedia.src} alt={activeMedia.alt} />
             )}

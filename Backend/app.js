@@ -2,6 +2,7 @@ import cors from "cors";
 import express from "express";
 import morgan from "morgan";
 import path from "path";
+import { fileURLToPath } from "url";
 import { env } from "./config/env.js";
 import { getRobotsTxt, getSitemapXml } from "./controllers/seoController.js";
 import { errorHandler, notFoundHandler } from "./middlewares/errorHandler.js";
@@ -10,10 +11,11 @@ import { asyncHandler } from "./utils/asyncHandler.js";
 import v1Routes from "./routes/v1/index.js";
 
 const app = express();
-const uploadDirectory = path.resolve(process.cwd(), "uploads");
+const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
+const uploadDirectory = path.resolve(currentDirectory, "uploads");
 const allowedOrigins = new Set(
   env.nodeEnv === "production"
-    ? [env.frontendOrigin, env.siteUrl].filter(Boolean)
+    ? [env.frontendOrigin, env.dashboardOrigin, env.siteUrl, ...env.allowedOrigins].filter(Boolean)
     : [
       env.frontendOrigin,
       "http://localhost:5173",
@@ -36,7 +38,13 @@ app.use(cors({
   }
 }));
 app.use(morgan(env.nodeEnv === "production" ? "combined" : "dev"));
-app.use(express.json());
+app.use(express.json({
+  verify(request, _response, buffer) {
+    if (request.originalUrl?.startsWith("/api/v1/payments/razorpay/webhook")) {
+      request.rawBody = Buffer.from(buffer);
+    }
+  }
+}));
 app.use(express.urlencoded({ extended: true }));
 app.use("/uploads", express.static(uploadDirectory, {
   maxAge: env.nodeEnv === "production" ? "30d" : 0,

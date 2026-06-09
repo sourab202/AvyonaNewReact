@@ -4,6 +4,7 @@ import XLSX from "xlsx";
 import { query } from "../config/db.js";
 import { ApiError } from "../utils/apiError.js";
 import { slugify } from "../utils/slugify.js";
+import { readTabularBuffer, SUPPORTED_TABULAR_FORMAT_LABEL } from "../utils/tabularImport.js";
 
 const localProductsPath = path.resolve(process.cwd(), "data", "local-products.json");
 const inventoryImportJobs = new Map();
@@ -655,6 +656,39 @@ async function replaceProductImages(productId, imageUrls = [], productName = "")
   }
 }
 
+function normalizeMediaUrls(urls = []) {
+  return [...new Set((Array.isArray(urls) ? urls : [])
+    .map((url) => String(url || "").trim())
+    .filter(Boolean))];
+}
+
+async function replaceProductMediaAssets(productId, imageUrls = [], videoUrls = [], productName = "") {
+  const normalizedImageUrls = normalizeImageUrls(imageUrls);
+  const normalizedVideoUrls = normalizeMediaUrls(videoUrls);
+
+  if (!normalizedImageUrls.length && !normalizedVideoUrls.length) return;
+
+  await query("DELETE FROM product_media WHERE product_id = ?", [productId]);
+
+  for (const [index, url] of normalizedImageUrls.entries()) {
+    await query(
+      `INSERT INTO product_media
+        (product_id, media_type, url, alt_text, sort_order, is_primary)
+       VALUES (?, 'image', ?, ?, ?, ?)`,
+      [productId, url, productName || null, index, index === 0 ? 1 : 0]
+    );
+  }
+
+  for (const [index, url] of normalizedVideoUrls.entries()) {
+    await query(
+      `INSERT INTO product_media
+        (product_id, media_type, url, alt_text, sort_order, is_primary)
+       VALUES (?, 'video', ?, ?, ?, 0)`,
+      [productId, url, productName || null, normalizedImageUrls.length + index]
+    );
+  }
+}
+
 function getSequentialInventoryValues(row, prefix, max = 20) {
   const values = [];
   for (let index = 1; index <= max; index += 1) {
@@ -1116,11 +1150,34 @@ function parseJsonValue(value, fallback) {
   }
 }
 
-function readInventoryWorkbook(filePath) {
-  const workbook = XLSX.readFile(filePath);
-  const sheetName = workbook.SheetNames[0];
-  const worksheet = workbook.Sheets[sheetName];
-  return XLSX.utils.sheet_to_json(worksheet, { defval: "" });
+async function readInventoryWorkbook(filePath, fileName = filePath) {
+  const buffer = await fs.readFile(filePath);
+  return readTabularBuffer(buffer, fileName);
+}
+
+function getInventoryFixGuidance(errorMessage) {
+  const error = String(errorMessage || "");
+  if (error.startsWith("Missing required column:")) return `Add the exact header "${error.split(":").slice(1).join(":").trim()}" to the first row of the file.`;
+  if (error === "ASIN is required") return "Enter a unique ASIN value in the ASIN column.";
+  if (error === "SKU is required") return "Enter a unique SKU value in the SKU column.";
+  if (error.includes("Duplicate ASIN")) return "Keep each ASIN on only one row, then upload the corrected file again.";
+  if (error.includes("Duplicate SKU")) return "Keep each SKU on only one row, then upload the corrected file again.";
+  if (error.includes("belong to different products")) return "Use the ASIN and SKU from the same existing product, or create a new unique pair.";
+  if (error.includes("does not exist for update")) return "Use Create + Update mode, or first create the product with the Full Product template.";
+  if (error.includes("Category is required")) return "Enter a category for every new product.";
+  if (error.includes("Category does not exist")) return "Use an existing category name or enable auto-create missing category/brand.";
+  if (error.includes("Subcategory does not exist")) return "Use an existing subcategory name or enable auto-create missing category/brand.";
+  if (error.includes("Brand is required")) return "Enter a brand for every product row.";
+  if (error.includes("Brand does not exist")) return "Use an existing brand name or enable auto-create missing category/brand.";
+  if (error.includes("Selling Price")) return "Enter Selling Price as a number without currency symbols or words.";
+  if (error.includes("MRP format")) return "Enter MRP as a number without currency symbols or words.";
+  if (error.includes("Stock Quantity")) return "Enter Stock Quantity as a whole number, for example 0, 5, or 25.";
+  if (error.includes("Product Status")) return "Use a supported product status such as active, inactive, draft, or archived.";
+  if (error.includes("Stock Status")) return "Use in-stock, low-stock, or out-of-stock.";
+  if (error.includes("not a valid URL")) return "Enter a complete http:// or https:// URL, or leave the optional URL field empty.";
+  if (error.includes("Slug is already used")) return "Choose a unique Product Slug or leave it empty so the system can generate one.";
+  if (error.includes("Related product ASIN/SKU")) return "Remove the unknown related key or replace it with an ASIN/SKU that already exists.";
+  return "Correct the highlighted value using the downloaded template, then validate the file again.";
 }
 
 function parseInventoryUpdateControls(value, templateType = "full-product") {
@@ -1433,7 +1490,10 @@ async function saveInventoryFailedRows(importId, failedRows = []) {
         Number(item.rowNumber || 0),
         item.asin || null,
         item.sku || null,
-        (item.errors || []).join("; ") || "Import failed",
+        [
+          `Reason: ${(item.errors || []).join("; ") || "Import failed"}`,
+          `How to fix: ${(item.fixes || []).join("; ") || getInventoryFixGuidance((item.errors || [])[0])}`
+        ].join(" | "),
         JSON.stringify(item.row || {})
       ]
     );
@@ -1463,6 +1523,73 @@ async function persistInventoryJobProgress(job) {
       job.id
     ]
   );
+}
+
+async function restoreInventoryImportJob(jobId) {
+  const cachedJob = inventoryImportJobs.get(jobId);
+  if (cachedJob) return cachedJob;
+
+  await ensureInventoryImportTables();
+  const rows = await query("SELECT * FROM inventory_import_jobs WHERE id = ? LIMIT 1", [jobId]);
+  if (!rows.length) return null;
+
+  const row = rows[0];
+  const report = parseJsonValue(row.report_data, {});
+  const config = report.config || {};
+  const templateType = String(row.template_type || "full-product");
+  const importType = String(row.import_type || "create-update");
+  const autoCreateMissingCategoryBrand = normalizeBooleanFlag(config.autoCreateMissingCategoryBrand);
+  const updateControls = parseInventoryUpdateControls(config.updateControls, templateType);
+
+  try {
+    await fs.access(row.stored_file_path);
+  } catch {
+    throw new ApiError(410, "The uploaded inventory file is no longer available. Please upload it again.");
+  }
+
+  const workbookRows = await readInventoryWorkbook(row.stored_file_path, row.file_name);
+  const validation = await runInventoryValidation({
+    rows: workbookRows,
+    templateType,
+    importType,
+    autoCreateMissingCategoryBrand
+  });
+  const job = {
+    id: row.id,
+    status: row.status,
+    filePath: row.stored_file_path,
+    originalFileName: row.file_name,
+    templateType,
+    importType,
+    autoCreateMissingCategoryBrand,
+    updateControls,
+    validation,
+    validRows: validation.validRowDetails || [],
+    totalRows: Number(row.total_rows || validation.validRows || 0),
+    processedRows: Number(row.processed_rows || 0),
+    successRows: Number(row.success_rows || 0),
+    failedRows: Number(row.failed_rows || 0),
+    currentBatch: Number(row.current_batch || 0),
+    batchSize: inventoryImportBatchSize,
+    cancelRequested: false,
+    createdAt: row.created_at,
+    report: {
+      createdAt: report.createdAt || row.created_at,
+      finishedAt: report.finishedAt || null,
+      createdRows: Number(report.createdRows || 0),
+      updatedRows: Number(report.updatedRows || 0),
+      skippedRows: Number(report.skippedRows || 0),
+      failedRows: Array.isArray(report.failedRows) ? report.failedRows : [],
+      config: {
+        autoCreateMissingCategoryBrand,
+        updateControls
+      }
+    },
+    error: report.error || ""
+  };
+
+  inventoryImportJobs.set(jobId, job);
+  return job;
 }
 
 function processInventoryJob(jobId) {
@@ -1500,6 +1627,7 @@ function processInventoryJob(jobId) {
         asin: item.asin,
         sku: item.sku,
         errors: [error.message || "Import failed"],
+        fixes: [getInventoryFixGuidance(error.message)],
         row: item.row
       };
       job.report.failedRows.push(failedRow);
@@ -2332,7 +2460,11 @@ async function runInventoryValidation({ rows = [], templateType = "full-product"
     const rowStatus = shouldSkipExistingCreateOnly || shouldSkipMissingUpdateOnly ? "skipped" : existingProduct ? "existing" : "new";
     const resultRow = { rowNumber, asin, sku, status: rowStatus, row };
     if (errors.length) {
-      failedRows.push({ ...resultRow, errors });
+      failedRows.push({
+        ...resultRow,
+        errors,
+        fixes: [...new Set(errors.map(getInventoryFixGuidance))]
+      });
     } else {
       validRows.push(resultRow);
       if (rowStatus === "skipped") skippedProducts += 1;
@@ -2378,11 +2510,11 @@ export async function validateInventoryImport(request, response) {
 
 export async function createInventoryImportJob(request, response) {
   if (!request.file) {
-    throw new ApiError(400, "Inventory .xlsx file is required");
+    throw new ApiError(400, `Inventory file is required. Supported formats: ${SUPPORTED_TABULAR_FORMAT_LABEL}.`);
   }
 
   await ensureInventoryImportTables();
-  const rows = readInventoryWorkbook(request.file.path);
+  const rows = await readInventoryWorkbook(request.file.path, request.file.originalname);
   const templateType = String(request.body?.templateType || "full-product").trim();
   const importType = String(request.body?.importType || "create-update").trim();
   const updateControls = parseInventoryUpdateControls(request.body?.updateControls, templateType);
@@ -2419,7 +2551,11 @@ export async function createInventoryImportJob(request, response) {
       createdRows: 0,
       updatedRows: 0,
       skippedRows: 0,
-      failedRows: validation.failedRowDetails || []
+      failedRows: validation.failedRowDetails || [],
+      config: {
+        autoCreateMissingCategoryBrand,
+        updateControls
+      }
     }
   };
   inventoryImportJobs.set(jobId, job);
@@ -2452,9 +2588,12 @@ export async function createInventoryImportJob(request, response) {
 }
 
 export async function startInventoryImportJob(request, response) {
-  const job = inventoryImportJobs.get(String(request.params.jobId || ""));
+  const job = await restoreInventoryImportJob(String(request.params.jobId || ""));
   if (!job) throw new ApiError(404, "Import job not found");
   if (job.status === "completed") throw new ApiError(409, "Import job is already completed");
+  if (job.status === "failed" && job.processedRows >= job.totalRows && job.totalRows > 0) {
+    throw new ApiError(409, "Import job already finished with failed rows. Review the failed-row report or retry those rows.");
+  }
   if (!["queued", "failed"].includes(job.status)) throw new ApiError(409, "Import job cannot be started in its current state");
   if (!job.validation.validRows) throw new ApiError(400, "Import job has no valid rows to process");
 
@@ -2500,7 +2639,7 @@ export async function getInventoryImportJob(request, response) {
 }
 
 export async function cancelInventoryImportJob(request, response) {
-  const job = inventoryImportJobs.get(String(request.params.jobId || ""));
+  const job = await restoreInventoryImportJob(String(request.params.jobId || ""));
   if (!job) throw new ApiError(404, "Import job not found");
   if (["completed", "failed", "cancelled"].includes(job.status)) {
     response.json({ success: true, data: getJobProgress(job) });
@@ -2626,7 +2765,11 @@ export async function retryInventoryImportFailedRows(request, response) {
       createdRows: 0,
       updatedRows: 0,
       skippedRows: 0,
-      failedRows: validation.failedRowDetails || []
+      failedRows: validation.failedRowDetails || [],
+      config: {
+        autoCreateMissingCategoryBrand: normalizeBooleanFlag(request.body?.autoCreateMissingCategoryBrand),
+        updateControls: parseInventoryUpdateControls(request.body?.updateControls, sourceRows[0].templateType)
+      }
     }
   };
   inventoryImportJobs.set(jobId, job);
@@ -2731,6 +2874,7 @@ export async function createProduct(request, response) {
     reviewCount = 0,
     imageUrl = "",
     imageUrls = [],
+    videoUrls = [],
     status = "draft",
     sortOrder = 0
   } = request.body || {};
@@ -2778,7 +2922,7 @@ export async function createProduct(request, response) {
       ]
     );
 
-    await replaceProductImages(result.insertId, normalizeImageUrls(imageUrls, imageUrl), name);
+    await replaceProductMediaAssets(result.insertId, normalizeImageUrls(imageUrls, imageUrl), videoUrls, name);
 
     const created = await attachProductMedia(await query("SELECT * FROM products WHERE id = ? LIMIT 1", [result.insertId]));
 
@@ -2820,6 +2964,7 @@ export async function updateProduct(request, response) {
     reviewCount,
     imageUrl,
     imageUrls,
+    videoUrls,
     status,
     sortOrder
   } = request.body || {};
@@ -2882,8 +3027,8 @@ export async function updateProduct(request, response) {
       ]
     );
 
-    if (Array.isArray(imageUrls) && imageUrls.length) {
-      await replaceProductImages(Number(request.params.id), normalizeImageUrls(imageUrls, imageUrl), nextName);
+    if ((Array.isArray(imageUrls) && imageUrls.length) || (Array.isArray(videoUrls) && videoUrls.length)) {
+      await replaceProductMediaAssets(Number(request.params.id), normalizeImageUrls(imageUrls || [], imageUrl), videoUrls || [], nextName);
     }
 
     const updated = await attachProductMedia(await query("SELECT * FROM products WHERE id = ? LIMIT 1", [Number(request.params.id)]));

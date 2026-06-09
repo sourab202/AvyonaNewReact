@@ -29,7 +29,7 @@ function ProtectedDashboard({ isAuthenticated }) {
     };
   }, [isAuthenticated]);
 
-  if (!isAuthenticated) return <Navigate to="/login" replace />;
+  if (!isAuthenticated) return <Navigate to="/dashboard/login" replace />;
   if (isVerifying) return <div style={{ padding: "24px", color: "#475569", fontWeight: 700 }}>Checking admin session...</div>;
   return <AppRoutes />;
 }
@@ -48,6 +48,7 @@ function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login isAuthenticated={isAuthenticated} />} />
+      <Route path="/dashboard/login" element={<Login isAuthenticated={isAuthenticated} />} />
       <Route path="/dashboard/*" element={<ProtectedDashboard isAuthenticated={isAuthenticated} />} />
       <Route path="/homepage/hero-banner" element={<Navigate to="/dashboard/homepage/hero-banner" replace />} />
       <Route path="/homepage/browse-categories" element={<Navigate to="/dashboard/homepage/browse-categories" replace />} />

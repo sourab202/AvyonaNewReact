@@ -4,6 +4,8 @@ import { deleteCustomerAddress, fetchCustomerAddresses, fetchCustomerReferral, f
 import { resolveMediaUrl } from "../utils/media";
 import { compressImageFile, formatCurrency, getMergedProfile } from "../utils/storefront";
 
+const GST_NUMBER_PATTERN = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/i;
+
 function ProfileProductImage({ src, alt }) {
   return src ? <img src={resolveMediaUrl(src)} alt={alt} /> : <span className="profile-no-image">No image</span>;
 }
@@ -301,15 +303,25 @@ export default function ProfilePage({ context }) {
   const saveProfile = async (event) => {
     event.preventDefault();
     const parts = profile.fullName.split(/\s+/);
+    const businessDetails = {
+      isBusinessAccount: Boolean(profile.isBusinessAccount || profile.businessName || profile.gstNumber),
+      businessName: String(profile.businessName || "").trim(),
+      gstNumber: String(profile.gstNumber || "").trim().toUpperCase()
+    };
+    if (businessDetails.gstNumber && !GST_NUMBER_PATTERN.test(businessDetails.gstNumber)) {
+      context.notify("Please enter a valid GST number or leave it blank.");
+      return;
+    }
     try {
       const response = await updateCustomerProfile({
         fullName: profile.fullName,
         email: profile.email,
-        mobile: profile.mobile
+        mobile: profile.mobile,
+        businessDetails
       });
       const customer = response.data?.customer;
       if (customer) {
-        context.setAuthUser({ id: customer.id, fullName: customer.fullName, email: customer.email, mobile: customer.mobile });
+        context.setAuthUser({ id: customer.id, fullName: customer.fullName, email: customer.email, mobile: customer.mobile, businessDetails: customer.businessDetails || businessDetails });
       }
       context.setCustomerProfile({
         ...context.customerProfile,
@@ -318,7 +330,11 @@ export default function ProfilePage({ context }) {
         email: profile.email,
         phone: profile.mobile,
         address: profile.address,
-        image: profile.image
+        image: profile.image,
+        businessDetails,
+        isBusinessAccount: businessDetails.isBusinessAccount,
+        businessName: businessDetails.businessName,
+        gstNumber: businessDetails.gstNumber
       });
       context.notify("Profile saved");
       setIsEditingProfile(false);
@@ -464,7 +480,7 @@ export default function ProfilePage({ context }) {
           </div>
           <div className="profile-detail-card">
             <div className="profile-avatar-wrap">
-              <img className="profile-avatar" src={profile.image} alt="Profile avatar" />
+              <img className="profile-avatar" src={resolveMediaUrl(profile.image)} alt="Profile avatar" />
               <label className="profile-avatar-edit" htmlFor="profileImageInput">Edit Photo</label>
               <input id="profileImageInput" name="profileImage" type="file" accept="image/*" hidden onChange={updateProfileImage} />
             </div>
@@ -474,6 +490,9 @@ export default function ProfilePage({ context }) {
                 <div><span>Phone</span><strong>{profile.mobile || "Not added"}</strong></div>
                 <div><span>Email</span><strong>{profile.email || "Not added"}</strong></div>
                 <div><span>Default Address</span><strong>{profile.address || "Not added"}</strong></div>
+                <div><span>Business Account</span><strong>{profile.isBusinessAccount || profile.businessName || profile.gstNumber ? "Yes" : "No"}</strong></div>
+                <div><span>Business Name</span><strong>{profile.businessName || "Not added"}</strong></div>
+                <div><span>GST Number</span><strong>{profile.gstNumber || "Not added"}</strong></div>
               </div>
             ) : (
               <form id="profile-details-form" name="profileDetailsForm" className="profile-form" onSubmit={saveProfile}>
@@ -482,6 +501,9 @@ export default function ProfilePage({ context }) {
                   <label className="profile-field" htmlFor="profile-email"><span>Email Address</span><input id="profile-email" name="email" type="email" autoComplete="email" value={profile.email} onChange={(event) => setProfile({ ...profile, email: event.target.value })} /></label>
                   <label className="profile-field" htmlFor="profile-mobile"><span>Mobile Number</span><input id="profile-mobile" name="mobile" autoComplete="tel" value={profile.mobile} onChange={(event) => setProfile({ ...profile, mobile: event.target.value })} /></label>
                   <label className="profile-field" htmlFor="profile-address"><span>Default Address</span><textarea id="profile-address" name="address" autoComplete="street-address" rows="4" value={profile.address} onChange={(event) => setProfile({ ...profile, address: event.target.value })} /></label>
+                  <label className="profile-field profile-field-wide profile-business-toggle" htmlFor="profile-business-account"><span>Business Purchase Account</span><span className="profile-checkbox-row"><input id="profile-business-account" name="isBusinessAccount" type="checkbox" checked={Boolean(profile.isBusinessAccount)} onChange={(event) => setProfile({ ...profile, isBusinessAccount: event.target.checked })} />Enable business details for invoices</span></label>
+                  <label className="profile-field" htmlFor="profile-business-name"><span>Business Name</span><input id="profile-business-name" name="businessName" autoComplete="organization" value={profile.businessName || ""} onChange={(event) => setProfile({ ...profile, businessName: event.target.value })} placeholder="Optional" /></label>
+                  <label className="profile-field" htmlFor="profile-gst-number"><span>GST Number</span><input id="profile-gst-number" name="gstNumber" autoComplete="off" value={profile.gstNumber || ""} onChange={(event) => setProfile({ ...profile, gstNumber: event.target.value.toUpperCase() })} placeholder="Optional" /></label>
                 </div>
                 <div className="profile-form-actions"><button className="primary-button" type="submit">Save Profile</button></div>
               </form>
@@ -614,9 +636,10 @@ export default function ProfilePage({ context }) {
                         {media.slice(0, 3).map((item, index) => {
                           const url = item.url || item.mediaUrl || item;
                           const isVideo = String(item.type || item.mediaType || url).toLowerCase().includes("video") || /\.(mp4|webm|ogg)$/i.test(String(url));
+                          const mediaUrl = resolveMediaUrl(url);
                           return isVideo
-                            ? <video key={`${url}:${index}`} src={url} controls />
-                            : <img key={`${url}:${index}`} src={url} alt={`${review.productName || "Review"} media ${index + 1}`} />;
+                            ? <video key={`${url}:${index}`} src={mediaUrl} controls />
+                            : <img key={`${url}:${index}`} src={mediaUrl} alt={`${review.productName || "Review"} media ${index + 1}`} />;
                         })}
                       </div>
                     ) : null}
@@ -670,7 +693,7 @@ export default function ProfilePage({ context }) {
         <section className="profile-dashboard-layout">
           <aside className="profile-account-sidebar">
             <div className="profile-sidebar-user">
-              <img className="profile-sidebar-avatar" src={profile.image} alt="Profile avatar" />
+              <img className="profile-sidebar-avatar" src={resolveMediaUrl(profile.image)} alt="Profile avatar" />
               <div><strong>{profile.fullName || "Customer"}</strong><span>{profile.email || "No email added"}</span></div>
             </div>
             <nav className="profile-account-nav" aria-label="Account sections">

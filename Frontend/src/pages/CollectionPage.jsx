@@ -3,7 +3,7 @@ import { Link, Navigate, useParams, useSearchParams } from "react-router-dom";
 import { trackAnalyticsEvent } from "../api/analyticsApi";
 import { fetchStorefrontProducts } from "../api/productApi";
 import ProductCard from "../components/product/ProductCard";
-import { flattenCategoryTree, fallbackCategoryTree } from "../data/category-data";
+import { flattenCategoryTree } from "../data/category-data";
 import { resolveMediaList, resolveMediaUrl } from "../utils/media";
 import { formatCurrency } from "../utils/storefront";
 
@@ -17,7 +17,7 @@ function normalizeBackendProduct(product) {
 
   return {
     asin: product.asin,
-    sku: product.asin || product.sku,
+    sku: product.sku || product.asin,
     slug: product.slug,
     name: product.name,
     brand: product.brand,
@@ -28,8 +28,8 @@ function normalizeBackendProduct(product) {
     discount,
     image: primaryImage,
     gallery,
-    highlights: [product.shortDescription || "New Avyona product"].filter(Boolean),
-    description: product.description ? String(product.description).split(/\n+/).filter(Boolean) : [product.shortDescription || "Product details will be updated soon."],
+    highlights: [product.shortDescription].filter(Boolean),
+    description: product.description ? String(product.description).split(/\n+/).filter(Boolean) : [product.shortDescription].filter(Boolean),
     rating: Number(product.rating || 0),
     reviewCount: Number(product.reviewCount || 0),
     availableStock: stockQuantity,
@@ -72,7 +72,7 @@ function collectCategoryProducts(category, categoryLookup, productCatalog) {
 }
 
 function getCategoryTreeFromContext(context) {
-  return context.siteCategories && context.siteCategories.length ? context.siteCategories : fallbackCategoryTree;
+  return Array.isArray(context.siteCategories) ? context.siteCategories : [];
 }
 
 function getListParam(searchParams, key) {
@@ -92,6 +92,7 @@ export default function CollectionPage({ context }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const searchParamString = searchParams.toString();
   const pageRef = useRef(null);
+  const productsSectionRef = useRef(null);
   const trackedCategoryRef = useRef("");
   const trackedFilterRef = useRef("");
   const categoryTree = getCategoryTreeFromContext(context);
@@ -111,6 +112,7 @@ export default function CollectionPage({ context }) {
   const sortBy = searchParams.get("sort") || "latest";
   const page = Math.max(1, getNumberParam(searchParams, "page", 1));
   const [filterOpen, setFilterOpen] = useState(false);
+  const [sortOpen, setSortOpen] = useState(false);
   const [animationSeed, setAnimationSeed] = useState(0);
   const [serverProducts, setServerProducts] = useState([]);
   const [serverUnavailable, setServerUnavailable] = useState(false);
@@ -186,10 +188,23 @@ export default function CollectionPage({ context }) {
   const resetFilters = () => {
     setSearchParams(new URLSearchParams());
     setFilterOpen(false);
+    setSortOpen(false);
+  };
+
+  const scrollToProducts = () => {
+    productsSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  const handleHeroKeyDown = (event) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      scrollToProducts();
+    }
   };
 
   useEffect(() => {
     setFilterOpen(false);
+    setSortOpen(false);
   }, [slug]);
 
   useEffect(() => {
@@ -230,12 +245,12 @@ export default function CollectionPage({ context }) {
 
   useEffect(() => {
     document.body.classList.add("collection-page");
-    document.body.classList.toggle("collection-filters-open", filterOpen);
+    document.body.classList.toggle("collection-filters-open", filterOpen || sortOpen);
     return () => {
       document.body.classList.remove("collection-page");
       document.body.classList.remove("collection-filters-open");
     };
-  }, [filterOpen]);
+  }, [filterOpen, sortOpen]);
 
   useEffect(() => {
     if (!currentCategory) return undefined;
@@ -349,19 +364,32 @@ export default function CollectionPage({ context }) {
         <div className="collection-reference-layout">
           <section className="collection-reference-shell collection-shell-glow" data-animate="shell">
             {currentCategoryBannerUrl ? (
-              <div className="collection-hero-media" style={bannerShellStyle} data-animate="intro">
+              <div
+                className="collection-hero-media"
+                style={bannerShellStyle}
+                data-animate="intro"
+                role="button"
+                tabIndex={0}
+                onClick={scrollToProducts}
+                onKeyDown={handleHeroKeyDown}
+                aria-label="View products in this collection"
+              >
                 <img src={currentCategoryBannerUrl} alt={currentCategory.name} style={bannerImageStyle} />
               </div>
             ) : null}
 
             <div className="collection-summary collection-hero-copy" data-animate="intro">
               <p className="collection-product-count">{`${totalProductCount} PRODUCTS`}</p>
-              <h1>{currentCategory.name}</h1>
+              <h1>
+                <button className="collection-title-button" type="button" onClick={scrollToProducts}>
+                  {currentCategory.name}
+                </button>
+              </h1>
               <p>{currentCategory.description || "Browse products inside this category."}</p>
             </div>
           </section>
 
-          <section className="collection-products-shell" data-animate="panel">
+          <section ref={productsSectionRef} className="collection-products-shell" data-animate="panel">
             <div className="collection-reference-head">
               <div className="collection-summary secondary">
                 <h2>All Products</h2>
@@ -374,40 +402,46 @@ export default function CollectionPage({ context }) {
                   aria-expanded={filterOpen}
                   onClick={() => setFilterOpen(true)}
                 >
-                  Filters
+                  Filter
                 </button>
-                <label className="collection-sort-control">
-                  <span className="collection-sort-label">Sort By</span>
-                  <select className="collection-sort-select" value={sortBy} onChange={(event) => updateFilters({ sort: event.target.value })}>
-                    <option value="latest">Latest</option>
-                    <option value="price-low-high">Price: Low to High</option>
-                    <option value="price-high-low">Price: High to Low</option>
-                    <option value="popularity">Popularity</option>
-                    <option value="rating-high-low">Top Rated</option>
-                  </select>
-                </label>
+                <button
+                  className="collection-mobile-filter-toggle"
+                  type="button"
+                  aria-expanded={sortOpen}
+                  onClick={() => setSortOpen(true)}
+                >
+                  Sort By
+                </button>
                 <button className="collection-reset-button" type="button" onClick={resetFilters}>Reset Filters</button>
               </div>
             </div>
 
-            {filterOpen ? <div className="collection-filter-backdrop" onClick={() => setFilterOpen(false)} /> : null}
+            {filterOpen || sortOpen ? <div className="collection-filter-backdrop" onClick={() => { setFilterOpen(false); setSortOpen(false); }} /> : null}
+
+            <div className={`collection-filter-dialog collection-sort-dialog ${sortOpen ? "is-open" : ""}`} role="dialog" aria-modal="true" aria-label="Sort products">
+              <div className="filter-panel-header">
+                <div><h2>Sort Products</h2></div>
+                <button className="collection-filter-close" type="button" onClick={() => setSortOpen(false)} aria-label="Close sort options">×</button>
+              </div>
+              <label className="collection-sort-control collection-sort-dialog-control">
+                <span className="collection-sort-label">Sort By</span>
+                <select className="collection-sort-select" value={sortBy} onChange={(event) => updateFilters({ sort: event.target.value })}>
+                  <option value="latest">Latest</option>
+                  <option value="price-low-high">Price: Low to High</option>
+                  <option value="price-high-low">Price: High to Low</option>
+                  <option value="popularity">Popularity</option>
+                  <option value="rating-high-low">Top Rated</option>
+                </select>
+              </label>
+              <div className="collection-filter-dialog-actions">
+                <button className="collection-reset-button" type="button" onClick={() => setSortOpen(false)}>Done</button>
+              </div>
+            </div>
+
             <aside className={`filter-panel ${filterOpen ? "is-open" : ""}`}>
               <div className="filter-panel-header">
                 <div><h2>Filters</h2></div>
-                <button className="collection-filter-close" type="button" onClick={() => setFilterOpen(false)}>Close</button>
-              </div>
-
-              <div className="filter-group collection-filter-sort-group">
-                <label className="collection-sort-control">
-                  <span className="collection-sort-label">Sort By</span>
-                  <select className="collection-sort-select" value={sortBy} onChange={(event) => updateFilters({ sort: event.target.value })}>
-                    <option value="latest">Latest</option>
-                    <option value="price-low-high">Price: Low to High</option>
-                    <option value="price-high-low">Price: High to Low</option>
-                    <option value="popularity">Popularity</option>
-                    <option value="rating-high-low">Top Rated</option>
-                  </select>
-                </label>
+                <button className="collection-filter-close" type="button" onClick={() => setFilterOpen(false)} aria-label="Close filters">×</button>
               </div>
 
               {childCategories.length ? (
@@ -494,7 +528,10 @@ export default function CollectionPage({ context }) {
                 </div>
               </div>
 
-              <button className="collection-reset-button filter-reset" type="button" onClick={resetFilters}>Reset Filters</button>
+              <div className="collection-filter-dialog-actions">
+                <button className="collection-reset-button" type="button" onClick={resetFilters}>Reset</button>
+                <button className="collection-reset-button filter-apply" type="button" onClick={() => setFilterOpen(false)}>Done</button>
+              </div>
             </aside>
 
             <div className="collection-results-content">
@@ -532,15 +569,15 @@ export default function CollectionPage({ context }) {
 
 const bannerShellStyle = {
   width: "100%",
-  borderRadius: "22px",
+  borderRadius: "18px",
   overflow: "hidden",
   border: "1px solid rgba(203, 213, 225, 0.7)",
-  boxShadow: "0 14px 34px rgba(174, 203, 190, 0.12)"
+  boxShadow: "0 10px 24px rgba(148, 163, 184, 0.08)"
 };
 
 const bannerImageStyle = {
   width: "100%",
-  height: "260px",
+  height: "128px",
   objectFit: "cover",
   display: "block"
 };

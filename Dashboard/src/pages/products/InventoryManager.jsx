@@ -285,12 +285,28 @@ function downloadFailedRows(failedRows) {
     ASIN: item.asin,
     SKU: item.sku,
     Errors: item.errorReason || (item.errors || []).join("; "),
+    "How to Fix": (item.fixes || []).join("; ") || extractFixFromStoredError(item.errorReason),
     ...(item.originalRowData || item.row || {})
   }));
   const worksheet = XLSX.utils.json_to_sheet(flattenedRows);
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, "Failed Rows");
   XLSX.writeFile(workbook, `avyona-failed-inventory-rows-${formatExportDate()}.xlsx`, { bookType: "xlsx" });
+}
+
+const SUPPORTED_IMPORT_EXTENSIONS = [".xlsx", ".xls", ".csv", ".tsv", ".txt"];
+const SUPPORTED_IMPORT_ACCEPT = SUPPORTED_IMPORT_EXTENSIONS.join(",");
+
+function isSupportedImportFile(file) {
+  const name = String(file?.name || "").toLowerCase();
+  return SUPPORTED_IMPORT_EXTENSIONS.some((extension) => name.endsWith(extension));
+}
+
+function extractFixFromStoredError(errorReason) {
+  const marker = "How to fix:";
+  const value = String(errorReason || "");
+  const index = value.toLowerCase().indexOf(marker.toLowerCase());
+  return index >= 0 ? value.slice(index + marker.length).trim() : "";
 }
 
 function downloadBlob(response, fallbackFileName) {
@@ -476,10 +492,17 @@ export default function InventoryManager() {
     }));
   };
 
+  const handleTabChange = (tabId) => {
+    setActiveTab(tabId);
+    if (tabId === "update") {
+      updateUploadConfig("importType", "update-only");
+    }
+  };
+
   const selectInventoryFile = (file) => {
     if (!file) return;
-    if (!file.name.toLowerCase().endsWith(".xlsx")) {
-      setValidationMessage("Only .xlsx Excel files are supported.");
+    if (!isSupportedImportFile(file)) {
+      setValidationMessage("Unsupported format. Upload XLSX, XLS, CSV, TSV, or delimited TXT.");
       updateUploadConfig("file", null);
       return;
     }
@@ -511,12 +534,12 @@ export default function InventoryManager() {
 
   const handleStartValidation = async () => {
     if (!uploadConfig.file) {
-      setValidationMessage("Select an .xlsx inventory file before validation.");
+      setValidationMessage("Select an XLSX, XLS, CSV, TSV, or TXT inventory file before validation.");
       return;
     }
 
-    if (!uploadConfig.file.name.toLowerCase().endsWith(".xlsx")) {
-      setValidationMessage("Only .xlsx Excel files are supported.");
+    if (!isSupportedImportFile(uploadConfig.file)) {
+      setValidationMessage("Unsupported format. Upload XLSX, XLS, CSV, TSV, or delimited TXT.");
       return;
     }
 
@@ -538,7 +561,9 @@ export default function InventoryManager() {
       setValidationMessage(`${uploadConfig.file.name} validation completed.`);
       setActiveTab("validation");
     } catch (error) {
-      setValidationMessage(error.response?.data?.message || error.message || "Unable to validate inventory file.");
+      const message = error.response?.data?.message || error.message || "Unable to validate inventory file.";
+      const fix = error.response?.data?.details?.howToFix;
+      setValidationMessage(fix ? `${message} How to fix: ${fix}` : message);
     } finally {
       setIsValidating(false);
     }
@@ -650,7 +675,7 @@ export default function InventoryManager() {
   };
 
   return (
-    <section className="dashboard-page-shell dashboard-admin-page" style={pageStyle}>
+    <section className="dashboard-page-shell dashboard-admin-page inventory-manager-page" style={pageStyle}>
       <div className="dashboard-page-heading">
         <div>
           <h2 style={{ margin: 0 }}>Inventory Manager</h2>
@@ -661,33 +686,33 @@ export default function InventoryManager() {
         <span style={statusPillStyle}>Products / Inventory Manager</span>
       </div>
 
-      <section style={tabShellStyle}>
-        <div style={tabListStyle} role="tablist" aria-label="Inventory manager sections">
-          {tabs.map((tab) => {
-            const Icon = tab.icon;
-            const isActive = tab.id === activeTab;
+      <div className="inventory-manager-tabs" style={tabListStyle} role="tablist" aria-label="Inventory manager sections">
+        {tabs.map((tab) => {
+          const Icon = tab.icon;
+          const isActive = tab.id === activeTab;
 
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                role="tab"
-                aria-selected={isActive}
-                onClick={() => setActiveTab(tab.id)}
-                style={{
-                  ...tabButtonStyle,
-                  ...(isActive ? activeTabButtonStyle : null)
-                }}
-              >
-                <Icon aria-hidden="true" />
-                <span>{tab.label}</span>
-              </button>
-            );
-          })}
-        </div>
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              role="tab"
+              aria-selected={isActive}
+              onClick={() => handleTabChange(tab.id)}
+              className="inventory-manager-tab"
+              style={{
+                ...tabButtonStyle,
+                ...(isActive ? activeTabButtonStyle : null)
+              }}
+            >
+              <Icon aria-hidden="true" />
+              <span>{tab.label}</span>
+            </button>
+          );
+        })}
+      </div>
 
-        <article style={panelStyle}>
-          <div style={ruleBannerStyle}>
+      <article className="inventory-manager-panel" style={panelStyle}>
+          <div className="inventory-manager-rule-banner" style={ruleBannerStyle}>
             <strong>Master key rule</strong>
             <span>ASIN and SKU are separate unique product identity fields for every import, update, and export.</span>
             <span>If ASIN or SKU exists for the same product, the row updates that product. If both are new, the row creates a new product.</span>
@@ -708,7 +733,7 @@ export default function InventoryManager() {
 
           <p style={panelCopyStyle}>{activeTabConfig.description}</p>
 
-          <div style={actionGridStyle}>
+          <div className="inventory-manager-action-grid" style={actionGridStyle}>
             {activeTabConfig.actions.map((action) => (
               <div key={action} style={actionCardStyle}>
                 <FaTasks aria-hidden="true" />
@@ -717,18 +742,20 @@ export default function InventoryManager() {
             ))}
           </div>
 
-          {activeTab === "upload" ? (
-            <section style={exportPanelStyle}>
-              <div style={templateHeaderStyle}>
+          {["upload", "update"].includes(activeTab) ? (
+            <section className="inventory-manager-section" style={exportPanelStyle}>
+              <div className="inventory-manager-section-header" style={templateHeaderStyle}>
                 <div>
-                  <p style={eyebrowStyle}>Upload Inventory</p>
-                  <h4 style={templateTitleStyle}>Prepare Inventory File For Validation</h4>
+                  <p style={eyebrowStyle}>{activeTab === "update" ? "Update Existing Inventory" : "Upload Inventory"}</p>
+                  <h4 style={templateTitleStyle}>
+                    {activeTab === "update" ? "Prepare Existing Product Updates For Validation" : "Prepare Inventory File For Validation"}
+                  </h4>
                 </div>
-                <span style={modulePillStyle}>.xlsx Only</span>
+                <span style={modulePillStyle}>XLSX, XLS, CSV, TSV, TXT</span>
               </div>
 
-              <section style={templatePanelStyle}>
-                <div style={templateHeaderStyle}>
+              <section className="inventory-manager-template-panel" style={templatePanelStyle}>
+                <div className="inventory-manager-section-header" style={templateHeaderStyle}>
                   <div>
                     <p style={eyebrowStyle}>Excel Templates</p>
                     <h4 style={templateTitleStyle}>Download Import Templates</h4>
@@ -736,10 +763,10 @@ export default function InventoryManager() {
                   <span style={modulePillStyle}>ASIN + SKU Required</span>
                 </div>
 
-                <div style={templateGridStyle}>
+                <div className="inventory-manager-template-grid" style={templateGridStyle}>
                   {excelTemplates.map((template) => (
-                    <article key={template.id} style={templateCardStyle}>
-                      <div style={templateCardHeaderStyle}>
+                    <article className="inventory-manager-template-card" key={template.id} style={templateCardStyle}>
+                      <div className="inventory-manager-template-card-header" style={templateCardHeaderStyle}>
                         <span style={templateIconStyle}>
                           <FaFileExcel aria-hidden="true" />
                         </span>
@@ -763,8 +790,8 @@ export default function InventoryManager() {
                 </div>
               </section>
 
-              <div style={exportGridStyle}>
-                <label style={fieldStyle}>
+              <div className="inventory-manager-upload-grid" style={exportGridStyle}>
+                <div style={fieldStyle}>
                   <span>Select File</span>
                   <div
                     role="button"
@@ -794,8 +821,7 @@ export default function InventoryManager() {
                     <input
                       ref={fileInputRef}
                       type="file"
-                      accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                      onClick={(event) => event.stopPropagation()}
+                      accept={SUPPORTED_IMPORT_ACCEPT}
                       onChange={(event) => selectInventoryFile(event.target.files?.[0] || null)}
                       style={hiddenFileInputStyle}
                     />
@@ -803,11 +829,11 @@ export default function InventoryManager() {
                       <FaFileExcel aria-hidden="true" style={dropzoneIconStyle} />
                     </span>
                     <span style={dropzoneTextStyle}>
-                      <strong>{uploadConfig.file ? uploadConfig.file.name : "Click or drag .xlsx file"}</strong>
-                      <small>{uploadConfig.file ? `${Math.max(1, Math.round(uploadConfig.file.size / 1024))} KB selected` : "Excel workbook only"}</small>
+                      <strong>{uploadConfig.file ? uploadConfig.file.name : "Click or drag a product data file"}</strong>
+                      <small>{uploadConfig.file ? `${Math.max(1, Math.round(uploadConfig.file.size / 1024))} KB selected` : "XLSX, XLS, CSV, TSV, or delimited TXT"}</small>
                     </span>
                   </div>
-                </label>
+                </div>
 
                 <label style={fieldStyle}>
                   <span>Select Import Type</span>
@@ -837,14 +863,14 @@ export default function InventoryManager() {
                 </label>
               </div>
 
-              <section style={controlPanelStyle}>
+              <section className="inventory-manager-control-panel" style={controlPanelStyle}>
                 <div>
                   <p style={eyebrowStyle}>Update Control Options</p>
                   <h4 style={templateTitleStyle}>Choose Fields Allowed To Overwrite</h4>
                   <p style={controlCopyStyle}>Unchecked sections will be protected during import, preventing accidental overwrite.</p>
                 </div>
 
-                <div style={controlGridStyle}>
+                <div className="inventory-manager-control-grid" style={controlGridStyle}>
                   {[
                     ["basicInfo", "Update product basic info"],
                     ["pricing", "Update pricing"],
@@ -870,7 +896,7 @@ export default function InventoryManager() {
               </section>
 
               <div style={exportActionRowStyle}>
-                <button type="button" onClick={handleStartValidation} style={downloadButtonStyle}>
+                <button type="button" disabled={!uploadConfig.file || isValidating} onClick={handleStartValidation} style={downloadButtonStyle}>
                   <FaPlay aria-hidden="true" />
                   {isValidating ? "Validating..." : "Start Validation"}
                 </button>
@@ -880,7 +906,7 @@ export default function InventoryManager() {
           ) : null}
 
           {activeTab === "validation" ? (
-            <section style={exportPanelStyle}>
+            <section className="inventory-manager-section" style={exportPanelStyle}>
               <div style={templateHeaderStyle}>
                 <div>
                   <p style={eyebrowStyle}>Validation Results</p>
@@ -891,7 +917,7 @@ export default function InventoryManager() {
 
               {validationResult ? (
                 <>
-                  <div style={resultGridStyle}>
+                  <div className="inventory-manager-result-grid" style={resultGridStyle}>
                     {[
                       ["Total rows", validationResult.totalRows],
                       ["Valid rows", validationResult.validRows],
@@ -919,7 +945,8 @@ export default function InventoryManager() {
                           <div key={`${item.rowNumber}-${item.asin}-${item.sku}`} style={failedRowStyle}>
                             <span>{`Row ${item.rowNumber}`}</span>
                             <strong>{`${item.asin || "Missing ASIN"} / ${item.sku || "Missing SKU"}`}</strong>
-                            <small>{(item.errors || []).join("; ")}</small>
+                            <small>{`Reason: ${(item.errors || []).join("; ")}`}</small>
+                            <small style={{ color: "#166534" }}>{`How to fix: ${(item.fixes || []).join("; ")}`}</small>
                           </div>
                         ))}
                       </div>
@@ -948,14 +975,14 @@ export default function InventoryManager() {
               ) : (
                 <div style={placeholderStyle}>
                   <strong>No validation run yet.</strong>
-                  <p>Upload an `.xlsx` inventory file from the Upload Inventory tab and click Start Validation.</p>
+                  <p>Upload an XLSX, XLS, CSV, TSV, or TXT inventory file and click Start Validation.</p>
                 </div>
               )}
             </section>
           ) : null}
 
           {activeTab === "progress" ? (
-            <section style={exportPanelStyle}>
+            <section className="inventory-manager-section" style={exportPanelStyle}>
               <div style={templateHeaderStyle}>
                 <div>
                   <p style={eyebrowStyle}>Import Progress</p>
@@ -970,7 +997,7 @@ export default function InventoryManager() {
                     <div style={{ ...progressBarFillStyle, width: `${Math.min(100, Number(importJob.percentageCompleted || 0))}%` }} />
                   </div>
 
-                  <div style={resultGridStyle}>
+                  <div className="inventory-manager-result-grid" style={resultGridStyle}>
                     {[
                       ["Total rows", importJob.totalRows],
                       ["Processed rows", importJob.processedRows],
@@ -1004,14 +1031,14 @@ export default function InventoryManager() {
               ) : (
                 <div style={placeholderStyle}>
                   <strong>No import job started yet.</strong>
-                  <p>Validate an uploaded `.xlsx` file, then click Start Import.</p>
+                  <p>Validate an uploaded product data file, then click Start Import.</p>
                 </div>
               )}
             </section>
           ) : null}
 
           {activeTab === "history" ? (
-            <section style={exportPanelStyle}>
+            <section className="inventory-manager-section" style={exportPanelStyle}>
               <div style={templateHeaderStyle}>
                 <div>
                   <p style={eyebrowStyle}>Import History</p>
@@ -1022,7 +1049,7 @@ export default function InventoryManager() {
 
               {historyMessage ? <span style={exportMessageStyle}>{historyMessage}</span> : null}
 
-              <div style={tableWrapStyle}>
+              <div className="inventory-manager-table-wrap" style={tableWrapStyle}>
                 <table style={tableStyle}>
                   <thead>
                     <tr>
@@ -1066,7 +1093,7 @@ export default function InventoryManager() {
           ) : null}
 
           {activeTab === "failed" ? (
-            <section style={exportPanelStyle}>
+            <section className="inventory-manager-section" style={exportPanelStyle}>
               <div style={templateHeaderStyle}>
                 <div>
                   <p style={eyebrowStyle}>Failed Rows</p>
@@ -1078,11 +1105,11 @@ export default function InventoryManager() {
                 </button>
               </div>
 
-              <div style={tableWrapStyle}>
+              <div className="inventory-manager-table-wrap" style={tableWrapStyle}>
                 <table style={tableStyle}>
                   <thead>
                     <tr>
-                      {["Import ID", "Row number", "ASIN", "SKU", "Error reason", "Original row data"].map((heading) => (
+                      {["Import ID", "Row number", "ASIN", "SKU", "Error reason", "How to fix", "Original row data"].map((heading) => (
                         <th key={heading} style={thStyle}>{heading}</th>
                       ))}
                     </tr>
@@ -1095,11 +1122,12 @@ export default function InventoryManager() {
                         <td style={tdStyle}>{item.asin}</td>
                         <td style={tdStyle}>{item.sku}</td>
                         <td style={tdStyle}>{item.errorReason}</td>
+                        <td style={tdStyle}>{extractFixFromStoredError(item.errorReason) || "Correct the row using the downloaded template."}</td>
                         <td style={tdStyle}>{JSON.stringify(item.originalRowData || {})}</td>
                       </tr>
                     )) : (
                       <tr>
-                        <td style={tdStyle} colSpan={6}>No failed rows yet.</td>
+                        <td style={tdStyle} colSpan={7}>No failed rows yet.</td>
                       </tr>
                     )}
                   </tbody>
@@ -1109,7 +1137,7 @@ export default function InventoryManager() {
           ) : null}
 
           {activeTab === "export" ? (
-            <section style={exportPanelStyle}>
+            <section className="inventory-manager-section" style={exportPanelStyle}>
               <div style={templateHeaderStyle}>
                 <div>
                   <p style={eyebrowStyle}>Export Inventory</p>
@@ -1118,7 +1146,7 @@ export default function InventoryManager() {
                 <span style={modulePillStyle}>XLSX Output</span>
               </div>
 
-              <div style={exportGridStyle}>
+              <div className="inventory-manager-upload-grid" style={exportGridStyle}>
                 <label style={fieldStyle}>
                   <span>Export Type</span>
                   <select value={exportFilters.exportType} onChange={(event) => updateExportFilter("exportType", event.target.value)} style={inputStyle}>
@@ -1203,7 +1231,7 @@ export default function InventoryManager() {
                   <div style={progressBarTrackStyle}>
                     <div style={{ ...progressBarFillStyle, width: `${Math.min(100, Number(exportJob.percentageCompleted || 0))}%` }} />
                   </div>
-                  <div style={resultGridStyle}>
+                  <div className="inventory-manager-result-grid" style={resultGridStyle}>
                     {[
                       ["Status", exportJob.status],
                       ["Export type", exportJob.exportType],
@@ -1226,7 +1254,7 @@ export default function InventoryManager() {
                 </div>
               ) : null}
 
-              <div style={tableWrapStyle}>
+              <div className="inventory-manager-table-wrap" style={tableWrapStyle}>
                 <table style={tableStyle}>
                   <thead>
                     <tr>
@@ -1271,8 +1299,7 @@ export default function InventoryManager() {
               ASIN/SKU matching, and inventory export actions.
             </p>
           </div>
-        </article>
-      </section>
+      </article>
     </section>
   );
 }
@@ -1290,13 +1317,6 @@ const statusPillStyle = {
   color: "#047857",
   fontSize: "13px",
   fontWeight: 800
-};
-
-const tabShellStyle = {
-  display: "grid",
-  gridTemplateColumns: "260px minmax(0, 1fr)",
-  gap: "18px",
-  alignItems: "start"
 };
 
 const tabListStyle = {
@@ -1546,7 +1566,15 @@ const inputStyle = {
 };
 
 const hiddenFileInputStyle = {
-  display: "none"
+  position: "absolute",
+  width: "1px",
+  height: "1px",
+  padding: 0,
+  margin: "-1px",
+  overflow: "hidden",
+  clip: "rect(0, 0, 0, 0)",
+  whiteSpace: "nowrap",
+  border: 0
 };
 
 const dropzoneStyle = {

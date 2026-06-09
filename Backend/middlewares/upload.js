@@ -1,8 +1,12 @@
 import fs from "fs";
 import path from "path";
+import { randomUUID } from "node:crypto";
 import multer from "multer";
+import { fileURLToPath } from "url";
 
-const uploadDirectory = path.resolve(process.cwd(), "uploads");
+const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
+const backendRootDirectory = path.resolve(currentDirectory, "..");
+const uploadDirectory = path.resolve(backendRootDirectory, "uploads");
 const inventoryUploadDirectory = path.resolve(uploadDirectory, "inventory");
 const settingsUploadDirectory = path.resolve(uploadDirectory, "settings");
 const footerUploadDirectory = path.resolve(uploadDirectory, "footer");
@@ -26,6 +30,7 @@ const allowedPaymentIconMimeTypes = new Set(["image/jpeg", "image/png", "image/w
 const allowedPaymentIconExtensions = new Set([".jpg", ".jpeg", ".png", ".webp", ".svg"]);
 const allowedVideoMimeTypes = new Set(["video/mp4", "video/webm", "video/quicktime"]);
 const allowedVideoExtensions = new Set([".mp4", ".webm", ".mov"]);
+const allowedTabularExtensions = new Set([".xlsx", ".xls", ".csv", ".tsv", ".txt"]);
 
 if (!fs.existsSync(uploadDirectory)) {
   fs.mkdirSync(uploadDirectory, { recursive: true });
@@ -72,10 +77,12 @@ const storage = multer.diskStorage({
 const inventoryStorage = multer.diskStorage({
   destination: (_request, _file, callback) => callback(null, inventoryUploadDirectory),
   filename: (_request, file, callback) => {
-    const safeName = `${Date.now()}-${String(file.originalname || "inventory.xlsx")
+    const originalName = String(file.originalname || "inventory.xlsx");
+    const extension = path.extname(originalName).toLowerCase();
+    const safeName = `${Date.now()}-${originalName
       .toLowerCase()
       .replace(/[^a-z0-9.]+/g, "-")}`;
-    callback(null, safeName.endsWith(".xlsx") ? safeName : `${safeName}.xlsx`);
+    callback(null, path.extname(safeName) ? safeName : `${safeName}${extension || ".xlsx"}`);
   }
 });
 
@@ -139,7 +146,7 @@ const whyShopIconStorage = multer.diskStorage({
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-+|-+$/g, "") || "why-shop-icon";
-    callback(null, `${Date.now()}-${safeBaseName}${extension}`);
+    callback(null, `${Date.now()}-${randomUUID()}-${safeBaseName}${extension}`);
   }
 });
 
@@ -243,13 +250,18 @@ function mediaFileFilter(_request, file, callback) {
 
 function inventoryFileFilter(_request, file, callback) {
   const extension = path.extname(file.originalname || "").toLowerCase();
-  const allowedInventoryMimeTypes = new Set([
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    "application/octet-stream",
-    "application/zip"
-  ]);
-  if (extension !== ".xlsx" || !allowedInventoryMimeTypes.has(file.mimetype)) {
-    callback(new Error("Only .xlsx inventory files are allowed"));
+  if (!allowedTabularExtensions.has(extension)) {
+    callback(createUploadError("Upload Excel (.xlsx, .xls), CSV (.csv), TSV (.tsv), or delimited text (.txt) inventory files"));
+    return;
+  }
+
+  callback(null, true);
+}
+
+function spreadsheetFileFilter(_request, file, callback) {
+  const extension = path.extname(file.originalname || "").toLowerCase();
+  if (!allowedTabularExtensions.has(extension)) {
+    callback(createUploadError("Upload Excel (.xlsx, .xls), CSV (.csv), TSV (.tsv), or delimited text (.txt) files"));
     return;
   }
 
@@ -285,6 +297,14 @@ export const uploadInventory = multer({
   fileFilter: inventoryFileFilter,
   limits: {
     fileSize: 50 * 1024 * 1024
+  }
+});
+
+export const uploadDeliveryPincodes = multer({
+  storage: multer.memoryStorage(),
+  fileFilter: spreadsheetFileFilter,
+  limits: {
+    fileSize: 20 * 1024 * 1024
   }
 });
 

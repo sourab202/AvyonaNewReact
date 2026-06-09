@@ -12,3 +12,4 @@ test-results/
 /package-lock.json
 backend/uploads/inventory-test/
 backend/uploads/inventory-exports/
+database_exports/

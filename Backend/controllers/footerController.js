@@ -1,6 +1,6 @@
 import { query } from "../config/db.js";
 import { ApiError } from "../utils/apiError.js";
-import { DEFAULT_APP_SETTINGS } from "../../shared/appSettings.js";
+import { DEFAULT_APP_SETTINGS } from "../shared/appSettings.js";
 
 const footerSettingsTableName = "footer_settings";
 const footerItemsTableName = "footer_items";

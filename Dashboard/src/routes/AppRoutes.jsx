@@ -17,6 +17,7 @@ const CustomPages = React.lazy(() => import("../pages/homepage/CustomPages"));
 const HomepageConfigurePage = React.lazy(() => import("../pages/homepage/HomepageConfigurePage"));
 const ThankYouPageSettings = React.lazy(() => import("../pages/homepage/ThankYouPageSettings"));
 const InvoiceDesigner = React.lazy(() => import("../pages/homepage/InvoiceDesigner"));
+const DeliveryPincodes = React.lazy(() => import("../pages/homepage/DeliveryPincodes"));
 const OrderDetails = React.lazy(() => import("../pages/orders/OrderDetails"));
 const Orders = React.lazy(() => import("../pages/orders/Orders"));
 const AddProduct = React.lazy(() => import("../pages/products/AddProduct"));
@@ -25,7 +26,7 @@ const InventoryManager = React.lazy(() => import("../pages/products/InventoryMan
 const Products = React.lazy(() => import("../pages/products/Products"));
 const Reviews = React.lazy(() => import("../pages/reviews/Reviews"));
 const Settings = React.lazy(() => import("../pages/settings/Settings"));
-const BlankSettingsPage = React.lazy(() => import("../pages/settings/BlankSettingsPage"));
+const ContactPageSettings = React.lazy(() => import("../pages/settings/ContactPageSettings"));
 const FooterSettings = React.lazy(() => import("../pages/settings/FooterSettings"));
 const ThemeSettings = React.lazy(() => import("../pages/settings/ThemeSettings"));
 const Variations = React.lazy(() => import("../pages/variations/Variations"));
@@ -73,6 +74,7 @@ export default function AppRoutes({ context, allProducts }) {
           <Route path="homepage/featured-brands" element={<HomepageConfigurePage sectionKey="featured-brands" />} />
           <Route path="homepage/why-shop" element={<HomepageConfigurePage sectionKey="why-shop" />} />
           <Route path="homepage/product-payment-icons" element={<HomepageConfigurePage sectionKey="product-payment-icons" />} />
+          <Route path="homepage/delivery-pincodes" element={<DeliveryPincodes />} />
           <Route path="homepage/pages" element={<CustomPages />} />
           <Route path="homepage/newsletter" element={<HomepageConfigurePage sectionKey="newsletter" />} />
           <Route path="homepage/blog-posts" element={<BlogPosts />} />
@@ -98,9 +100,9 @@ export default function AppRoutes({ context, allProducts }) {
           <Route path="reviews/new" element={<Reviews />} />
           <Route path="settings" element={<Navigate to="/dashboard/settings/main" replace />} />
           <Route path="settings/main" element={<Settings />} />
-          <Route path="settings/header" element={<BlankSettingsPage />} />
+          <Route path="settings/header" element={<Settings initialSection="header" />} />
           <Route path="settings/footer" element={<FooterSettings />} />
-          <Route path="settings/contact-page" element={<BlankSettingsPage />} />
+          <Route path="settings/contact-page" element={<ContactPageSettings />} />
           <Route path="settings/theme" element={<ThemeSettings />} />
           <Route path="settings/manage-access" element={<Settings initialSection="manage-access" />} />
         </Route>

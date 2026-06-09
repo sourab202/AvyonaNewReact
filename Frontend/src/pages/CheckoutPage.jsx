@@ -5,15 +5,24 @@ import { applyCustomerCreditPoints, fetchCustomerWallet } from "../api/customerA
 import { resolveMediaUrl } from "../utils/media";
 import {
   formatCurrency,
-  getCheckoutPaymentMethods,
-  getCheckoutShippingOptions,
   getMergedProfile,
   readStorage,
   writeStorage
 } from "../utils/storefront";
 import { couponRules, validateCoupon } from "../../../shared/coupons";
 import { validateCheckoutCoupon } from "../api/couponApi";
-import { createStorefrontOrder } from "../api/orderApi";
+import {
+  createRazorpayPaymentOrder,
+  createStorefrontOrder,
+  launchRazorpayCheckout,
+  verifyRazorpayPayment
+} from "../api/orderApi";
+
+const GST_NUMBER_PATTERN = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/i;
+
+function hasFilledFields(source, keys) {
+  return keys.every((key) => String(source[key] || "").trim());
+}
 
 export default function CheckoutPage({ context }) {
   const navigate = useNavigate();
@@ -21,10 +30,17 @@ export default function CheckoutPage({ context }) {
   const siteSettings = context.siteSettings || {};
   const general = siteSettings.general || {};
   const paymentSettings = siteSettings.payment || {};
+  const razorpayPayment = siteSettings.razorpayPayment || {};
+  const onlinePaymentEnabled = razorpayPayment.enabled === true;
   const shippingSettings = siteSettings.shipping || {};
   const paymentIcons = [];
-  const shippingOptions = getCheckoutShippingOptions(context);
-  const paymentMethods = getCheckoutPaymentMethods(context);
+  const paymentMethods = onlinePaymentEnabled
+    ? [{
+        id: "razorpay",
+        label: "Razorpay Secure",
+        description: razorpayPayment.description || "Pay securely using UPI, cards, wallets, or net banking."
+      }]
+    : [];
   const mergedProfile = getMergedProfile(context.authUser, context.customerProfile);
   const [savedFirstName = "", ...savedLastParts] = mergedProfile.fullName.split(/\s+/).filter(Boolean);
   const savedLastName = savedLastParts.join(" ");
@@ -34,14 +50,24 @@ export default function CheckoutPage({ context }) {
     lastName: context.customerProfile.lastName || savedLastName,
     address1: context.customerProfile.address || "",
     address2: "",
-    companyName: "",
+    companyName: mergedProfile.businessName || "",
+    gstNumber: mergedProfile.gstNumber || "",
     city: "",
     state: "Telangana",
     pinCode: String(context.customerProfile.address || "").match(/\b(\d{6})\b/)?.[1] || "",
     phone: mergedProfile.mobile || "",
-    shippingMethod: shippingOptions[0]?.id || "standard",
-    paymentMethod: paymentMethods[0]?.id || "phonepe",
+    paymentMethod: "razorpay",
     billingAddress: "same",
+    billingFirstName: context.customerProfile.firstName || savedFirstName,
+    billingLastName: context.customerProfile.lastName || savedLastName,
+    billingCompanyName: mergedProfile.businessName || "",
+    billingGstNumber: mergedProfile.gstNumber || "",
+    billingAddress1: "",
+    billingAddress2: "",
+    billingCity: "",
+    billingState: "Telangana",
+    billingPinCode: "",
+    billingPhone: mergedProfile.mobile || "",
     checkoutMode: context.authUser ? "login" : "guest"
   });
   const [couponCode, setCouponCode] = useState(() => readStorage("avyonaPendingCoupon", ""));
@@ -62,15 +88,30 @@ export default function CheckoutPage({ context }) {
   const minRedeemPoints  = walletData?.minRedeemPoints  || 100;
   const maxDiscountRupees = Math.floor(subtotal * (maxRedeemPercent / 100));
   const maxPointsUsable   = Math.min(customerAvailablePoints, maxDiscountRupees * pointsPerRupee);
-  const selectedShipping = shippingOptions.find((option) => option.id === form.shippingMethod) || shippingOptions[0];
-  const shipping = Number(selectedShipping?.price || 0);
+  const shipping = 0;
   const appliedCouponResult = appliedCoupon
     ? validateCoupon(appliedCoupon.code, { items: context.cart, subtotal, coupons: availableCoupons })
     : { valid: false, discount: 0 };
   const discount = appliedCouponResult.valid ? Number(appliedCouponResult.discount || 0) : 0;
   const creditDiscount = Math.floor(appliedPoints / pointsPerRupee);
   const total = Math.max(0, subtotal - discount - creditDiscount) + shipping;
-  const hasRequiredAddress = ["contact", "firstName", "lastName", "address1", "city", "state", "pinCode", "phone"].every((key) => String(form[key] || "").trim());
+  const hasRequiredAddress = hasFilledFields(form, ["contact", "firstName", "lastName", "address1", "city", "state", "pinCode", "phone"]);
+  const hasRequiredBillingAddress = form.billingAddress !== "different" || hasFilledFields(form, [
+    "billingFirstName",
+    "billingLastName",
+    "billingAddress1",
+    "billingCity",
+    "billingState",
+    "billingPinCode",
+    "billingPhone"
+  ]);
+  const canSubmitOrder = Boolean(
+    onlinePaymentEnabled &&
+    context.cart.length &&
+    hasRequiredAddress &&
+    hasRequiredBillingAddress &&
+    !isSubmittingOrder
+  );
 
   useEffect(() => {
     document.body.classList.add("checkout-page");
@@ -97,20 +138,21 @@ export default function CheckoutPage({ context }) {
       firstName: current.firstName || context.customerProfile.firstName || savedFirstName,
       lastName: current.lastName || context.customerProfile.lastName || savedLastName,
       address1: current.address1 || context.customerProfile.address || "",
+      companyName: current.companyName || context.customerProfile.businessName || mergedProfile.businessName || "",
+      gstNumber: current.gstNumber || context.customerProfile.gstNumber || mergedProfile.gstNumber || "",
       phone: current.phone || mergedProfile.mobile || "",
+      billingFirstName: current.billingFirstName || context.customerProfile.firstName || savedFirstName,
+      billingLastName: current.billingLastName || context.customerProfile.lastName || savedLastName,
+      billingCompanyName: current.billingCompanyName || context.customerProfile.businessName || mergedProfile.businessName || "",
+      billingGstNumber: current.billingGstNumber || context.customerProfile.gstNumber || mergedProfile.gstNumber || "",
+      billingPhone: current.billingPhone || mergedProfile.mobile || "",
       checkoutMode: "login"
     }));
-  }, [context.authUser, context.customerProfile, mergedProfile.email, mergedProfile.mobile, savedFirstName, savedLastName]);
-
-  useEffect(() => {
-    if (!shippingOptions.some((option) => option.id === form.shippingMethod)) {
-      setForm((current) => ({ ...current, shippingMethod: shippingOptions[0]?.id || "standard" }));
-    }
-  }, [form.shippingMethod, shippingOptions]);
+  }, [context.authUser, context.customerProfile, mergedProfile.businessName, mergedProfile.email, mergedProfile.gstNumber, mergedProfile.mobile, savedFirstName, savedLastName]);
 
   useEffect(() => {
     if (!paymentMethods.some((method) => method.id === form.paymentMethod)) {
-      setForm((current) => ({ ...current, paymentMethod: paymentMethods[0]?.id || "phonepe" }));
+      setForm((current) => ({ ...current, paymentMethod: "razorpay" }));
     }
   }, [form.paymentMethod, paymentMethods]);
 
@@ -234,6 +276,24 @@ export default function CheckoutPage({ context }) {
     setPointsMessage("Credit points removed.");
   };
 
+  const clearCartAdjustments = () => {
+    if (appliedCoupon) {
+      setAppliedCoupon(null);
+      setCouponMessage("Cart updated. Please apply your coupon again.");
+    }
+    if (appliedPoints > 0) {
+      setAppliedPoints(0);
+      setPointsInput("");
+      setPointsMessage("Cart updated. Please apply credit points again.");
+    }
+  };
+
+  const changeCartQuantity = (item, nextQuantity) => {
+    const quantity = Math.max(1, Math.floor(Number(nextQuantity || 1)));
+    context.updateCartQuantity?.(item.slug, item.variantLabel || "", quantity);
+    clearCartAdjustments();
+  };
+
   const applyAllPoints = async () => {
     setPointsInput(String(maxPointsUsable));
     try {
@@ -251,11 +311,44 @@ export default function CheckoutPage({ context }) {
 
   const submitOrder = async (event) => {
     event.preventDefault();
-    if (!context.cart.length || !hasRequiredAddress || isSubmittingOrder) return;
+    if (!canSubmitOrder) return;
+    if (form.gstNumber.trim() && !GST_NUMBER_PATTERN.test(form.gstNumber.trim())) {
+      context.notify("Please enter a valid GST number or leave it blank.");
+      return;
+    }
+    if (form.billingAddress === "different" && form.billingGstNumber.trim() && !GST_NUMBER_PATTERN.test(form.billingGstNumber.trim())) {
+      context.notify("Please enter a valid billing GST number or leave it blank.");
+      return;
+    }
 
     setIsSubmittingOrder(true);
     const createdAt = new Date().toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
     const deliveryAddress = `${form.address1}${form.address2 ? `, ${form.address2}` : ""}, ${form.city}, ${form.state} - ${form.pinCode}`;
+    const billingDetails = form.billingAddress === "different"
+      ? {
+          firstName: form.billingFirstName,
+          lastName: form.billingLastName,
+          companyName: form.billingCompanyName,
+          gstNumber: form.billingGstNumber,
+          line1: form.billingAddress1,
+          line2: form.billingAddress2,
+          city: form.billingCity,
+          state: form.billingState,
+          pincode: form.billingPinCode,
+          phone: form.billingPhone
+        }
+      : {
+          firstName: form.firstName,
+          lastName: form.lastName,
+          companyName: form.companyName,
+          gstNumber: form.gstNumber,
+          line1: form.address1,
+          line2: form.address2,
+          city: form.city,
+          state: form.state,
+          pincode: form.pinCode,
+          phone: form.phone
+        };
     let orderNumber = `AVY-${Date.now().toString().slice(-6)}`;
     let backendOrder = null;
 
@@ -266,7 +359,12 @@ export default function CheckoutPage({ context }) {
           lastName: form.lastName,
           contact: form.contact,
           email: form.contact.includes("@") ? form.contact : "",
-          phone: form.phone
+          phone: form.phone,
+          businessDetails: {
+            isBusinessAccount: Boolean(billingDetails.companyName || billingDetails.gstNumber),
+            businessName: billingDetails.companyName,
+            gstNumber: billingDetails.gstNumber
+          }
         },
         address: {
           line1: form.address1,
@@ -274,6 +372,19 @@ export default function CheckoutPage({ context }) {
           city: form.city,
           state: form.state,
           pincode: form.pinCode
+        },
+        billingAddress: {
+          sameAsShipping: form.billingAddress !== "different",
+          firstName: billingDetails.firstName,
+          lastName: billingDetails.lastName,
+          line1: billingDetails.line1,
+          line2: billingDetails.line2,
+          city: billingDetails.city,
+          state: billingDetails.state,
+          pincode: billingDetails.pincode,
+          phone: billingDetails.phone,
+          businessName: billingDetails.companyName,
+          gstNumber: billingDetails.gstNumber
         },
         items: context.cart.map((item) => ({
           asin: item.asin || item.slug,
@@ -283,30 +394,13 @@ export default function CheckoutPage({ context }) {
           quantity: Number(item.quantity || 1),
           variantLabel: item.variantLabel || ""
         })),
-        pricing: {
-          subtotal,
-          discount,
-          shipping,
-          total
-        },
         paymentMethod: form.paymentMethod,
-        shippingMethod: form.shippingMethod,
         couponCode: appliedCoupon?.code || "",
         creditPoints: appliedPoints
       });
 
       backendOrder = response.data || null;
       orderNumber = backendOrder?.orderNumber || orderNumber;
-      trackAnalyticsEvent({
-        eventType: "purchase",
-        orderNumber,
-        cartValue: Number(backendOrder?.totalAmount ?? total),
-        metadata: {
-          itemCount: context.cart.reduce((sum, item) => sum + Number(item.quantity || 1), 0),
-          paymentMethod: form.paymentMethod,
-          paymentStatus: backendOrder?.paymentStatus || ""
-        }
-      });
     } catch (error) {
       context.notify(error.message || "Unable to place order. Please check stock, coupon, and delivery details.");
       setIsSubmittingOrder(false);
@@ -317,7 +411,58 @@ export default function CheckoutPage({ context }) {
     const finalDiscount = Number(backendOrder?.discount ?? discount);
     const finalCreditDiscount = Number(backendOrder?.creditDiscount ?? creditDiscount);
     const finalShipping = Number(backendOrder?.shippingFee ?? shipping);
-    const paymentStatus = backendOrder?.paymentStatus || "pending";
+    const gatewayRequest = {
+      orderId: backendOrder?.id,
+      orderNumber,
+      contact: form.contact
+    };
+    let verifiedPayment;
+
+    try {
+      const gatewayResponse = await createRazorpayPaymentOrder(gatewayRequest);
+      const gatewayOrder = gatewayResponse.data || {};
+      const paymentResponse = await launchRazorpayCheckout({
+        key: gatewayOrder.keyId,
+        amount: gatewayOrder.amount,
+        currency: gatewayOrder.currency || "INR",
+        name: general.storeName || "Avyona",
+        description: gatewayOrder.description || "Order Payment",
+        order_id: gatewayOrder.razorpayOrderId,
+        prefill: {
+          name: `${form.firstName} ${form.lastName}`.trim(),
+          email: form.contact.includes("@") ? form.contact : "",
+          contact: form.phone
+        },
+        notes: {
+          order_number: orderNumber
+        },
+        theme: {
+          color: "#23844f"
+        }
+      });
+
+      const verificationResponse = await verifyRazorpayPayment({
+        ...gatewayRequest,
+        razorpayOrderId: paymentResponse.razorpay_order_id,
+        razorpayPaymentId: paymentResponse.razorpay_payment_id,
+        razorpaySignature: paymentResponse.razorpay_signature
+      });
+      verifiedPayment = verificationResponse.data || {};
+    } catch (error) {
+      context.notify(error.message || "Payment could not be completed.");
+      setIsSubmittingOrder(false);
+      navigate(`/payment-failed/${orderNumber}`, {
+        state: {
+          orderNumber,
+          orderId: backendOrder?.id,
+          message: error.message || "Payment could not be completed.",
+          contact: form.contact
+        }
+      });
+      return;
+    }
+
+    const paymentStatus = verifiedPayment.paymentStatus || "paid";
 
     const newOrders = context.cart.map((item) => ({
       orderNumber,
@@ -337,7 +482,7 @@ export default function CheckoutPage({ context }) {
       deliveryAddress,
       contact: form.contact,
       date: createdAt,
-      status: paymentStatus === "failed" ? "Payment Failed" : "Order Confirmed"
+      status: "Order Confirmed"
     }));
     context.setOrders([...newOrders, ...context.orders].slice(0, 24));
     context.setCustomerProfile({
@@ -346,12 +491,28 @@ export default function CheckoutPage({ context }) {
       lastName: form.lastName,
       contact: form.contact,
       phone: form.phone,
-      address: `${form.address1}, ${form.city}, ${form.state} - ${form.pinCode}`
+      address: `${form.address1}, ${form.city}, ${form.state} - ${form.pinCode}`,
+      businessDetails: {
+        isBusinessAccount: Boolean(billingDetails.companyName || billingDetails.gstNumber),
+        businessName: billingDetails.companyName,
+        gstNumber: billingDetails.gstNumber
+      },
+      isBusinessAccount: Boolean(billingDetails.companyName || billingDetails.gstNumber),
+      businessName: billingDetails.companyName,
+      gstNumber: billingDetails.gstNumber
     });
-    if (paymentStatus !== "failed") {
-      context.setCart([]);
-    }
-    context.notify(paymentStatus === "failed" ? "Test payment failed. Order was recorded for QA." : "Order placed successfully");
+    context.setCart([]);
+    trackAnalyticsEvent({
+      eventType: "purchase",
+      orderNumber,
+      cartValue: finalTotal,
+      metadata: {
+        itemCount: newOrders.reduce((sum, item) => sum + Number(item.quantity || 1), 0),
+        paymentMethod: "razorpay",
+        paymentStatus
+      }
+    });
+    context.notify("Payment successful. Order confirmed.");
     setIsSubmittingOrder(false);
     navigate(`/order-confirmation/${orderNumber}`, {
       state: {
@@ -364,6 +525,7 @@ export default function CheckoutPage({ context }) {
         shipping: finalShipping,
         paymentMethod: form.paymentMethod,
         paymentStatus,
+        orderStatus: verifiedPayment.status || "confirmed",
         deliveryAddress,
         contact: form.contact,
         date: createdAt
@@ -411,7 +573,10 @@ export default function CheckoutPage({ context }) {
                 <div className="field-group"><label className="field-label">First Name</label><input value={form.firstName} onChange={(event) => setForm({ ...form, firstName: event.target.value })} required /></div>
                 <div className="field-group"><label className="field-label">Last Name</label><input value={form.lastName} onChange={(event) => setForm({ ...form, lastName: event.target.value })} required /></div>
               </div>
-              <div className="field-group"><label className="field-label">Company</label><input value={form.companyName} onChange={(event) => setForm({ ...form, companyName: event.target.value })} placeholder="Company (optional)" /></div>
+              <div className="field-grid two-col">
+                <div className="field-group"><label className="field-label">Business Name</label><input value={form.companyName} onChange={(event) => setForm({ ...form, companyName: event.target.value })} placeholder="Optional" /></div>
+                <div className="field-group"><label className="field-label">GST Number</label><input value={form.gstNumber} onChange={(event) => setForm({ ...form, gstNumber: event.target.value.toUpperCase() })} placeholder="Optional" /></div>
+              </div>
               <div className="field-group"><label className="field-label">Address</label><input value={form.address1} onChange={(event) => setForm({ ...form, address1: event.target.value })} required /></div>
               <div className="field-group"><label className="field-label">Apartment, Suite, etc.</label><input value={form.address2} onChange={(event) => setForm({ ...form, address2: event.target.value })} placeholder="Apartment, suite, etc. (optional)" /></div>
               <div className="field-grid location-grid">
@@ -428,18 +593,12 @@ export default function CheckoutPage({ context }) {
               ) : null}
             </div>
             <div className="checkout-section">
-              <h2>Shipping Method</h2>
-              <div className="option-stack">
-                {shippingOptions.map((option) => (
-                  <label key={option.id} className={`shipping-option ${form.shippingMethod === option.id ? "active" : ""}`}>
-                    <input type="radio" name="shippingMethod" checked={form.shippingMethod === option.id} onChange={() => setForm({ ...form, shippingMethod: option.id })} />
-                    <span className="option-copy">
-                      <strong>{option.label}</strong>
-                      <small>{option.description}</small>
-                    </span>
-                    <span className="option-price">{option.price === 0 ? "Free" : formatCurrency(option.price, context)}</span>
-                  </label>
-                ))}
+              <div className="free-shipping-notice">
+                <span className="free-shipping-icon" aria-hidden="true">✓</span>
+                <span>
+                  <strong>Free Shipping</strong>
+                  <small>No shipping charge will be added to your order.</small>
+                </span>
               </div>
             </div>
             <div className="checkout-section">
@@ -464,6 +623,11 @@ export default function CheckoutPage({ context }) {
                     </div>
                   </label>
                 ))}
+                {!onlinePaymentEnabled ? (
+                  <div className="payment-unavailable-message" role="status">
+                    Online payment is currently unavailable. Please contact support.
+                  </div>
+                ) : null}
               </div>
               <div className="trust-mini-grid"><span>SSL Secure</span><span>100% Safe Payment</span><span>Fast Delivery Available</span></div>
             </div>
@@ -479,8 +643,28 @@ export default function CheckoutPage({ context }) {
                   <span>Use a different billing address</span>
                 </label>
               </div>
+              {form.billingAddress === "different" ? (
+                <div className="billing-address-fields">
+                  <div className="field-grid two-col">
+                    <div className="field-group"><label className="field-label">First Name</label><input value={form.billingFirstName} onChange={(event) => setForm({ ...form, billingFirstName: event.target.value })} required /></div>
+                    <div className="field-group"><label className="field-label">Last Name</label><input value={form.billingLastName} onChange={(event) => setForm({ ...form, billingLastName: event.target.value })} required /></div>
+                  </div>
+                  <div className="field-grid two-col">
+                    <div className="field-group"><label className="field-label">Business Name</label><input value={form.billingCompanyName} onChange={(event) => setForm({ ...form, billingCompanyName: event.target.value })} placeholder="Optional" /></div>
+                    <div className="field-group"><label className="field-label">GST Number</label><input value={form.billingGstNumber} onChange={(event) => setForm({ ...form, billingGstNumber: event.target.value.toUpperCase() })} placeholder="Optional" /></div>
+                  </div>
+                  <div className="field-group"><label className="field-label">Billing Address</label><input value={form.billingAddress1} onChange={(event) => setForm({ ...form, billingAddress1: event.target.value })} required /></div>
+                  <div className="field-group"><label className="field-label">Apartment, Suite, etc.</label><input value={form.billingAddress2} onChange={(event) => setForm({ ...form, billingAddress2: event.target.value })} placeholder="Apartment, suite, etc. (optional)" /></div>
+                  <div className="field-grid location-grid">
+                    <div className="field-group"><label className="field-label">City</label><input value={form.billingCity} onChange={(event) => setForm({ ...form, billingCity: event.target.value })} required /></div>
+                    <div className="field-group"><label className="field-label">State</label><input value={form.billingState} onChange={(event) => setForm({ ...form, billingState: event.target.value })} required /></div>
+                    <div className="field-group"><label className="field-label">PIN Code</label><input value={form.billingPinCode} onChange={(event) => setForm({ ...form, billingPinCode: event.target.value })} required /></div>
+                  </div>
+                  <div className="field-group"><label className="field-label">Billing Phone</label><input value={form.billingPhone} onChange={(event) => setForm({ ...form, billingPhone: event.target.value })} required /></div>
+                </div>
+              ) : null}
             </div>
-            <div className="checkout-cta-wrap"><button className="checkout-pay-button" type="submit" disabled={!context.cart.length || isSubmittingOrder}>{isSubmittingOrder ? "Placing Order..." : context.cart.length ? "Pay Now" : "Cart Empty"}</button><p className="checkout-cta-note">Secure Checkout. You will not be charged until you confirm.</p></div>
+            <div className="checkout-cta-wrap"><button className="checkout-pay-button" type="submit" disabled={!canSubmitOrder}>{isSubmittingOrder ? "Processing Payment..." : context.cart.length ? (razorpayPayment.buttonText || "Pay Now") : "Cart Empty"}</button><p className="checkout-cta-note">{onlinePaymentEnabled ? "Secure checkout powered by Razorpay." : "Online payment is currently unavailable. Please contact support."}</p></div>
           </section>
           <aside className="checkout-summary-panel">
             <details className="mobile-summary-toggle" open>
@@ -488,7 +672,38 @@ export default function CheckoutPage({ context }) {
               <div className="mobile-summary-body">
                 <div className="summary-shell">
                   <div className="summary-items">
-                    {context.cart.length ? context.cart.map((item) => <article key={`${item.slug}:${item.variantLabel || ""}`} className="summary-item"><div className="summary-item-art"><img src={resolveMediaUrl(item.image)} alt={item.name} /></div><div className="summary-item-copy"><h3>{item.name}</h3><p className="summary-meta">{`Quantity: ${item.quantity}`}</p></div><strong className="summary-item-price">{formatCurrency(Number(item.price || 0) * Number(item.quantity || 1), context)}</strong></article>) : <div className="checkout-empty-state"><h3>Your cart is empty</h3><p>Add products before continuing to checkout.</p><Link to="/">Continue Shopping</Link></div>}
+                    {context.cart.length ? context.cart.map((item) => {
+                      const quantity = Number(item.quantity || 1);
+                      const maxQuantity = Math.max(quantity, Number(item.availableStock || 99));
+                      return (
+                        <article key={`${item.slug}:${item.variantLabel || ""}`} className="summary-item">
+                          <div className="summary-item-art"><img src={resolveMediaUrl(item.image)} alt={item.name} /></div>
+                          <div className="summary-item-copy">
+                            <h3>{item.name}</h3>
+                            <div className="summary-quantity-control" aria-label={`Quantity for ${item.name}`}>
+                              <button
+                                type="button"
+                                onClick={() => changeCartQuantity(item, quantity - 1)}
+                                disabled={quantity <= 1}
+                                aria-label={`Reduce ${item.name} quantity`}
+                              >
+                                -
+                              </button>
+                              <span>{quantity}</span>
+                              <button
+                                type="button"
+                                onClick={() => changeCartQuantity(item, quantity + 1)}
+                                disabled={quantity >= maxQuantity}
+                                aria-label={`Increase ${item.name} quantity`}
+                              >
+                                +
+                              </button>
+                            </div>
+                          </div>
+                          <strong className="summary-item-price">{formatCurrency(Number(item.price || 0) * quantity, context)}</strong>
+                        </article>
+                      );
+                    }) : <div className="checkout-empty-state"><h3>Your cart is empty</h3><p>Add products before continuing to checkout.</p><Link to="/">Continue Shopping</Link></div>}
                   </div>
                   <div className="summary-totals">
                     <form className="checkout-coupon-form" onSubmit={applyCoupon}>

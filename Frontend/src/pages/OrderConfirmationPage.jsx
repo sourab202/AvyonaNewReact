@@ -22,10 +22,20 @@ function getPaymentLabel(method) {
 }
 
 function getStatusChip(paymentStatus) {
-  if (paymentStatus === "paid" || paymentStatus === "authorized") return { label: "Payment Successful", tone: "success" };
+  if (paymentStatus === "paid") return { label: "Paid", tone: "success" };
+  if (paymentStatus === "authorized") return { label: "Authorized", tone: "success" };
   if (paymentStatus === "cod_pending") return { label: "Pay on Delivery", tone: "info" };
   if (paymentStatus === "failed") return { label: "Payment Failed", tone: "error" };
   return { label: "Pending", tone: "neutral" };
+}
+
+function formatStatus(value, fallback = "-") {
+  const status = String(value || "").trim();
+  if (!status) return fallback;
+  return status
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }
 
 function formatOrderDate(value) {
@@ -124,6 +134,7 @@ export default function OrderConfirmationPage({ context }) {
   let shipping = 0;
   let paymentMethod = "";
   let paymentStatus = "";
+  let orderStatus = "";
   let deliveryAddress = "";
   let contact = initialContact;
   let date = "";
@@ -145,6 +156,7 @@ export default function OrderConfirmationPage({ context }) {
     shipping = Number(apiOrder.summary?.shippingFee || 0);
     paymentMethod = apiOrder.paymentMethod || "";
     paymentStatus = apiOrder.paymentStatus || "";
+    orderStatus = apiOrder.status || "";
     deliveryAddress = buildAddressString(apiOrder.deliveryAddress);
     contact = apiOrder.deliveryAddress?.email || apiOrder.deliveryAddress?.phone || initialContact;
     date = formatOrderDate(apiOrder.summary?.placedAt);
@@ -158,6 +170,7 @@ export default function OrderConfirmationPage({ context }) {
     subtotal = Math.max(0, total + discount + creditDiscount - shipping);
     paymentMethod = state?.paymentMethod ?? storedFirst.paymentMethod ?? "";
     paymentStatus = state?.paymentStatus ?? storedFirst.paymentStatus ?? "";
+    orderStatus = state?.orderStatus ?? storedFirst.orderStatus ?? storedFirst.status ?? "";
     deliveryAddress = state?.deliveryAddress ?? storedFirst.deliveryAddress ?? "";
     contact = state?.contact ?? storedFirst.contact ?? initialContact;
     date = state?.date ?? storedFirst.date ?? "";
@@ -357,15 +370,18 @@ export default function OrderConfirmationPage({ context }) {
                   <dt>Order Status</dt>
                   <dd>
                     <span className={`thankyou-status-chip thankyou-status-${paymentStatus === "failed" ? "error" : "success"}`}>
-                      {paymentStatus === "failed" ? "Payment Failed" : "Order Confirmed"}
+                      {formatStatus(orderStatus, paymentStatus === "paid" ? "Confirmed" : "Pending")}
                     </span>
                   </dd>
                 </div>
-                <div className="thankyou-detail-row"><dt>Payment</dt><dd>{getPaymentLabel(paymentMethod)}</dd></div>
+                <div className="thankyou-detail-row"><dt>Payment Method</dt><dd>{getPaymentLabel(paymentMethod)}</dd></div>
                 <div className="thankyou-detail-row">
                   <dt>Payment Status</dt>
                   <dd><span className={`thankyou-status-chip thankyou-status-${statusChip.tone}`}>{statusChip.label}</span></dd>
                 </div>
+                {paymentStatus === "paid" ? (
+                  <div className="thankyou-detail-row"><dt>Message</dt><dd>Payment successful</dd></div>
+                ) : null}
               </dl>
             </article>
           </div>

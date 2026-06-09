@@ -30,6 +30,16 @@ export async function fetchPublicSettings() {
   return fetchCachedJson(`${apiBaseUrl}/settings/public`, "Unable to fetch public settings");
 }
 
+export async function fetchPublicPaymentSettings() {
+  const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000/api/v1";
+  return fetchFreshJson(`${apiBaseUrl}/settings/public/payment`, "Unable to fetch payment settings");
+}
+
+export async function fetchPublicContactPageSettings() {
+  const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000/api/v1";
+  return fetchFreshJson(`${apiBaseUrl}/settings/public/contact-page`, "Unable to fetch Contact Page settings");
+}
+
 export async function fetchPublicThemeSettings() {
   const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000/api/v1";
   return fetchFreshJson(`${apiBaseUrl}/theme-settings`, "Unable to fetch theme settings");

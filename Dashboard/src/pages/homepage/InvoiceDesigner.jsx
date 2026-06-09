@@ -5,8 +5,16 @@ import { resolveAdminMediaUrl } from "../../utils/media";
 
 const DEFAULT_SETTINGS = {
   logoUrl: "",
+  logoSource: "",
   headerText: "",
   footerText: "",
+  footerThankYouNote: "Thank you for shopping with us!",
+  computerGeneratedNote: "Computer-generated invoice. No signature required.",
+  supportContactNote: "",
+  websiteUrl: "",
+  watermarkUrl: "",
+  qrCodeUrl: "",
+  bottomNoteText: "",
   signatureUrl: "",
   stampUrl: "",
   businessName: "",
@@ -22,6 +30,8 @@ const DEFAULT_SETTINGS = {
   showTax: true,
   showCreditPoints: true,
   showFooterNote: true,
+  showWatermark: true,
+  showQrCode: true,
   thankYouNote: "Thank you for shopping with us!",
   returnPolicyNote: "",
   warrantyNote: "",
@@ -36,7 +46,9 @@ const SECTION_TOGGLES = [
   { key: "showSkuAsin", label: "Show SKU / ASIN", hint: "Show product SKU and ASIN code below the product name" },
   { key: "showTax", label: "Show Tax", hint: "Show computed tax amount per line item (when tax rate > 0)" },
   { key: "showCreditPoints", label: "Show Credit Points Discount", hint: "Show credit points redeemed as a discount row in the summary" },
-  { key: "showFooterNote", label: "Show Footer Note", hint: "Show the footer note text at the bottom of the invoice" }
+  { key: "showFooterNote", label: "Show Footer Note", hint: "Show the footer note text at the bottom of the invoice" },
+  { key: "showWatermark", label: "Show Watermark", hint: "Display a pale watermark image behind the invoice content" },
+  { key: "showQrCode", label: "Show QR Code", hint: "Display the QR code in the invoice footer" }
 ];
 
 function resolvePreviewUrl(value) {
@@ -49,6 +61,8 @@ export default function InvoiceDesigner() {
   const [loadState, setLoadState] = useState("loading");
   const [uploadStates, setUploadStates] = useState({
     logo: { uploading: false, error: "" },
+    qr: { uploading: false, error: "" },
+    watermark: { uploading: false, error: "" },
     signature: { uploading: false, error: "" },
     stamp: { uploading: false, error: "" }
   });
@@ -64,7 +78,14 @@ export default function InvoiceDesigner() {
         const raw = response.data?.data || response.data || {};
         const saved = raw.invoiceDesigner || {};
         if (isMounted) {
-          setSettings({ ...DEFAULT_SETTINGS, ...saved });
+          setSettings({
+            ...DEFAULT_SETTINGS,
+            ...saved,
+            logoSource: saved.logoSource || saved.logoUrl || "",
+            footerThankYouNote: saved.footerThankYouNote || saved.thankYouNote || DEFAULT_SETTINGS.footerThankYouNote,
+            computerGeneratedNote: saved.computerGeneratedNote || saved.footerText || DEFAULT_SETTINGS.computerGeneratedNote,
+            supportContactNote: saved.supportContactNote || saved.supportNote || ""
+          });
           setLoadState("ready");
         }
       } catch {
@@ -84,7 +105,14 @@ export default function InvoiceDesigner() {
     try {
       const response = await fetchAdminSettings();
       const current = response.data?.data || response.data || {};
-      await updateAdminSettings({ settings: { ...current, invoiceDesigner: settings } });
+      const nextSettings = {
+        ...settings,
+        logoUrl: settings.logoSource || settings.logoUrl,
+        footerText: settings.computerGeneratedNote || settings.footerText,
+        thankYouNote: settings.footerThankYouNote || settings.thankYouNote,
+        supportNote: settings.supportContactNote || settings.supportNote
+      };
+      await updateAdminSettings({ settings: { ...current, invoiceDesigner: nextSettings } });
       setSaveState("saved");
       setTimeout(() => setSaveState("idle"), 2500);
     } catch {
@@ -147,7 +175,7 @@ export default function InvoiceDesigner() {
     try {
       const res = await uploadAdminImage(file);
       const url = res.data?.url || res.data?.data?.url || "";
-      const keyMap = { logo: "logoUrl", signature: "signatureUrl", stamp: "stampUrl" };
+      const keyMap = { logo: "logoUrl", qr: "qrCodeUrl", watermark: "watermarkUrl", signature: "signatureUrl", stamp: "stampUrl" };
       update(keyMap[field], url);
       setUploadStates((prev) => ({ ...prev, [field]: { uploading: false, error: "" } }));
     } catch {
@@ -221,11 +249,11 @@ export default function InvoiceDesigner() {
 
             {/* Logo */}
             <ImageUploadRow
-              label="Invoice Logo"
+              label="Logo Source"
               hint="Overrides the store logo — leave empty to use the store logo from General Settings"
               fieldKey="logo"
-              value={settings.logoUrl}
-              onClear={() => update("logoUrl", "")}
+              value={settings.logoSource || settings.logoUrl}
+              onClear={() => { update("logoSource", ""); update("logoUrl", ""); }}
               onUpload={(file) => handleImageUpload("logo", file)}
               uploadState={uploadStates.logo}
             />
@@ -248,17 +276,57 @@ export default function InvoiceDesigner() {
 
             <label style={fieldRowStyle}>
               <div style={fieldLabelRowStyle}>
-                <span style={labelStyle}>Footer Text</span>
-                <span style={hintStyle}>Legal or custom note shown at the bottom right — shown only when "Show Footer Note" is on</span>
+                <span style={labelStyle}>Computer-generated Invoice Note</span>
+                <span style={hintStyle}>Legal note shown in the invoice footer</span>
               </div>
               <input
                 type="text"
-                value={settings.footerText}
-                onChange={(e) => update("footerText", e.target.value)}
+                value={settings.computerGeneratedNote}
+                onChange={(e) => update("computerGeneratedNote", e.target.value)}
                 placeholder="Computer-generated invoice. No signature required."
                 style={inputStyle}
               />
             </label>
+
+            <div style={dividerStyle} />
+
+            <ImageUploadRow
+              label="QR Code Image / URL"
+              hint="Upload a QR image, or paste a URL in the field below"
+              fieldKey="qr"
+              value={settings.qrCodeUrl}
+              onClear={() => update("qrCodeUrl", "")}
+              onUpload={(file) => handleImageUpload("qr", file)}
+              uploadState={uploadStates.qr}
+              previewStyle={{ maxHeight: "72px", maxWidth: "72px", objectFit: "contain", borderRadius: "8px", border: "1px solid #e5edf5", background: "#f8fafc", padding: "6px" }}
+            />
+
+            <label style={fieldRowStyle}>
+              <div style={fieldLabelRowStyle}>
+                <span style={labelStyle}>QR Code URL</span>
+                <span style={hintStyle}>Optional direct URL if you do not upload an image</span>
+              </div>
+              <input
+                type="text"
+                value={settings.qrCodeUrl}
+                onChange={(e) => update("qrCodeUrl", e.target.value)}
+                placeholder="https://yourstore.com/pay-or-track"
+                style={inputStyle}
+              />
+            </label>
+
+            <div style={dividerStyle} />
+
+            <ImageUploadRow
+              label="Watermark Image"
+              hint="Pale background image shown behind the invoice table and totals"
+              fieldKey="watermark"
+              value={settings.watermarkUrl}
+              onClear={() => update("watermarkUrl", "")}
+              onUpload={(file) => handleImageUpload("watermark", file)}
+              uploadState={uploadStates.watermark}
+              previewStyle={{ maxHeight: "86px", maxWidth: "180px", objectFit: "contain", borderRadius: "8px", border: "1px solid #e5edf5", background: "#f8fafc", padding: "6px", opacity: 0.55 }}
+            />
 
             <div style={dividerStyle} />
 
@@ -299,9 +367,10 @@ export default function InvoiceDesigner() {
           <div style={fieldGroupStyle}>
             {[
               { key: "businessName", label: "Business / Legal Name", placeholder: "Uses store name from General Settings" },
-              { key: "gstNumber", label: "GST Number (GSTIN)", placeholder: "Uses GST from General Settings" },
+              { key: "gstNumber", label: "Business GSTIN", placeholder: "Uses GST from General Settings" },
+              { key: "supportPhone", label: "Toll-free / Phone", placeholder: "Uses phone from General Settings", type: "tel" },
               { key: "supportEmail", label: "Support Email", placeholder: "Uses email from General Settings", type: "email" },
-              { key: "supportPhone", label: "Support Phone", placeholder: "Uses phone from General Settings", type: "tel" }
+              { key: "websiteUrl", label: "Website URL", placeholder: "https://avyona.com", type: "url" }
             ].map(({ key, label, placeholder, type }) => (
               <label key={key} style={fieldRowStyle}>
                 <div style={fieldLabelRowStyle}>
@@ -367,10 +436,10 @@ export default function InvoiceDesigner() {
         </div>
         <div style={notesGridStyle}>
           {[
-            { key: "thankYouNote", label: "Thank You Note", placeholder: "Thank you for shopping with us!" },
-            { key: "returnPolicyNote", label: "Return Policy Note", placeholder: "e.g. Returns accepted within 7 days with original packaging." },
-            { key: "warrantyNote", label: "Warranty Note", placeholder: "e.g. This product carries a 1-year manufacturer warranty." },
-            { key: "supportNote", label: "Support Note", placeholder: "e.g. For assistance, email support@yourstore.com or call us." }
+            { key: "footerThankYouNote", label: "Footer Thank-you Note", placeholder: "Thank you for shopping with us!" },
+            { key: "computerGeneratedNote", label: "Computer-generated Invoice Note", placeholder: "Computer-generated invoice. No signature required." },
+            { key: "supportContactNote", label: "Support Contact Note", placeholder: "For support, contact support@yourstore.com." },
+            { key: "bottomNoteText", label: "Bottom Note Text", placeholder: "Order note or final customer message." }
           ].map(({ key, label, placeholder }) => (
             <label key={key} style={fieldRowStyle}>
               <div style={fieldLabelRowStyle}>

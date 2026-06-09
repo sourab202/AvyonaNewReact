@@ -2058,7 +2058,7 @@ function WhyShopConfigure({ section, refreshToken = 0 }) {
   const [persistedItemIds, setPersistedItemIds] = React.useState(() => new Set(DEFAULT_APP_SETTINGS.homepage.whyShopItems.map((item) => item.id)));
   const [isLoading, setIsLoading] = React.useState(true);
   const [isSaving, setIsSaving] = React.useState(false);
-  const [uploadingItemId, setUploadingItemId] = React.useState("");
+  const [uploadingItemIds, setUploadingItemIds] = React.useState(() => new Set());
   const [message, setMessage] = React.useState("");
   const [messageTone, setMessageTone] = React.useState("success");
 
@@ -2154,6 +2154,11 @@ function WhyShopConfigure({ section, refreshToken = 0 }) {
 
   const uploadIcon = async (itemId, file) => {
     if (!file) return;
+    if (uploadingItemIds.has(itemId)) {
+      setMessage("Please wait for the current icon upload to finish.");
+      setMessageTone("warning");
+      return;
+    }
     const validationMessage = validateWhyShopIconFile(file);
     if (validationMessage) {
       setMessage(validationMessage);
@@ -2161,7 +2166,7 @@ function WhyShopConfigure({ section, refreshToken = 0 }) {
       return;
     }
 
-    setUploadingItemId(itemId);
+    setUploadingItemIds((current) => new Set(current).add(itemId));
     try {
       const response = await uploadWhyShopIcon(file);
       updateItem(itemId, { iconUrl: response.data?.data?.url || "" });
@@ -2171,7 +2176,11 @@ function WhyShopConfigure({ section, refreshToken = 0 }) {
       setMessage(error.response?.data?.message || "Icon upload failed.");
       setMessageTone("warning");
     } finally {
-      setUploadingItemId("");
+      setUploadingItemIds((current) => {
+        const next = new Set(current);
+        next.delete(itemId);
+        return next;
+      });
     }
   };
 
@@ -2182,7 +2191,7 @@ function WhyShopConfigure({ section, refreshToken = 0 }) {
   };
 
   const saveAll = async () => {
-    const cssError = getScopedCssValidationError(sectionSettings.customCss, ".avyona-product-payment-icons");
+    const cssError = getScopedCssValidationError(sectionSettings.customCss, ".avyona-why-shop");
     if (cssError) {
       setMessage(cssError);
       setMessageTone("warning");
@@ -2203,18 +2212,17 @@ function WhyShopConfigure({ section, refreshToken = 0 }) {
       await updateWhyShopSettings(cleanSectionSettings);
 
       const cleanIds = new Set(cleanItems.map((item) => item.id));
-      await Promise.all(
-        [...persistedItemIds]
-          .filter((itemId) => !cleanIds.has(itemId))
-          .map((itemId) => deleteWhyShopItem(itemId))
-      );
+      for (const itemId of [...persistedItemIds].filter((id) => !cleanIds.has(id))) {
+        await deleteWhyShopItem(itemId);
+      }
 
-      await Promise.all(cleanItems.map((item) => (
-        persistedItemIds.has(item.id)
-          ? updateWhyShopItem(item.id, item)
-          : createWhyShopItem(item)
-      )));
-      await Promise.all(cleanItems.map((item) => updateWhyShopItemStatus(item.id, item.status)));
+      for (const item of cleanItems) {
+        if (persistedItemIds.has(item.id)) {
+          await updateWhyShopItem(item.id, item);
+        } else {
+          await createWhyShopItem(item);
+        }
+      }
       await reorderWhyShopItems(cleanItems.map((item) => item.id));
 
       const refreshedResponse = await fetchWhyShopHomepage();
@@ -2229,6 +2237,7 @@ function WhyShopConfigure({ section, refreshToken = 0 }) {
       setSectionSettings(normalizeHomepageSectionSettings(refreshedData.settings || cleanSectionSettings, DEFAULT_APP_SETTINGS.homepage[settingsKey]));
       setItems(normalizeWhyShopItems(savedSettings));
       setPersistedItemIds(new Set((refreshedData.items || cleanItems).map((item) => item.id)));
+      window.localStorage.setItem("avyonaWhyShopUpdatedAt", String(Date.now()));
       setMessage(`${sectionLabel} settings and trust badges saved.`);
       setMessageTone("success");
     } catch (error) {
@@ -2301,7 +2310,7 @@ function WhyShopConfigure({ section, refreshToken = 0 }) {
           </div>
 
           <div style={settingsSaveActionStyle}>
-            <button type="button" onClick={saveAll} disabled={isSaving || isLoading || Boolean(uploadingItemId)} style={saveButtonStyle}>
+            <button type="button" onClick={saveAll} disabled={isSaving || isLoading || uploadingItemIds.size > 0} style={saveButtonStyle}>
               {isSaving ? "Saving..." : "Save Settings"}
             </button>
           </div>
@@ -2334,7 +2343,7 @@ function WhyShopConfigure({ section, refreshToken = 0 }) {
 
                   <IconUploadDropzone
                     item={item}
-                    isUploading={uploadingItemId === item.id}
+                    isUploading={uploadingItemIds.has(item.id)}
                     onUpload={(file) => uploadIcon(item.id, file)}
                     onRemove={() => removeIcon(item.id)}
                   />
@@ -2457,7 +2466,7 @@ function WhyShopConfigure({ section, refreshToken = 0 }) {
         </div>
 
         <div style={whyShopBottomActionStyle}>
-          <button type="button" onClick={saveAll} disabled={isSaving || isLoading || Boolean(uploadingItemId)} style={saveButtonStyle}>
+          <button type="button" onClick={saveAll} disabled={isSaving || isLoading || uploadingItemIds.size > 0} style={saveButtonStyle}>
             {isSaving ? "Saving..." : "Save Why Shop Section"}
           </button>
           <Link to="/dashboard/homepage" style={backButtonStyle}>Back to Homepage Sections</Link>
@@ -2473,7 +2482,7 @@ function IconUploadDropzone({ item, isUploading, onUpload, onRemove }) {
 
   const handleFiles = (files) => {
     const file = files?.[0];
-    if (file) onUpload(file);
+    if (file && !isUploading) onUpload(file);
   };
 
   const preventDefaults = (event) => {
@@ -2502,6 +2511,7 @@ function IconUploadDropzone({ item, isUploading, onUpload, onRemove }) {
       onDrop={(event) => {
         preventDefaults(event);
         setIsDragging(false);
+        if (isUploading) return;
         handleFiles(event.dataTransfer.files);
       }}
     >
@@ -2516,11 +2526,15 @@ function IconUploadDropzone({ item, isUploading, onUpload, onRemove }) {
         <span style={labelStyle}>Icon upload</span>
         <p style={panelCopyStyle}>PNG, JPG, JPEG, WebP, or sanitized SVG. Max 1 MB.</p>
         <div style={whyShopDropzoneActionsStyle}>
-          <label htmlFor={inputId} style={secondaryButtonStyle}>
-            {item.iconUrl ? "Replace icon" : "Click to upload"}
+          <label
+            htmlFor={isUploading ? undefined : inputId}
+            aria-disabled={isUploading}
+            style={isUploading ? disabledActionButtonStyle : secondaryButtonStyle}
+          >
+            {isUploading ? "Uploading..." : item.iconUrl ? "Replace icon" : "Click to upload"}
           </label>
           {item.iconUrl ? (
-            <button type="button" onClick={onRemove} style={dangerButtonStyle}>Remove icon</button>
+            <button type="button" onClick={onRemove} disabled={isUploading} style={isUploading ? disabledActionButtonStyle : dangerButtonStyle}>Remove icon</button>
           ) : null}
         </div>
         {isUploading ? <small style={helperTextStyle}>Uploading...</small> : <small style={helperTextStyle}>Drag and drop upload supported.</small>}
@@ -2528,7 +2542,12 @@ function IconUploadDropzone({ item, isUploading, onUpload, onRemove }) {
           id={inputId}
           type="file"
           accept="image/png,image/jpeg,image/webp,image/svg+xml"
-          onChange={(event) => handleFiles(event.target.files)}
+          disabled={isUploading}
+          onChange={(event) => {
+            const files = event.target.files;
+            handleFiles(files);
+            event.target.value = "";
+          }}
           style={hiddenFileInputStyle}
         />
       </div>
@@ -3310,7 +3329,7 @@ function FeaturedBrandsConfigure({ section, refreshToken = 0 }) {
             <article key={brand.id} style={brandCardStyle}>
               <button type="button" onClick={() => setExpandedBrandId((current) => current === brand.id ? "" : brand.id)} style={brandPreviewButtonStyle}>
                 <span style={brandLogoPreviewStyle}>
-                  {brand.logoUrl ? <img src={brand.logoUrl} alt={brand.name || "Brand logo"} style={brandLogoImageStyle} /> : "Logo"}
+                  {brand.logoUrl ? <img src={resolveAdminMediaUrl(brand.logoUrl)} alt={brand.name || "Brand logo"} style={brandLogoImageStyle} /> : "Logo"}
                 </span>
                 <span style={brandPreviewCopyStyle}>
                   <span style={eyebrowStyle}>{`Brand ${index + 1}`}</span>

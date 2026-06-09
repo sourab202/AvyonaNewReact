@@ -310,7 +310,7 @@ export default function ThankYouPageSettings() {
             </p>
           </div>
           <Link to="/dashboard/homepage/thank-you-page/invoice-designer" style={subNavLinkStyle}>
-            Open Invoice Designer →
+            Edit Invoice
           </Link>
         </div>
       </article>

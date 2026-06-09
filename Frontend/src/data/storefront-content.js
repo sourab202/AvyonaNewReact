@@ -1,7 +1,3 @@
-import { productData as rawProductData } from "./product-data";
-import { collectionData as rawCollectionData } from "./collection-data";
-import { getOptimizedAssetPath } from "../utils/storefront";
-
 export const categoryRouteMap = {
   "personal-audio": "/collection/personal-audio",
   "professional-audio": "/collection/professional-audio",
@@ -116,35 +112,3 @@ export const blogEntries = [
 ];
 
 export const blogEntriesBySlug = Object.fromEntries(blogEntries.map((entry) => [entry.slug, entry]));
-
-export const featuredBrands = ["sony", "KODAK", "JBL", "AKG", "WYZE", "GLOCUENT"];
-
-function normalizeAssetPaths(value) {
-  if (Array.isArray(value)) return value.map(normalizeAssetPaths);
-  if (value && typeof value === "object") {
-    return Object.fromEntries(Object.entries(value).map(([key, entryValue]) => [key, normalizeAssetPaths(entryValue)]));
-  }
-  if (typeof value === "string" && value.startsWith("im" + "ages/")) return "";
-  return value;
-}
-
-export const productData = normalizeAssetPaths(rawProductData);
-export const collectionData = normalizeAssetPaths(rawCollectionData);
-export const allProducts = Object.values(productData);
-const productsByAsin = new Map(allProducts.map((product) => [String(product.asin || ""), product]));
-
-export function getProductByIdentifier(identifier) {
-  const normalized = String(identifier || "").trim();
-  if (!normalized) return null;
-  return productData[normalized] || productsByAsin.get(normalized) || null;
-}
-
-export function getProductsByVariantGroup(groupId) {
-  const normalized = String(groupId || "").trim();
-  if (!normalized) return [];
-  return allProducts.filter((product) => String(product.variantGroupId || "") === normalized);
-}
-
-export const featuredProducts = allProducts.slice(0, 8);
-export const arrivalProducts = [...allProducts].sort((left, right) => right.rating - left.rating).slice(0, 4);
-export const frameProducts = allProducts.filter((product) => product.collectionSlug === "digital-photo-frames");

@@ -5,9 +5,16 @@ import { ApiError } from "../utils/apiError.js";
 import { signCustomerToken } from "../utils/jwt.js";
 import { grantSignupBonus } from "../services/creditPointsRewards.js";
 import { validateReferralAtSignup } from "../services/creditPointsSecurity.js";
+import {
+  getCustomerBusinessDetails,
+  normalizeBusinessDetails,
+  publicBusinessDetails,
+  saveCustomerBusinessDetails
+} from "../services/customerBusinessDetails.js";
 
 function publicCustomer(customer) {
   const [firstName = "", ...lastParts] = String(customer.fullName || "").split(/\s+/).filter(Boolean);
+  const businessDetails = publicBusinessDetails(customer.businessDetails || customer);
   return {
     id: customer.id,
     fullName: customer.fullName,
@@ -16,7 +23,11 @@ function publicCustomer(customer) {
     firstName,
     lastName: lastParts.join(" "),
     city: customer.city || "",
-    state: customer.state || ""
+    state: customer.state || "",
+    businessDetails,
+    isBusinessAccount: businessDetails.isBusinessAccount,
+    businessName: businessDetails.businessName,
+    gstNumber: businessDetails.gstNumber
   };
 }
 
@@ -108,6 +119,7 @@ export async function signupCustomer(request, response) {
   const phone    = String(request.body?.mobile   || request.body?.phone || "").trim();
   const password = String(request.body?.password || "");
   const referredByCode = String(request.body?.referralCode || "").trim().toUpperCase() || null;
+  const businessDetails = normalizeBusinessDetails(request.body?.businessDetails || request.body || {});
   const ipAddress = request.headers["x-forwarded-for"]?.split(",")[0]?.trim() || request.ip || null;
   const rawDevice = String(request.body?.deviceFingerprint || request.headers["x-device-fingerprint"] || request.headers["user-agent"] || "").trim();
   const deviceHash = rawDevice ? crypto.createHash("sha256").update(rawDevice).digest("hex") : null;
@@ -164,6 +176,8 @@ export async function signupCustomer(request, response) {
     customerId = result.insertId;
   }
 
+  await saveCustomerBusinessDetails(customerId, businessDetails);
+
   // ── Store referral code if provided (validated in reward service) ─────────
   if (referredByCode && isNewAccount) {
     await query(
@@ -195,6 +209,7 @@ export async function signupCustomer(request, response) {
     [customerId]
   );
   const customer = rows[0];
+  customer.businessDetails = await getCustomerBusinessDetails(customerId);
 
   // ── Grant signup bonus (non-fatal — fires after response for new accounts) ─
   // Only new accounts receive the bonus; updating a password-less stub does not.
@@ -245,6 +260,7 @@ export async function loginCustomer(request, response) {
   }
 
   await query("UPDATE customers SET last_login_at = NOW() WHERE id = ?", [customer.id]);
+  customer.businessDetails = await getCustomerBusinessDetails(customer.id);
 
   response.json({
     success: true,
@@ -288,10 +304,11 @@ export async function requestCustomerPasswordReset(request, response) {
 }
 
 export async function getCurrentCustomer(request, response) {
+  const businessDetails = await getCustomerBusinessDetails(request.customer.id);
   response.json({
     success: true,
     data: {
-      customer: publicCustomer(request.customer)
+      customer: publicCustomer({ ...request.customer, businessDetails })
     }
   });
 }
@@ -302,6 +319,11 @@ export async function updateCurrentCustomer(request, response) {
   const phone = String(request.body?.mobile || request.body?.phone || "").trim();
   const city = String(request.body?.city || "").trim();
   const state = String(request.body?.state || "").trim();
+  const hasBusinessPayload = Object.prototype.hasOwnProperty.call(request.body || {}, "businessDetails") ||
+    Object.prototype.hasOwnProperty.call(request.body || {}, "businessName") ||
+    Object.prototype.hasOwnProperty.call(request.body || {}, "gstNumber") ||
+    Object.prototype.hasOwnProperty.call(request.body || {}, "isBusinessAccount") ||
+    Object.prototype.hasOwnProperty.call(request.body || {}, "businessAccount");
 
   if (!fullName || !email) {
     throw new ApiError(400, "Full name and email are required");
@@ -323,13 +345,18 @@ export async function updateCurrentCustomer(request, response) {
     [fullName, email, phone || null, city || null, state || null, request.customer.id]
   );
 
+  let businessDetails = await getCustomerBusinessDetails(request.customer.id);
+  if (hasBusinessPayload) {
+    businessDetails = await saveCustomerBusinessDetails(request.customer.id, request.body?.businessDetails || request.body || {});
+  }
+
   const rows = await query("SELECT id, full_name AS fullName, email, phone, city, state FROM customers WHERE id = ? LIMIT 1", [request.customer.id]);
 
   response.json({
     success: true,
     message: "Profile updated",
     data: {
-      customer: publicCustomer(rows[0])
+      customer: publicCustomer({ ...rows[0], businessDetails })
     }
   });
 }

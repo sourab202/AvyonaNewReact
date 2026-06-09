@@ -132,29 +132,6 @@ export function getCheckoutPaymentMethods(source) {
   ].filter((method) => method.enabled);
 }
 
-export function getCheckoutShippingOptions(source) {
-  const settings = getSiteSettings(source);
-  const shipping = settings.shipping || {};
-  const shippingChargesText = String(shipping.shippingCharges || "");
-  const numericMatch = shippingChargesText.match(/(\d[\d,]*)/);
-  const standardCharge = numericMatch ? Number(numericMatch[1].replace(/,/g, "")) : 0;
-
-  return [
-    {
-      id: "standard",
-      label: "Standard Delivery",
-      description: `Delivered in ${shipping.deliveryTime || "3 to 5 business days"}`,
-      price: standardCharge
-    },
-    {
-      id: "express",
-      label: "Express Delivery",
-      description: `Priority dispatch in ${shipping.dispatchTime || "24 to 48 hours"}`,
-      price: Math.max(standardCharge, 199)
-    }
-  ];
-}
-
 export function normalizeText(value) {
   return String(value || "")
     .toLowerCase()
@@ -375,12 +352,20 @@ export function getMergedProfile(authUser, customerProfile) {
   const firstName = String(customerProfile.firstName || "").trim();
   const lastName = String(customerProfile.lastName || "").trim();
   const fullName = [firstName, lastName].filter(Boolean).join(" ").trim() || authUser?.fullName || "Avyona Customer";
+  const businessDetails = customerProfile.businessDetails || authUser?.businessDetails || {};
+  const businessName = customerProfile.businessName || businessDetails.businessName || authUser?.businessName || "";
+  const gstNumber = customerProfile.gstNumber || businessDetails.gstNumber || authUser?.gstNumber || "";
+  const isBusinessAccount = Boolean(customerProfile.isBusinessAccount || businessDetails.isBusinessAccount || authUser?.isBusinessAccount || businessName || gstNumber);
   return {
     fullName,
     email: customerProfile.email || authUser?.email || "",
     mobile: customerProfile.phone || authUser?.mobile || "",
     address: customerProfile.address || "",
-    image: customerProfile.image || createInitialAvatar(fullName)
+    image: customerProfile.image || createInitialAvatar(fullName),
+    businessDetails: { isBusinessAccount, businessName, gstNumber },
+    isBusinessAccount,
+    businessName,
+    gstNumber
   };
 }
 

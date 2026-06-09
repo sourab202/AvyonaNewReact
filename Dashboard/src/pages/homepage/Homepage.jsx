@@ -40,8 +40,12 @@ const homepageSections = [
   {
     title: "Product Payment Icons",
     path: "/dashboard/homepage/product-payment-icons",
-    description: "Manage payment icons shown on product detail pages.",
-    actionLabel: "Configure"
+    description: "Manage payment icons shown on product detail pages."
+  },
+  {
+    title: "Delivery Pincodes",
+    path: "/dashboard/homepage/delivery-pincodes",
+    description: "Add, edit, import, activate, and bulk-manage delivery serviceability and COD by pincode."
   },
   {
     title: "Pages",
@@ -61,8 +65,7 @@ const homepageSections = [
   {
     title: "Limited Time Offers",
     path: "/dashboard/coupons?view=offers",
-    description: "Manage coupon offer cards shown on the homepage and product pages.",
-    actionLabel: "Configure"
+    description: "Manage coupon offer cards shown on the homepage and product pages."
   },
   {
     title: "Reviews",

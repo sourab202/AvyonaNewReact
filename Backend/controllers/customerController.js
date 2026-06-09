@@ -1,5 +1,6 @@
 import { query } from "../config/db.js";
 import { ApiError } from "../utils/apiError.js";
+import { ensureCustomerBusinessDetailsTable, saveCustomerBusinessDetails } from "../services/customerBusinessDetails.js";
 
 function getAccountStatus(customer) {
   if (Number(customer.totalOrders || 0) > 0) {
@@ -32,6 +33,7 @@ function formatSavedAddresses(customer) {
 }
 
 export async function listCustomers(_request, response) {
+  await ensureCustomerBusinessDetailsTable();
   const rows = await query(
     `SELECT
       c.id,
@@ -50,11 +52,36 @@ export async function listCustomers(_request, response) {
      ORDER BY c.created_at DESC`
   );
 
-  const data = rows.map((customer) => ({
-    ...customer,
-    accountStatus: getAccountStatus(customer),
-    savedAddresses: formatSavedAddresses(customer)
-  }));
+  const businessRows = rows.length
+    ? await query(
+        `SELECT
+          customer_id AS customerId,
+          is_business_account AS isBusinessAccount,
+          business_name AS businessName,
+          gst_number AS gstNumber
+         FROM customer_business_details
+         WHERE customer_id IN (${rows.map(() => "?").join(",")})`,
+        rows.map((customer) => customer.id)
+      )
+    : [];
+  const businessByCustomer = new Map(businessRows.map((row) => [Number(row.customerId), row]));
+
+  const data = rows.map((customer) => {
+    const business = businessByCustomer.get(Number(customer.id)) || {};
+    return {
+      ...customer,
+      businessDetails: {
+        isBusinessAccount: Boolean(business.isBusinessAccount || business.businessName || business.gstNumber),
+        businessName: business.businessName || "",
+        gstNumber: business.gstNumber || ""
+      },
+      isBusinessAccount: Boolean(business.isBusinessAccount || business.businessName || business.gstNumber),
+      businessName: business.businessName || "",
+      gstNumber: business.gstNumber || "",
+      accountStatus: getAccountStatus(customer),
+      savedAddresses: formatSavedAddresses(customer)
+    };
+  });
 
   response.json({
     success: true,
@@ -69,6 +96,8 @@ export async function getCustomerDetails(request, response) {
   if (!Number.isFinite(customerId) || customerId <= 0) {
     throw new ApiError(400, "Invalid customer id");
   }
+
+  await ensureCustomerBusinessDetailsTable();
 
   const customerRows = await query(
     `SELECT
@@ -118,16 +147,65 @@ export async function getCustomerDetails(request, response) {
     [customerId]
   );
 
+  const businessRows = await query(
+    `SELECT
+      is_business_account AS isBusinessAccount,
+      business_name AS businessName,
+      gst_number AS gstNumber
+     FROM customer_business_details
+     WHERE customer_id = ?
+     LIMIT 1`,
+    [customerId]
+  );
+  const business = businessRows[0] || {};
+  const businessDetails = {
+    isBusinessAccount: Boolean(business.isBusinessAccount || business.businessName || business.gstNumber),
+    businessName: business.businessName || "",
+    gstNumber: business.gstNumber || ""
+  };
+
   response.json({
     success: true,
     data: {
       ...customer,
+      businessDetails,
+      isBusinessAccount: businessDetails.isBusinessAccount,
+      businessName: businessDetails.businessName,
+      gstNumber: businessDetails.gstNumber,
       accountStatus: getAccountStatus(customer),
       emailVerified: Boolean(customer.email),
       phoneVerified: Boolean(customer.phone),
       savedAddresses: formatSavedAddresses(customer),
       orderHistory,
       notes: []
+    }
+  });
+}
+
+export async function updateCustomerBusinessDetails(request, response) {
+  const customerId = Number(request.params.id);
+
+  if (!Number.isFinite(customerId) || customerId <= 0) {
+    throw new ApiError(400, "Invalid customer id");
+  }
+
+  const customerRows = await query("SELECT id FROM customers WHERE id = ? LIMIT 1", [customerId]);
+  if (!customerRows[0]) {
+    throw new ApiError(404, "Customer not found");
+  }
+
+  const businessDetails = await saveCustomerBusinessDetails(customerId, request.body || {});
+
+  response.json({
+    success: true,
+    message: businessDetails.isBusinessAccount || businessDetails.businessName || businessDetails.gstNumber
+      ? "Business details updated"
+      : "Business details removed",
+    data: {
+      businessDetails,
+      isBusinessAccount: businessDetails.isBusinessAccount,
+      businessName: businessDetails.businessName,
+      gstNumber: businessDetails.gstNumber
     }
   });
 }

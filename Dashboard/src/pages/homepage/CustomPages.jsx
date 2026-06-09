@@ -20,6 +20,7 @@ import {
   FaTrash,
   FaFont
 } from "react-icons/fa";
+import { resolveAdminMediaUrl } from "../../utils/media";
 import {
   createBlock as createBlockRequest,
   createPage as createPageRequest,
@@ -1133,7 +1134,7 @@ export default function CustomPages() {
                         <strong>{block.title || block.type}</strong>
                         <span>{getBlockSummary(block)}</span>
                       </div>
-                      {block.imageUrl ? <img src={block.imageUrl} alt={block.imageAltText || ""} style={blockThumbStyle} /> : null}
+                      {block.imageUrl ? <img src={resolveAdminMediaUrl(block.imageUrl)} alt={block.imageAltText || ""} style={blockThumbStyle} /> : null}
                       <div style={compactBlockActionsStyle}>
                         <button type="button" onClick={() => setEditingBlockId((current) => current === block.id ? "" : block.id)} style={iconButtonStyle} title="Edit"><FaEdit /></button>
                         <button type="button" onClick={() => duplicateBlock(editingPage.id, block)} style={iconButtonStyle} title="Duplicate"><FaCopy /></button>
@@ -1616,10 +1617,10 @@ function PagePreview({ page, blocks, mode }) {
       <div style={previewContentStyle}>
         {visibleBlocks.length ? visibleBlocks.slice(0, 5).map((block) => (
           <div key={block.id} style={previewBlockStyle}>
-            {block.type === "Image Block" && block.imageUrl ? <img src={block.imageUrl} alt={block.imageAltText || ""} style={previewImageStyle} /> : null}
+            {block.type === "Image Block" && block.imageUrl ? <img src={resolveAdminMediaUrl(block.imageUrl)} alt={block.imageAltText || ""} style={previewImageStyle} /> : null}
             {block.type === "Image + Text Block" ? (
               <div style={block.imageTextLayout === "overlay" ? previewImageTextOverlayStyle : previewImageTextStyle}>
-                {block.imageUrl ? <img src={block.imageUrl} alt={block.imageAltText || ""} style={previewImageTextImageStyle} /> : null}
+                {block.imageUrl ? <img src={resolveAdminMediaUrl(block.imageUrl)} alt={block.imageAltText || ""} style={previewImageTextImageStyle} /> : null}
                 <div style={{ ...previewImageTextCopyStyle, textAlign: block.imageTextAlign || "left" }}>
                   <strong>{block.imageTextHeading || block.title}</strong>
                   <p>{block.imageTextParagraph || block.content}</p>

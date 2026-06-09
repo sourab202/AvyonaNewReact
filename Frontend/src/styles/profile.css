@@ -332,6 +332,28 @@ body.profile-page {
   box-shadow: 0 0 0 4px rgba(11, 138, 87, 0.1);
 }
 
+.profile-business-toggle {
+  padding: 12px 14px;
+  border: 1px solid #d7eee0;
+  border-radius: 14px;
+  background: #f4fbf7;
+}
+
+.profile-checkbox-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: #334155;
+  font-size: 0.94rem;
+  font-weight: 700;
+}
+
+.profile-checkbox-row input {
+  width: auto;
+  min-height: auto;
+  margin: 0;
+}
+
 .profile-form-actions {
   display: flex;
   justify-content: flex-end;

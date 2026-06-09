@@ -1,5 +1,5 @@
 import React from "react";
-import { NavLink, useNavigate } from "react-router-dom";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
   FaBox,
   FaCog,
@@ -48,11 +48,21 @@ const navItems = [
 
 export default function Sidebar({ isCollapsed = false, onToggleCollapse }) {
   const navigate = useNavigate();
+  const location = useLocation();
+  const [openDropdowns, setOpenDropdowns] = React.useState(() => ({
+    settings: location.pathname.startsWith("/dashboard/settings")
+  }));
 
   const handleLogout = () => {
     clearAdminToken();
-    navigate("/login", { replace: true });
+    navigate("/dashboard/login", { replace: true });
   };
+
+  React.useEffect(() => {
+    if (location.pathname.startsWith("/dashboard/settings")) {
+      setOpenDropdowns((current) => ({ ...current, settings: true }));
+    }
+  }, [location.pathname]);
 
   return (
     <aside className="dashboard-sidebar">
@@ -81,25 +91,41 @@ export default function Sidebar({ isCollapsed = false, onToggleCollapse }) {
           const visibleChildren = (item.children || []).filter((child) => canViewModule(child.module));
 
           if (visibleChildren.length) {
+            const dropdownKey = item.label.toLowerCase();
+            const isDropdownOpen = Boolean(openDropdowns[dropdownKey]) && !isCollapsed;
+            const isSectionActive = location.pathname === item.to || visibleChildren.some((child) => location.pathname.startsWith(child.to));
+            const toggleDropdown = () => {
+              if (isCollapsed) {
+                navigate(item.to);
+                return;
+              }
+              setOpenDropdowns((current) => ({ ...current, [dropdownKey]: !current[dropdownKey] }));
+            };
+
             return (
-              <div key={item.to}>
-                <NavLink
-                  to={item.to}
-                  className={({ isActive }) => `dashboard-nav-link${isActive ? " is-active" : ""}`}
+              <div key={item.to} className={`dashboard-nav-group${isDropdownOpen ? " is-open" : ""}`}>
+                <button
+                  type="button"
+                  className={`dashboard-nav-link dashboard-nav-button dashboard-nav-dropdown-toggle${isSectionActive ? " is-active" : ""}`}
+                  onClick={toggleDropdown}
+                  aria-expanded={isDropdownOpen}
+                  aria-controls={`${dropdownKey}-submenu`}
                 >
                   <item.icon className="dashboard-nav-icon" aria-hidden="true" />
                   <span className="dashboard-nav-label">{item.label}</span>
-                  <FaChevronDown className="dashboard-nav-chevron" aria-hidden="true" />
-                </NavLink>
-                {visibleChildren.map((child) => (
-                  <NavLink
-                    key={child.to}
-                    to={child.to}
-                    className={({ isActive }) => `dashboard-nav-sublink${isActive ? " is-active" : ""}`}
-                  >
-                    <span className="dashboard-nav-label">{child.label}</span>
-                  </NavLink>
-                ))}
+                  <FaChevronDown className={`dashboard-nav-chevron${isDropdownOpen ? " is-open" : ""}`} aria-hidden="true" />
+                </button>
+                <div id={`${dropdownKey}-submenu`} className="dashboard-nav-submenu" hidden={!isDropdownOpen}>
+                  {visibleChildren.map((child) => (
+                    <NavLink
+                      key={child.to}
+                      to={child.to}
+                      className={({ isActive }) => `dashboard-nav-sublink${isActive ? " is-active" : ""}`}
+                    >
+                      <span className="dashboard-nav-label">{child.label}</span>
+                    </NavLink>
+                  ))}
+                </div>
               </div>
             );
           }

@@ -1,7 +1,7 @@
 import React from "react";
 import { FaPlus, FaTimes } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
-import { createProduct, fetchCategories, updateProduct, uploadAdminImage } from "../../api/adminApi";
+import { createProduct, fetchCategories, updateProduct, uploadAdminImage, uploadAdminMedia } from "../../api/adminApi";
 import {
   createEmptySpecGroup,
   createEmptySpecItem,
@@ -261,7 +261,12 @@ export function buildProductFormDataFromStorefrontProduct(product) {
     media: {
       ...base.media,
       images: productImages.map((image, index) => createPseudoUpload(index === 0 ? "Current product image" : `Gallery image ${index + 1}`, image)),
-      videos: product.video ? [createPseudoUpload("Current product video", product.video)] : []
+      videos: [
+        ...(product.video ? [createPseudoUpload("Current product video", product.video)] : []),
+        ...(Array.isArray(product.videoUrls) ? product.videoUrls : [])
+          .filter((url) => url && url !== product.video)
+          .map((url, index) => createPseudoUpload(`Current product video ${index + 2}`, url))
+      ]
     },
     variants: Array.isArray(product.variants) && product.variants.length
       ? product.variants.map((variant) => ({
@@ -647,10 +652,28 @@ export default function AddProduct({ initialProductData = null, mode = "add" }) 
     return uploadedUrls.filter(Boolean);
   };
 
+  const uploadProductVideos = async () => {
+    const videoFiles = Array.isArray(media.videos) ? media.videos : [];
+    const uploadedUrls = [];
+
+    for (const video of videoFiles) {
+      if (video.file) {
+        const response = await uploadAdminMedia(video.file);
+        const uploadedUrl = response.data?.data?.url || response.data?.url || "";
+        uploadedUrls.push(toStoredUploadUrl(uploadedUrl));
+      } else if (video.url) {
+        uploadedUrls.push(toStoredUploadUrl(video.url));
+      }
+    }
+
+    return uploadedUrls.filter(Boolean);
+  };
+
   const buildProductPayload = async (publishStatus) => {
     const productCategorySlug = basicInfo.subcategory || basicInfo.category;
     const categoryRecord = backendCategories.find((category) => category.slug === productCategorySlug);
     const productImageUrls = await uploadProductImages();
+    const productVideoUrls = await uploadProductVideos();
     const primaryImageUrl = productImageUrls[0] || "";
     const cleanedHighlights = highlights.map((item) => String(item || "").trim()).filter(Boolean);
     const descriptionText = String(descriptionData.content || "").trim();
@@ -672,6 +695,7 @@ export default function AddProduct({ initialProductData = null, mode = "add" }) 
       reviewCount: 0,
       imageUrl: primaryImageUrl,
       imageUrls: productImageUrls,
+      videoUrls: productVideoUrls,
       status: publishStatus
     };
   };

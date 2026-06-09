@@ -241,7 +241,7 @@ const orders = [
     ],
     pricing: {
       subtotal: 8497,
-      shippingFee: 99,
+      shippingFee: 0,
       discountTotal: 250,
       taxTotal: 0,
       grandTotal: 8346,

@@ -3,7 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import orders, { orderStatusOptions } from "../../data/orders";
 import { formatCurrency } from "../../utils/storefront";
 import { formatOrderStatusLabel } from "../../../../shared/orderStatusFlow";
-import { updateOrderTracking } from "../../api/adminApi";
+import { fetchOrder, updateOrderTracking } from "../../api/adminApi";
 
 function DetailCard({ title, children }) {
   return (
@@ -31,26 +31,29 @@ function getOrderStatusStyle(status) {
 }
 
 function getPaymentStatusStyle(status) {
-  const normalizedStatus = getPaymentBadgeLabel(status);
+  const normalizedStatus = String(status || "").replaceAll("-", "_");
 
-  if (normalizedStatus === "Paid") return { background: "#dcfce7", color: "#16a34a" };
-  if (normalizedStatus === "Unpaid") return { background: "#fee2e2", color: "#ef4444" };
-  if (normalizedStatus === "Partial") return { background: "#ffedd5", color: "#ea580c" };
-  if (normalizedStatus === "Refunded") return { background: "#e5e7eb", color: "#6b7280" };
+  if (normalizedStatus === "paid" || normalizedStatus === "authorized") return { background: "#dcfce7", color: "#16a34a" };
+  if (normalizedStatus === "pending" || normalizedStatus === "cod_pending") return { background: "#fef3c7", color: "#9a6700" };
+  if (normalizedStatus === "failed") return { background: "#fee2e2", color: "#dc2626" };
+  if (normalizedStatus === "refunded" || normalizedStatus === "partially_refunded") return { background: "#dbeafe", color: "#2563eb" };
   return { background: "#f8fafc", color: "#475569" };
 }
 
 function getPaymentBadgeLabel(status) {
-  if (status === "paid" || status === "authorized") return "Paid";
-  if (status === "partially-refunded") return "Partial";
-  if (status === "refunded") return "Refunded";
-  if (status === "pending" || status === "failed" || status === "cod-pending") return "Unpaid";
-  return status;
+  const normalizedStatus = String(status || "").replaceAll("-", "_");
+  if (normalizedStatus === "paid") return "Paid";
+  if (normalizedStatus === "authorized") return "Authorized";
+  if (normalizedStatus === "partially_refunded") return "Partially Refunded";
+  if (normalizedStatus === "refunded") return "Refunded";
+  if (normalizedStatus === "failed") return "Failed";
+  if (normalizedStatus === "pending" || normalizedStatus === "cod_pending") return "Pending";
+  return formatOrderStatusLabel(normalizedStatus);
 }
 
 export default function OrderDetails() {
   const { orderId } = useParams();
-  const order = React.useMemo(
+  const fallbackOrder = React.useMemo(
     () => orders.find((entry) => String(entry.id) === String(orderId)),
     [orderId]
   );
@@ -62,17 +65,44 @@ export default function OrderDetails() {
   const [adminRemark, setAdminRemark] = React.useState("");
   const [statusMessage, setStatusMessage] = React.useState("");
   const [isSaving, setIsSaving] = React.useState(false);
+  const [isLoading, setIsLoading] = React.useState(true);
 
   React.useEffect(() => {
-    if (!order) return;
-    setCurrentOrder(order);
-    setOrderStatus(order.orderStatus);
-    setCourierName(order.courierName || "");
-    setExpectedDeliveryDate(toDateTimeLocalValue(order.expectedDeliveryDate));
-    setTrackingNote("");
-    setAdminRemark(order.notes.adminRemark || "");
-    setStatusMessage("");
-  }, [order]);
+    let isMounted = true;
+
+    async function loadOrder() {
+      setIsLoading(true);
+      setStatusMessage("");
+
+      try {
+        const response = await fetchOrder(orderId);
+        if (!isMounted) return;
+        applyLoadedOrder(response.data?.data);
+      } catch {
+        if (!isMounted) return;
+        applyLoadedOrder(fallbackOrder || null);
+        if (fallbackOrder) {
+          setStatusMessage("Backend order details are unavailable. Showing local preview data.");
+        }
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
+    }
+
+    function applyLoadedOrder(order) {
+      setCurrentOrder(order);
+      setOrderStatus(order?.orderStatus || "");
+      setCourierName(order?.courierName || "");
+      setExpectedDeliveryDate(toDateTimeLocalValue(order?.expectedDeliveryDate));
+      setTrackingNote("");
+      setAdminRemark(order?.notes?.adminRemark || "");
+    }
+
+    loadOrder();
+    return () => {
+      isMounted = false;
+    };
+  }, [fallbackOrder, orderId]);
 
   const handleOrderStatusUpdate = async () => {
     if (!currentOrder) return;
@@ -86,36 +116,42 @@ export default function OrderDetails() {
         expectedDeliveryDate: expectedDeliveryDate ? new Date(expectedDeliveryDate).toISOString() : null,
         note: trackingNote
       });
-    } catch {
-      // The local dashboard preview still updates so tracking can be reviewed without backend auth.
-    } finally {
-      const nextTimeline = currentOrder.orderStatus !== orderStatus ? [
-        {
-          id: `${orderStatus}-${Date.now()}`,
-          title: buildTimelineTitle(orderStatus),
-          status: orderStatus,
-          dateTime: new Date().toISOString(),
-          note: trackingNote || "Tracking status updated from admin dashboard."
-        },
-        ...currentOrder.timeline
-      ] : currentOrder.timeline;
-
-      setCurrentOrder({
-        ...currentOrder,
-        orderStatus,
-        courierName,
-        expectedDeliveryDate: expectedDeliveryDate ? new Date(expectedDeliveryDate).toISOString() : "",
-        timeline: nextTimeline,
-        notes: {
-          ...currentOrder.notes,
-          adminRemark: adminRemark || currentOrder.notes.adminRemark || ""
-        }
-      });
-      setTrackingNote("");
-      setStatusMessage(`Tracking updated: ${formatOrderStatusLabel(orderStatus)}${courierName ? ` via ${courierName}` : ""}.`);
+    } catch (error) {
+      setStatusMessage(error.response?.data?.message || "Unable to update order tracking.");
       setIsSaving(false);
+      return;
     }
+
+    const nextTimeline = currentOrder.orderStatus !== orderStatus ? [
+      {
+        id: `${orderStatus}-${Date.now()}`,
+        title: buildTimelineTitle(orderStatus),
+        status: orderStatus,
+        dateTime: new Date().toISOString(),
+        note: trackingNote || "Tracking status updated from admin dashboard."
+      },
+      ...currentOrder.timeline
+    ] : currentOrder.timeline;
+
+    setCurrentOrder({
+      ...currentOrder,
+      orderStatus,
+      courierName,
+      expectedDeliveryDate: expectedDeliveryDate ? new Date(expectedDeliveryDate).toISOString() : "",
+      timeline: nextTimeline,
+      notes: {
+        ...currentOrder.notes,
+        adminRemark: adminRemark || currentOrder.notes.adminRemark || ""
+      }
+    });
+    setTrackingNote("");
+    setStatusMessage(`Tracking updated: ${formatOrderStatusLabel(orderStatus)}${courierName ? ` via ${courierName}` : ""}.`);
+    setIsSaving(false);
   };
+
+  if (isLoading) {
+    return <p style={{ color: "#64748b" }}>Loading order details...</p>;
+  }
 
   if (!currentOrder) {
     return (
@@ -305,8 +341,8 @@ export default function OrderDetails() {
       <DetailCard title="Payment Details">
         <div style={detailGridStyle}>
           <div style={detailItemStyle}>
-            <span>Payment Method</span>
-            <strong>{currentOrder.payment.method}</strong>
+            <span>Payment Gateway</span>
+            <strong>{formatPaymentGateway(currentOrder.payment.gateway)}</strong>
           </div>
           <div style={detailItemStyle}>
             <span>Payment Status</span>
@@ -315,20 +351,24 @@ export default function OrderDetails() {
             </span>
           </div>
           <div style={detailItemStyle}>
-            <span>Transaction ID</span>
-            <strong>{currentOrder.payment.transactionId || "Not available"}</strong>
+            <span>Razorpay Order ID</span>
+            <strong style={breakableValueStyle}>{currentOrder.payment.razorpayOrderId || "Not available"}</strong>
           </div>
           <div style={detailItemStyle}>
-            <span>Paid Amount</span>
-            <strong>{getPaidAmountLabel(currentOrder)}</strong>
+            <span>Razorpay Payment ID</span>
+            <strong style={breakableValueStyle}>{currentOrder.payment.razorpayPaymentId || "Not available"}</strong>
           </div>
           <div style={detailItemStyle}>
-            <span>Payment Date</span>
-            <strong>{currentOrder.payment.paidAt || "Awaiting payment update"}</strong>
+            <span>Paid Date</span>
+            <strong>{currentOrder.payment.paidAt ? formatDateTime(currentOrder.payment.paidAt) : "Awaiting payment"}</strong>
           </div>
           <div style={detailItemStyle}>
-            <span>Payment Reference</span>
-            <strong>{currentOrder.payment.paymentReference || "Not available"}</strong>
+            <span>Payment Error</span>
+            <strong style={breakableValueStyle}>{currentOrder.payment.paymentError || "No payment error"}</strong>
+          </div>
+          <div style={detailItemStyle}>
+            <span>Refund Status</span>
+            <strong>{formatRefundStatus(currentOrder.payment.refundStatus)}</strong>
           </div>
         </div>
       </DetailCard>
@@ -499,6 +539,19 @@ function getPaidAmountLabel(order) {
   }
 
   return "Awaiting payment";
+}
+
+function formatPaymentGateway(value) {
+  const gateway = String(value || "").trim();
+  if (!gateway) return "Not available";
+  return gateway.toLowerCase() === "razorpay" ? "Razorpay" : gateway;
+}
+
+function formatRefundStatus(value) {
+  const normalized = String(value || "not_refunded").replaceAll("-", "_");
+  if (normalized === "refunded") return "Refunded";
+  if (normalized === "partially_refunded") return "Partially Refunded";
+  return "Not Refunded";
 }
 
 function formatDateTime(value) {
@@ -778,4 +831,8 @@ const mutedTextStyle = {
   margin: 0,
   color: "#8aa0b5",
   fontSize: "13px"
+};
+
+const breakableValueStyle = {
+  overflowWrap: "anywhere"
 };
