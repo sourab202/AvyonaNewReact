@@ -1,10 +1,12 @@
 import React from "react";
 import {
   fetchAdminSettings,
+  fetchCategories,
   fetchGeneralSettings,
   fetchPaymentSettings,
   testPaymentConnection,
   updateAdminSettings,
+  updateCategoryCod,
   updateGeneralSettings,
   updatePaymentSettings,
   uploadSettingsAsset
@@ -356,6 +358,11 @@ function BooleanSetting({ label, value, onChange }) {
   );
 }
 
+function isEnabledSetting(value) {
+  if (value === false || value === 0 || String(value).trim().toLowerCase() === "false") return false;
+  return value === true || value === 1 || String(value).trim() === "1";
+}
+
 const defaultPaymentSettings = {
   provider: "razorpay",
   enabled: false,
@@ -368,7 +375,8 @@ const defaultPaymentSettings = {
   liveWebhookSecret: "",
   currency: "INR",
   buttonText: "Pay Now",
-  description: "Order Payment"
+  description: "Order Payment",
+  codEnabled: true
 };
 
 function PaymentSecretField({ label, value, configured, onChange }) {
@@ -395,7 +403,9 @@ function PaymentSettingsPanel({
   isLoading,
   isSaving,
   isTesting,
+  categories,
   onChange,
+  onCategoryChange,
   onSave,
   onTest
 }) {
@@ -415,6 +425,7 @@ function PaymentSettingsPanel({
         <article style={panelStyle}>
           <h4 style={{ margin: 0, color: "#0f172a", fontSize: "20px" }}>General</h4>
           <BooleanSetting label="Enable Online Payment" value={settings.enabled} onChange={(value) => update("enabled", value)} />
+          <BooleanSetting label="Enable Cash on Delivery" value={settings.codEnabled} onChange={(value) => update("codEnabled", value)} />
           <label style={settingRowStyle}>
             <span style={settingLabelStyle}>Mode</span>
             <select value={settings.mode || "test"} onChange={(event) => update("mode", event.target.value)} style={inputStyle}>
@@ -426,6 +437,29 @@ function PaymentSettingsPanel({
             <span style={settingLabelStyle}>Currency</span>
             <input value={settings.currency || "INR"} readOnly style={{ ...inputStyle, background: "#f8fafc" }} />
           </label>
+        </article>
+
+        <article style={panelStyle}>
+          <h4 style={{ margin: 0, color: "#0f172a", fontSize: "20px" }}>COD Allowed Categories</h4>
+          <p style={{ margin: 0, color: "#526377" }}>
+            Cash on Delivery is available only when every product in the cart belongs to an allowed primary category.
+          </p>
+          <div style={{ display: "grid", gap: "10px" }}>
+            {categories.map((category) => (
+              <label key={category.id} style={categoryCodRowStyle}>
+                <strong style={{ color: "#0f172a" }}>{category.name}</strong>
+                <span style={categoryCodToggleStyle}>
+                  <input
+                    type="checkbox"
+                    checked={isEnabledSetting(category.codEnabled)}
+                    onChange={(event) => onCategoryChange(category.id, event.target.checked)}
+                  />
+                  <span>{isEnabledSetting(category.codEnabled) ? "On" : "Off"}</span>
+                </span>
+              </label>
+            ))}
+            {!categories.length ? <span style={settingValueStyle}>No categories are available.</span> : null}
+          </div>
         </article>
 
         <article style={panelStyle}>
@@ -752,6 +786,7 @@ export default function Settings({ initialSection = SETTINGS_SECTIONS[0].id }) {
   const [usingFallback, setUsingFallback] = React.useState(false);
   const [uploadStates, setUploadStates] = React.useState({});
   const [paymentSettings, setPaymentSettings] = React.useState(defaultPaymentSettings);
+  const [paymentCategories, setPaymentCategories] = React.useState([]);
   const [isTestingPayment, setIsTestingPayment] = React.useState(false);
 
   const currentSection = React.useMemo(
@@ -774,10 +809,11 @@ export default function Settings({ initialSection = SETTINGS_SECTIONS[0].id }) {
       setIsLoading(true);
 
       try {
-        const [settingsResult, generalResult, paymentResult] = await Promise.allSettled([
+        const [settingsResult, generalResult, paymentResult, categoriesResult] = await Promise.allSettled([
           fetchAdminSettings(),
           fetchGeneralSettings(),
-          fetchPaymentSettings()
+          fetchPaymentSettings(),
+          fetchCategories()
         ]);
         if (!isMounted) return;
         const settingsData = settingsResult.status === "fulfilled" ? settingsResult.value.data?.data || {} : {};
@@ -787,7 +823,15 @@ export default function Settings({ initialSection = SETTINGS_SECTIONS[0].id }) {
         if (paymentResult.status === "fulfilled") {
           setPaymentSettings({ ...defaultPaymentSettings, ...(paymentResult.value.data?.data || {}) });
         }
-        setUsingFallback(settingsResult.status === "rejected" || generalResult.status === "rejected" || paymentResult.status === "rejected");
+        if (categoriesResult.status === "fulfilled") {
+          setPaymentCategories(Array.isArray(categoriesResult.value.data?.data) ? categoriesResult.value.data.data : []);
+        }
+        setUsingFallback(
+          settingsResult.status === "rejected" ||
+          generalResult.status === "rejected" ||
+          paymentResult.status === "rejected" ||
+          categoriesResult.status === "rejected"
+        );
         setStatusMessage(
           settingsResult.status === "fulfilled" && generalResult.status === "fulfilled"
             ? "Settings loaded from backend."
@@ -858,7 +902,10 @@ export default function Settings({ initialSection = SETTINGS_SECTIONS[0].id }) {
     if (activeSection === "payment") {
       setIsSaving(true);
       try {
-        const response = await updatePaymentSettings({ settings: paymentSettings });
+        const [response] = await Promise.all([
+          updatePaymentSettings({ settings: paymentSettings }),
+          ...paymentCategories.map((category) => updateCategoryCod(category.id, isEnabledSetting(category.codEnabled)))
+        ]);
         setPaymentSettings({ ...defaultPaymentSettings, ...(response.data?.data || paymentSettings) });
         setUsingFallback(false);
         setStatusMessage("Payment settings saved successfully.");
@@ -1001,7 +1048,13 @@ export default function Settings({ initialSection = SETTINGS_SECTIONS[0].id }) {
                   isLoading={isLoading}
                   isSaving={isSaving}
                   isTesting={isTestingPayment}
+                  categories={paymentCategories}
                   onChange={setPaymentSettings}
+                  onCategoryChange={(categoryId, codEnabled) => {
+                    setPaymentCategories((current) => current.map((category) =>
+                      Number(category.id) === Number(categoryId) ? { ...category, codEnabled } : category
+                    ));
+                  }}
                   onSave={handleSave}
                   onTest={handleTestPaymentConnection}
                 />
@@ -1274,6 +1327,28 @@ const toggleFieldStyle = {
   gap: "10px",
   color: "#0f172a",
   fontWeight: 600
+};
+
+const categoryCodRowStyle = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: "16px",
+  minHeight: "48px",
+  padding: "10px 12px",
+  border: "1px solid #dbe5ee",
+  borderRadius: "12px",
+  background: "#f8fafc"
+};
+
+const categoryCodToggleStyle = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "flex-end",
+  gap: "8px",
+  minWidth: "58px",
+  color: "#334155",
+  fontWeight: 700
 };
 
 const settingLabelStyle = {

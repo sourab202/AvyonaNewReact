@@ -7,6 +7,7 @@ import adminFooterSettingsRoutes from "./adminFooterSettingsRoutes.js";
 import adminHomepageWhyShopRoutes from "./adminHomepageWhyShopRoutes.js";
 import adminHomepageProductPaymentIconsRoutes from "./adminHomepageProductPaymentIconsRoutes.js";
 import adminPageRoutes from "./adminPageRoutes.js";
+import abandonedCheckoutRoutes from "./abandonedCheckoutRoutes.js";
 import analyticsRoutes from "./analyticsRoutes.js";
 import blogRoutes from "./blogRoutes.js";
 import blogTagRoutes from "./blogTagRoutes.js";
@@ -71,6 +72,7 @@ router.use("/admin/footer-items", adminFooterItemsRoutes);
 router.use("/admin/homepage/why-shop", adminHomepageWhyShopRoutes);
 router.use("/admin/homepage/product-payment-icons", adminHomepageProductPaymentIconsRoutes);
 router.use("/admin/pages", adminPageRoutes);
+router.use("/admin/abandoned-checkouts", abandonedCheckoutRoutes);
 router.get(
   "/admin/theme-settings",
   asyncHandler(requireAdminAuth),
@@ -86,6 +88,7 @@ router.put(
 router.use("/admin/blogs", blogRoutes);
 router.use("/admin/blog-tags", blogTagRoutes);
 router.use("/analytics", analyticsRoutes);
+router.use("/abandoned-checkouts", abandonedCheckoutRoutes);
 router.use("/footer", publicFooterRoutes);
 router.use("/homepage", publicHomepageRoutes);
 router.use("/pages", publicPageRoutes);

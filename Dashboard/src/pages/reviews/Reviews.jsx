@@ -28,7 +28,7 @@ function createEmptyForm() {
     reviewTitle: "",
     reviewText: "",
     reviewDate: today,
-    visibilityStatus: REVIEW_VISIBILITY_STATUSES.HIDDEN,
+    visibilityStatus: REVIEW_VISIBILITY_STATUSES.PUBLIC,
     imageFile: null,
     videoFile: null
   };

@@ -203,7 +203,14 @@ async function readPaymentSettingsRow() {
 }
 
 export async function getPaymentSettings(options = {}) {
-  return mapPaymentSettingsRow(await readPaymentSettingsRow(), options.includeSecrets === true);
+  const settings = mapPaymentSettingsRow(await readPaymentSettingsRow(), options.includeSecrets === true);
+  const rows = await query(
+    "SELECT setting_value AS settingValue FROM app_settings WHERE setting_key = 'cod_enabled' LIMIT 1"
+  );
+  return {
+    ...settings,
+    codEnabled: String(rows[0]?.settingValue ?? "true").trim().toLowerCase() !== "false"
+  };
 }
 
 export async function savePaymentSettings(payload = {}) {
@@ -300,6 +307,17 @@ export async function savePaymentSettings(payload = {}) {
       values.description
     ]
   );
+
+  if (payload.codEnabled !== undefined) {
+    await query(
+      `INSERT INTO app_settings (setting_key, setting_value, setting_group)
+       VALUES ('cod_enabled', ?, 'payment')
+       ON DUPLICATE KEY UPDATE
+         setting_value = VALUES(setting_value),
+         setting_group = VALUES(setting_group)`,
+      [payload.codEnabled === true ? "true" : "false"]
+    );
+  }
 
   return getPaymentSettings();
 }

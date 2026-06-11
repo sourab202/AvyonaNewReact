@@ -117,12 +117,17 @@ export async function uploadCustomerReviewMedia(request, response) {
 }
 
 export async function createAdminReview(request, response) {
+  const requestedVisibility = request.body?.visibilityStatus || request.body?.visibility_status;
+  const visibilityStatus = Object.values(REVIEW_VISIBILITY_STATUSES).includes(requestedVisibility)
+    ? requestedVisibility
+    : REVIEW_VISIBILITY_STATUSES.PUBLIC;
+
   const result = await createReview({
     ...request.body,
     reviewType: REVIEW_TYPES.ADMIN,
     review_type: REVIEW_TYPES.ADMIN,
-    visibilityStatus: REVIEW_VISIBILITY_STATUSES.PUBLIC,
-    visibility_status: REVIEW_VISIBILITY_STATUSES.PUBLIC,
+    visibilityStatus,
+    visibility_status: visibilityStatus,
     customerId: null,
     customer_id: null,
     orderId: null,

@@ -104,6 +104,18 @@ function getTimestampWhereClause(alias, range) {
   return { sql: `${column} >= DATE_SUB(CURDATE(), INTERVAL 29 DAY)`, values: [] };
 }
 
+function getAnalyticsTimestampWhereClause(alias, range) {
+  const column = alias ? `${alias}.occurred_at` : "occurred_at";
+  if (range.startDate && range.endDate) {
+    return {
+      sql: `${column} >= ? AND ${column} < DATE_ADD(?, INTERVAL 1 DAY)`,
+      values: [range.startDate, range.endDate]
+    };
+  }
+
+  return { sql: `${column} >= DATE_SUB(CURDATE(), INTERVAL 29 DAY)`, values: [] };
+}
+
 function getDateEqualsTodayClause(alias) {
   const column = alias ? `${alias}.\`date\`` : "`date`";
   return `${column} = CURDATE()`;
@@ -114,42 +126,66 @@ function percent(numerator, denominator) {
 }
 
 async function getFunnelSummary(range) {
-  const dateWhere = getDateWhereClause("", range);
+  const timestampWhere = getAnalyticsTimestampWhereClause("ae", range);
+  const abandonedWhere = range.startDate && range.endDate
+    ? {
+      sql: "abandoned_at >= ? AND abandoned_at < DATE_ADD(?, INTERVAL 1 DAY)",
+      values: [range.startDate, range.endDate]
+    }
+    : {
+      sql: "abandoned_at >= DATE_SUB(CURDATE(), INTERVAL 29 DAY)",
+      values: []
+    };
   const [funnelRow] = await query(
     `SELECT
-      COALESCE(SUM(sessions), 0) AS sessions,
-      COALESCE(SUM(users), 0) AS users,
-      COALESCE(SUM(product_views), 0) AS productViews,
-      COALESCE(SUM(searches), 0) AS searchQueries,
-      COALESCE(SUM(add_to_cart), 0) AS addToCart,
-      COALESCE(SUM(checkout), 0) AS checkoutStart,
-      COALESCE(SUM(purchase), 0) AS purchases,
-      COALESCE(SUM(abandoned_carts), 0) AS abandonedCarts,
-      COALESCE(SUM(category_views), 0) AS categoryViews,
-      COALESCE(SUM(remove_from_cart), 0) AS removeFromCart,
-      COALESCE(SUM(wishlist_add), 0) AS wishlistAdd,
-      COALESCE(SUM(filter_applied), 0) AS filterApplied
-     FROM daily_funnel_metrics
-     WHERE ${dateWhere.sql}`,
-    dateWhere.values
+      COUNT(DISTINCT NULLIF(ae.session_id, '')) AS sessions,
+      COUNT(DISTINCT COALESCE(ae.user_id, ae.customer_id)) AS users,
+      COUNT(DISTINCT CASE WHEN ae.event_type = 'product_view' THEN NULLIF(ae.session_id, '') END) AS productViewSessions,
+      COUNT(DISTINCT CASE WHEN ae.event_type = 'add_to_cart' THEN NULLIF(ae.session_id, '') END) AS cartSessions,
+      COUNT(DISTINCT CASE WHEN ae.event_type = 'checkout_start' THEN NULLIF(ae.session_id, '') END) AS checkoutSessions,
+      COUNT(DISTINCT CASE WHEN ae.event_type = 'purchase' THEN NULLIF(ae.session_id, '') END) AS purchaseSessions,
+      SUM(ae.event_type = 'product_view') AS productViewEvents,
+      SUM(ae.event_type = 'search') AS searchQueries,
+      SUM(ae.event_type = 'add_to_cart') AS addToCartEvents,
+      SUM(ae.event_type = 'checkout_start') AS checkoutEvents,
+      SUM(ae.event_type = 'purchase') AS purchaseEvents,
+      SUM(ae.event_type = 'category_view') AS categoryViews,
+      SUM(ae.event_type = 'remove_from_cart') AS removeFromCart,
+      SUM(ae.event_type = 'wishlist_add') AS wishlistAdd,
+      SUM(ae.event_type = 'filter_applied') AS filterApplied
+     FROM analytics_events ae
+     WHERE ${timestampWhere.sql}`,
+    timestampWhere.values
+  );
+  const [abandonedRow] = await query(
+    `SELECT COUNT(DISTINCT session_id) AS abandonedCartSessions
+     FROM analytics_abandoned_carts
+     WHERE ${abandonedWhere.sql}`,
+    abandonedWhere.values
   );
 
   const funnel = {
     sessions: Number(funnelRow.sessions || 0),
     users: Number(funnelRow.users || 0),
-    productViews: Number(funnelRow.productViews || 0),
+    productViews: Number(funnelRow.productViewSessions || 0),
     searchQueries: Number(funnelRow.searchQueries || 0),
-    addToCart: Number(funnelRow.addToCart || 0),
-    checkoutStart: Number(funnelRow.checkoutStart || 0),
-    purchases: Number(funnelRow.purchases || 0),
-    abandonedCarts: Number(funnelRow.abandonedCarts || 0)
+    addToCart: Number(funnelRow.cartSessions || 0),
+    checkoutStart: Number(funnelRow.checkoutSessions || 0),
+    purchases: Number(funnelRow.purchaseSessions || 0),
+    abandonedCarts: Number(abandonedRow.abandonedCartSessions || 0)
   };
 
   const supporting = {
     categoryViews: Number(funnelRow.categoryViews || 0),
     removeFromCart: Number(funnelRow.removeFromCart || 0),
     wishlistAdd: Number(funnelRow.wishlistAdd || 0),
-    filterApplied: Number(funnelRow.filterApplied || 0)
+    filterApplied: Number(funnelRow.filterApplied || 0),
+    eventCounts: {
+      productViews: Number(funnelRow.productViewEvents || 0),
+      addToCart: Number(funnelRow.addToCartEvents || 0),
+      checkoutStart: Number(funnelRow.checkoutEvents || 0),
+      purchases: Number(funnelRow.purchaseEvents || 0)
+    }
   };
 
   return {
@@ -180,21 +216,26 @@ export async function getDashboardSummary(request, response) {
   const customerWhere = getTimestampWhereClause("c", range);
   const orderWhere = getTimestampWhereClause("o", range);
 
-  const [productCountRow] = await query(`SELECT COUNT(*) AS totalProducts FROM products p WHERE ${productWhere.sql}`, productWhere.values);
+  const [productCountRow] = await query("SELECT COUNT(*) AS totalProducts FROM products WHERE is_deleted = 0");
   const [categoryCountRow] = await query("SELECT COUNT(*) AS totalCategories FROM categories");
   const [customerCountRow] = await query(`SELECT COUNT(*) AS totalCustomers FROM customers c WHERE ${customerWhere.sql}`, customerWhere.values);
   const [orderCountRow] = await query(`SELECT COUNT(*) AS totalOrders FROM orders o WHERE ${orderWhere.sql}`, orderWhere.values);
-  const [revenueRow] = await query(`SELECT COALESCE(SUM(o.total_amount), 0) AS totalRevenue FROM orders o WHERE ${orderWhere.sql}`, orderWhere.values);
+  const [revenueRow] = await query(
+    `SELECT COALESCE(SUM(o.total_amount), 0) AS totalRevenue
+     FROM orders o
+     WHERE ${orderWhere.sql}
+       AND o.payment_status IN ('paid', 'authorized')
+       AND o.status NOT IN ('cancelled', 'failed', 'returned')`,
+    orderWhere.values
+  );
 
   const lowStockProducts = await query(
     `SELECT p.id, p.name, p.slug, p.image_url AS image, p.sku, p.stock_quantity AS stockQuantity, p.status
      FROM products p
-     WHERE p.stock_quantity BETWEEN 1 AND 5
-       AND ${productWhere.sql}
+     WHERE p.is_deleted = 0
+       AND (p.stock_quantity <= p.low_stock_threshold OR p.status = 'out_of_stock')
      ORDER BY p.stock_quantity ASC, p.updated_at DESC
      LIMIT 5`
-    ,
-    productWhere.values
   );
 
   const latestOrders = await query(
@@ -234,12 +275,15 @@ export async function getDashboardSummary(request, response) {
   const topCategories = await query(
     `SELECT c.id, c.name, c.slug, COUNT(p.id) AS productCount
      FROM categories c
-     LEFT JOIN products p ON p.category_id = c.id
-       AND ${productWhere.sql}
+     LEFT JOIN product_categories pc
+       ON pc.category_id = c.id
+       AND pc.relation_type = 'primary'
+     LEFT JOIN products p
+       ON p.id = pc.product_id
+       AND p.is_deleted = 0
      GROUP BY c.id, c.name, c.slug
      ORDER BY productCount DESC, c.name ASC
-     LIMIT 5`,
-    productWhere.values
+     LIMIT 5`
   );
   const orderStatusCounts = orderStatusRows.reduce((counts, row) => {
     counts[row.status] = Number(row.count || 0);
@@ -285,16 +329,20 @@ export async function getDashboardAnalytics(request, response) {
   const searchFilter = options.searchQuery ? "AND search_query LIKE ?" : "";
   const searchValues = options.searchQuery ? [`%${options.searchQuery}%`] : [];
 
+  const analyticsTimestampWhere = getAnalyticsTimestampWhereClause("ae", options.range);
   const [totalEventsRow] = await query(
-    `SELECT COALESCE(SUM(product_views + searches + add_to_cart + checkout + purchase + abandoned_carts + category_views + remove_from_cart + wishlist_add + filter_applied), 0) AS totalEvents
-     FROM daily_funnel_metrics
-     WHERE ${dateWhere.sql}`,
-    dateWhere.values
+    `SELECT COUNT(*) AS totalEvents
+     FROM analytics_events ae
+     WHERE ${analyticsTimestampWhere.sql}
+       AND ae.event_type <> 'abandoned_cart'`,
+    analyticsTimestampWhere.values
   );
   const [todayEventsRow] = await query(
-    `SELECT COALESCE(SUM(product_views + searches + add_to_cart + checkout + purchase + abandoned_carts + category_views + remove_from_cart + wishlist_add + filter_applied), 0) AS todayEvents
-     FROM daily_funnel_metrics
-     WHERE ${getDateEqualsTodayClause("")}`
+    `SELECT COUNT(*) AS todayEvents
+     FROM analytics_events
+     WHERE occurred_at >= CURDATE()
+       AND occurred_at < DATE_ADD(CURDATE(), INTERVAL 1 DAY)
+       AND event_type <> 'abandoned_cart'`
   );
 
   const summary = await getFunnelSummary(options.range);
@@ -309,26 +357,37 @@ export async function getDashboardAnalytics(request, response) {
      WHERE ${dateWhere.sql}
        ${productFilter}
      GROUP BY product_key
+     HAVING SUM(views) > 0
      ORDER BY views DESC, name ASC
      LIMIT ? OFFSET ?`,
     [...dateWhere.values, ...productValues, options.limit, offset]
   );
 
+  const orderWhere = getTimestampWhereClause("o", options.range);
   const mostPurchasedProducts = await query(
     `SELECT
-      COALESCE(MAX(product_name), MAX(product_slug), MAX(product_asin), 'Unknown product') AS name,
-      MAX(product_slug) AS slug,
-      MAX(product_asin) AS asin,
-      SUM(purchases) AS purchases,
-      SUM(views) AS views
-     FROM daily_product_metrics
-     WHERE ${dateWhere.sql}
-       ${productFilter}
-     GROUP BY product_key
-     HAVING purchases > 0
-     ORDER BY purchases DESC, views DESC, name ASC
+      COALESCE(MAX(p.name), MAX(oi.product_name), 'Unknown product') AS name,
+      MAX(p.slug) AS slug,
+      MAX(p.asin) AS asin,
+      SUM(oi.quantity) AS purchases,
+      COUNT(DISTINCT o.id) AS orders
+     FROM order_items oi
+     JOIN orders o ON o.id = oi.order_id
+     LEFT JOIN products p ON p.id = oi.product_id
+     WHERE ${orderWhere.sql}
+       AND o.status NOT IN ('cancelled', 'failed', 'returned')
+       ${options.productSearch ? "AND (p.name LIKE ? OR p.slug LIKE ? OR p.asin LIKE ? OR oi.product_name LIKE ?)" : ""}
+     GROUP BY COALESCE(oi.product_id, oi.product_name)
+     ORDER BY purchases DESC, orders DESC, name ASC
      LIMIT ? OFFSET ?`,
-    [...dateWhere.values, ...productValues, options.limit, offset]
+    [
+      ...orderWhere.values,
+      ...(options.productSearch
+        ? [...productValues, `%${options.productSearch}%`]
+        : []),
+      options.limit,
+      offset
+    ]
   );
 
   const lowConversionProducts = await query(
@@ -415,7 +474,7 @@ export async function getDashboardAnalytics(request, response) {
       totals: {
         totalEvents: Number(totalEventsRow.totalEvents || 0),
         todayEvents: Number(todayEventsRow.todayEvents || 0),
-        conversionRate: summary.rates.purchaseRate
+        conversionRate: summary.overview.conversionRate
       },
       range: options.range,
       comparison,

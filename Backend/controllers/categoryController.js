@@ -183,6 +183,7 @@ const CATEGORY_SELECT = `SELECT
   c.meta_title AS metaTitle,
   c.meta_description AS metaDescription,
   c.meta_keywords AS keywords,
+  c.cod_enabled AS codEnabled,
   c.is_active AS isActive,
   c.created_at AS createdAt,
   c.updated_at AS updatedAt
@@ -331,7 +332,8 @@ function normalizeCategoryPayload(payload = {}) {
     metaTitle: toNullableString(payload.metaTitle),
     metaDescription: toNullableString(payload.metaDescription),
     keywords: toNullableString(payload.keywords),
-    isActive: status === "active"
+    isActive: status === "active",
+    codEnabled: parseBoolean(payload.codEnabled, true)
   };
 }
 
@@ -689,6 +691,25 @@ export async function updateCategory(request, response) {
       source: "local-file"
     });
   }
+}
+
+export async function updateCategoryCod(request, response) {
+  const categoryId = parseCategoryId(request.params.id);
+  const codEnabled = parseBoolean(request.body?.codEnabled, true);
+  const result = await query(
+    "UPDATE categories SET cod_enabled = ? WHERE id = ? LIMIT 1",
+    [codEnabled ? 1 : 0, categoryId]
+  );
+
+  if (!result.affectedRows) {
+    throw new ApiError(404, "Category not found");
+  }
+
+  response.json({
+    success: true,
+    message: "Category COD setting updated successfully",
+    data: await getCategoryRowById(categoryId)
+  });
 }
 
 export async function deleteCategory(request, response) {

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { trackAnalyticsEvent } from "../api/analyticsApi";
+import { captureAbandonedCheckout, recoverAbandonedCheckout } from "../api/abandonedCheckoutApi";
 import { applyCustomerCreditPoints, fetchCustomerWallet } from "../api/customerApi";
 import { resolveMediaUrl } from "../utils/media";
 import {
@@ -19,28 +20,73 @@ import {
 } from "../api/orderApi";
 
 const GST_NUMBER_PATTERN = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/i;
+const CHECKOUT_TOKEN_KEY = "avyonaCheckoutToken";
+
+function createCheckoutToken() {
+  if (typeof window === "undefined") return "";
+  const existing = window.localStorage.getItem(CHECKOUT_TOKEN_KEY);
+  if (existing) return existing;
+  const token = window.crypto?.randomUUID
+    ? window.crypto.randomUUID()
+    : `checkout-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
+  window.localStorage.setItem(CHECKOUT_TOKEN_KEY, token);
+  return token;
+}
 
 function hasFilledFields(source, keys) {
   return keys.every((key) => String(source[key] || "").trim());
 }
 
+function flattenCategories(categories = []) {
+  return categories.flatMap((category) => [
+    category,
+    ...flattenCategories(Array.isArray(category.children) ? category.children : [])
+  ]);
+}
+
+function isCodEnabled(value) {
+  if (value === false || value === 0 || String(value).trim().toLowerCase() === "false") return false;
+  return value === true || value === 1 || String(value).trim() === "1";
+}
+
 export default function CheckoutPage({ context }) {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const recoveryToken = searchParams.get("recover") || "";
+  const checkoutTokenRef = useRef(recoveryToken || createCheckoutToken());
+  const recoveryLoadedRef = useRef(false);
   const availableCoupons = context.coupons?.length ? context.coupons : couponRules;
   const siteSettings = context.siteSettings || {};
   const general = siteSettings.general || {};
   const paymentSettings = siteSettings.payment || {};
   const razorpayPayment = siteSettings.razorpayPayment || {};
   const onlinePaymentEnabled = razorpayPayment.enabled === true;
+  const codGloballyEnabled = razorpayPayment.codEnabled !== false;
+  const categoryCodLookup = new Map(
+    flattenCategories(context.siteCategories || []).flatMap((category) => [
+      [String(category.name || "").trim().toLowerCase(), isCodEnabled(category.codEnabled)],
+      [String(category.slug || "").trim().toLowerCase(), isCodEnabled(category.codEnabled)]
+    ])
+  );
+  const codBlockedItem = context.cart.find((item) => {
+    const categoryKey = String(item.category || item.categorySlug || "").trim().toLowerCase();
+    return !categoryKey || categoryCodLookup.get(categoryKey) !== true;
+  });
+  const codAvailable = codGloballyEnabled && !codBlockedItem;
   const shippingSettings = siteSettings.shipping || {};
   const paymentIcons = [];
-  const paymentMethods = onlinePaymentEnabled
-    ? [{
+  const paymentMethods = [
+    ...(onlinePaymentEnabled ? [{
         id: "razorpay",
-        label: "Razorpay Secure",
+        label: "Online Payment / Razorpay",
         description: razorpayPayment.description || "Pay securely using UPI, cards, wallets, or net banking."
-      }]
-    : [];
+      }] : []),
+    ...(codAvailable ? [{
+      id: "cod",
+      label: "Cash on Delivery",
+      description: "Pay when your order arrives."
+    }] : [])
+  ];
   const mergedProfile = getMergedProfile(context.authUser, context.customerProfile);
   const [savedFirstName = "", ...savedLastParts] = mergedProfile.fullName.split(/\s+/).filter(Boolean);
   const savedLastName = savedLastParts.join(" ");
@@ -106,7 +152,7 @@ export default function CheckoutPage({ context }) {
     "billingPhone"
   ]);
   const canSubmitOrder = Boolean(
-    onlinePaymentEnabled &&
+    paymentMethods.some((method) => method.id === form.paymentMethod) &&
     context.cart.length &&
     hasRequiredAddress &&
     hasRequiredBillingAddress &&
@@ -117,6 +163,98 @@ export default function CheckoutPage({ context }) {
     document.body.classList.add("checkout-page");
     return () => document.body.classList.remove("checkout-page");
   }, []);
+
+  useEffect(() => {
+    if (!recoveryToken || recoveryLoadedRef.current) return;
+    recoveryLoadedRef.current = true;
+    checkoutTokenRef.current = recoveryToken;
+    window.localStorage.setItem(CHECKOUT_TOKEN_KEY, recoveryToken);
+
+    recoverAbandonedCheckout(recoveryToken)
+      .then((response) => {
+        const checkout = response.data || {};
+        if (Array.isArray(checkout.cartItems) && checkout.cartItems.length) {
+          context.setCart(checkout.cartItems);
+        }
+        const shipping = checkout.shippingAddress || {};
+        const billing = checkout.billingAddress || {};
+        setForm((current) => ({
+          ...current,
+          contact: checkout.email || checkout.phone || current.contact,
+          firstName: shipping.firstName || current.firstName,
+          lastName: shipping.lastName || current.lastName,
+          address1: shipping.line1 || current.address1,
+          address2: shipping.line2 || current.address2,
+          companyName: shipping.companyName || current.companyName,
+          city: shipping.city || current.city,
+          state: shipping.state || current.state,
+          pinCode: shipping.pincode || current.pinCode,
+          phone: checkout.phone || shipping.phone || current.phone,
+          paymentMethod: checkout.paymentMethod || current.paymentMethod,
+          billingAddress: checkout.billingAddress ? "different" : current.billingAddress,
+          billingFirstName: billing.firstName || current.billingFirstName,
+          billingLastName: billing.lastName || current.billingLastName,
+          billingAddress1: billing.line1 || current.billingAddress1,
+          billingAddress2: billing.line2 || current.billingAddress2,
+          billingCity: billing.city || current.billingCity,
+          billingState: billing.state || current.billingState,
+          billingPinCode: billing.pincode || current.billingPinCode,
+          billingPhone: billing.phone || current.billingPhone
+        }));
+        context.notify("Your saved checkout has been restored.");
+      })
+      .catch((error) => context.notify(error.message || "Unable to restore this checkout."));
+  }, [context, recoveryToken]);
+
+  useEffect(() => {
+    if (!context.cart.length || !String(form.contact || "").trim() || !String(form.address1 || "").trim()) return undefined;
+    const timer = window.setTimeout(() => {
+      const billingAddress = form.billingAddress === "different"
+        ? {
+            firstName: form.billingFirstName,
+            lastName: form.billingLastName,
+            line1: form.billingAddress1,
+            line2: form.billingAddress2,
+            city: form.billingCity,
+            state: form.billingState,
+            pincode: form.billingPinCode,
+            phone: form.billingPhone
+          }
+        : null;
+      captureAbandonedCheckout({
+        checkoutToken: checkoutTokenRef.current,
+        customer: {
+          firstName: form.firstName,
+          lastName: form.lastName,
+          contact: form.contact,
+          email: form.contact.includes("@") ? form.contact : "",
+          phone: form.phone || (!form.contact.includes("@") ? form.contact : "")
+        },
+        cartItems: context.cart,
+        subtotal,
+        totalAmount: total,
+        currency: "INR",
+        shippingAddress: {
+          firstName: form.firstName,
+          lastName: form.lastName,
+          companyName: form.companyName,
+          line1: form.address1,
+          line2: form.address2,
+          city: form.city,
+          state: form.state,
+          pincode: form.pinCode,
+          phone: form.phone
+        },
+        billingAddress,
+        paymentMethod: form.paymentMethod,
+        source: "website",
+        deviceInfo: `${window.innerWidth}x${window.innerHeight}`
+      }).catch(() => {
+        // Checkout remains usable if background capture is temporarily unavailable.
+      });
+    }, 800);
+    return () => window.clearTimeout(timer);
+  }, [context.cart, form, subtotal, total]);
 
   useEffect(() => {
     if (checkoutTrackedRef.current || !context.cart.length) return;
@@ -152,7 +290,10 @@ export default function CheckoutPage({ context }) {
 
   useEffect(() => {
     if (!paymentMethods.some((method) => method.id === form.paymentMethod)) {
-      setForm((current) => ({ ...current, paymentMethod: "razorpay" }));
+      const fallbackMethod = paymentMethods[0]?.id || "";
+      if (form.paymentMethod !== fallbackMethod) {
+        setForm((current) => ({ ...current, paymentMethod: fallbackMethod }));
+      }
     }
   }, [form.paymentMethod, paymentMethods]);
 
@@ -396,7 +537,8 @@ export default function CheckoutPage({ context }) {
         })),
         paymentMethod: form.paymentMethod,
         couponCode: appliedCoupon?.code || "",
-        creditPoints: appliedPoints
+        creditPoints: appliedPoints,
+        checkoutToken: checkoutTokenRef.current
       });
 
       backendOrder = response.data || null;
@@ -411,6 +553,81 @@ export default function CheckoutPage({ context }) {
     const finalDiscount = Number(backendOrder?.discount ?? discount);
     const finalCreditDiscount = Number(backendOrder?.creditDiscount ?? creditDiscount);
     const finalShipping = Number(backendOrder?.shippingFee ?? shipping);
+    const buildLocalOrders = (paymentStatus) => context.cart.map((item) => ({
+      orderNumber,
+      slug: item.slug,
+      name: item.name,
+      image: item.image,
+      category: item.category,
+      quantity: Number(item.quantity || 1),
+      total: Number(item.price || 0) * Number(item.quantity || 1),
+      orderTotal: finalTotal,
+      discount: finalDiscount,
+      creditDiscount: finalCreditDiscount,
+      couponCode: appliedCoupon?.code || "",
+      shipping: finalShipping,
+      paymentMethod: form.paymentMethod,
+      paymentStatus,
+      deliveryAddress,
+      contact: form.contact,
+      date: createdAt,
+      status: "Order Confirmed"
+    }));
+
+    if (form.paymentMethod === "cod") {
+      const paymentStatus = backendOrder?.paymentStatus || "pending";
+      const newOrders = buildLocalOrders(paymentStatus);
+      context.setOrders([...newOrders, ...context.orders].slice(0, 24));
+      context.setCustomerProfile({
+        ...context.customerProfile,
+        firstName: form.firstName,
+        lastName: form.lastName,
+        contact: form.contact,
+        phone: form.phone,
+        address: `${form.address1}, ${form.city}, ${form.state} - ${form.pinCode}`,
+        businessDetails: {
+          isBusinessAccount: Boolean(billingDetails.companyName || billingDetails.gstNumber),
+          businessName: billingDetails.companyName,
+          gstNumber: billingDetails.gstNumber
+        },
+        isBusinessAccount: Boolean(billingDetails.companyName || billingDetails.gstNumber),
+        businessName: billingDetails.companyName,
+        gstNumber: billingDetails.gstNumber
+      });
+      context.setCart([]);
+      window.localStorage.removeItem(CHECKOUT_TOKEN_KEY);
+      trackAnalyticsEvent({
+        eventType: "purchase",
+        orderNumber,
+        cartValue: finalTotal,
+        metadata: {
+          itemCount: newOrders.reduce((sum, item) => sum + Number(item.quantity || 1), 0),
+          paymentMethod: "cod",
+          paymentStatus
+        }
+      });
+      context.notify("Order placed successfully with Cash on Delivery.");
+      setIsSubmittingOrder(false);
+      navigate(`/order-confirmation/${orderNumber}`, {
+        state: {
+          orderNumber,
+          items: newOrders,
+          total: finalTotal,
+          discount: finalDiscount,
+          creditDiscount: finalCreditDiscount,
+          couponCode: appliedCoupon?.code || "",
+          shipping: finalShipping,
+          paymentMethod: "cod",
+          paymentStatus,
+          orderStatus: backendOrder?.status || "pending",
+          deliveryAddress,
+          contact: form.contact,
+          date: createdAt
+        }
+      });
+      return;
+    }
+
     const gatewayRequest = {
       orderId: backendOrder?.id,
       orderNumber,
@@ -464,26 +681,7 @@ export default function CheckoutPage({ context }) {
 
     const paymentStatus = verifiedPayment.paymentStatus || "paid";
 
-    const newOrders = context.cart.map((item) => ({
-      orderNumber,
-      slug: item.slug,
-      name: item.name,
-      image: item.image,
-      category: item.category,
-      quantity: Number(item.quantity || 1),
-      total: Number(item.price || 0) * Number(item.quantity || 1),
-      orderTotal: finalTotal,
-      discount: finalDiscount,
-      creditDiscount: finalCreditDiscount,
-      couponCode: appliedCoupon?.code || "",
-      shipping: finalShipping,
-      paymentMethod: form.paymentMethod,
-      paymentStatus,
-      deliveryAddress,
-      contact: form.contact,
-      date: createdAt,
-      status: "Order Confirmed"
-    }));
+    const newOrders = buildLocalOrders(paymentStatus);
     context.setOrders([...newOrders, ...context.orders].slice(0, 24));
     context.setCustomerProfile({
       ...context.customerProfile,
@@ -502,6 +700,7 @@ export default function CheckoutPage({ context }) {
       gstNumber: billingDetails.gstNumber
     });
     context.setCart([]);
+    window.localStorage.removeItem(CHECKOUT_TOKEN_KEY);
     trackAnalyticsEvent({
       eventType: "purchase",
       orderNumber,
@@ -543,7 +742,7 @@ export default function CheckoutPage({ context }) {
           <div className="checkout-header-meta">
             <span>Secure Checkout</span>
             <span>{shippingSettings.deliveryTime || "Fast Delivery Available"}</span>
-            <span>{paymentSettings.codEnabled ? "COD Available" : "Prepaid Orders Only"}</span>
+            <span>{codAvailable ? "COD Available" : "Prepaid Orders Only"}</span>
           </div>
         </div>
       </header>
@@ -588,7 +787,7 @@ export default function CheckoutPage({ context }) {
               {hasRequiredAddress ? (
                 <p className="delivery-estimate">
                   {`Estimated delivery in ${shippingSettings.deliveryTime || "3 to 5 business days"} - `}
-                  {paymentSettings.codEnabled ? "COD available for eligible PINs" : "Prepaid payment required"}
+                  {codAvailable ? "COD available for eligible items" : "Prepaid payment required"}
                 </p>
               ) : null}
             </div>
@@ -628,6 +827,11 @@ export default function CheckoutPage({ context }) {
                     Online payment is currently unavailable. Please contact support.
                   </div>
                 ) : null}
+                {codGloballyEnabled && !codAvailable ? (
+                  <div className="payment-unavailable-message" role="status">
+                    Cash on Delivery is not available for some items in your cart.
+                  </div>
+                ) : null}
               </div>
               <div className="trust-mini-grid"><span>SSL Secure</span><span>100% Safe Payment</span><span>Fast Delivery Available</span></div>
             </div>
@@ -664,7 +868,7 @@ export default function CheckoutPage({ context }) {
                 </div>
               ) : null}
             </div>
-            <div className="checkout-cta-wrap"><button className="checkout-pay-button" type="submit" disabled={!canSubmitOrder}>{isSubmittingOrder ? "Processing Payment..." : context.cart.length ? (razorpayPayment.buttonText || "Pay Now") : "Cart Empty"}</button><p className="checkout-cta-note">{onlinePaymentEnabled ? "Secure checkout powered by Razorpay." : "Online payment is currently unavailable. Please contact support."}</p></div>
+            <div className="checkout-cta-wrap"><button className="checkout-pay-button" type="submit" disabled={!canSubmitOrder}>{isSubmittingOrder ? "Processing Order..." : context.cart.length ? (form.paymentMethod === "cod" ? "Place COD Order" : (razorpayPayment.buttonText || "Pay Now")) : "Cart Empty"}</button><p className="checkout-cta-note">{form.paymentMethod === "cod" ? "Pay when your order arrives." : onlinePaymentEnabled ? "Secure checkout powered by Razorpay." : "Online payment is currently unavailable. Please contact support."}</p></div>
           </section>
           <aside className="checkout-summary-panel">
             <details className="mobile-summary-toggle" open>

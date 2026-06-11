@@ -183,6 +183,10 @@ function normalizeLocalProduct(payload) {
     rating: Number(payload.rating || 0),
     reviewCount: Number(payload.reviewCount || 0),
     imageUrl: payload.imageUrl || "",
+    highlights: Array.isArray(payload.highlights) ? payload.highlights : [],
+    specs: Array.isArray(payload.specGroups) ? payload.specGroups : [],
+    faqs: Array.isArray(payload.faqs) ? payload.faqs : [],
+    policies: Array.isArray(payload.policies) ? payload.policies : [],
     status: payload.status || "draft",
     isDeleted: false,
     isVisible: true,
@@ -190,6 +194,105 @@ function normalizeLocalProduct(payload) {
     createdAt: now,
     updatedAt: now
   };
+}
+
+function cleanText(value) {
+  return String(value || "").trim();
+}
+
+async function replaceProductHighlightsFromPayload(productId, highlights) {
+  if (!Array.isArray(highlights)) return;
+
+  const rows = highlights.map(cleanText).filter(Boolean);
+  await query("DELETE FROM product_highlights WHERE product_id = ?", [productId]);
+
+  for (const [index, highlight] of rows.entries()) {
+    await query(
+      "INSERT INTO product_highlights (product_id, highlight_text, sort_order) VALUES (?, ?, ?)",
+      [productId, highlight, index]
+    );
+  }
+}
+
+async function replaceProductSpecificationsFromPayload(productId, specGroups) {
+  if (!Array.isArray(specGroups)) return;
+
+  const groups = specGroups
+    .map((group) => ({
+      title: cleanText(group?.title || group?.name),
+      items: (Array.isArray(group?.items) ? group.items : [])
+        .map((item) => ({
+          label: cleanText(Array.isArray(item) ? item[0] : item?.label),
+          value: cleanText(Array.isArray(item) ? item[1] : item?.value)
+        }))
+        .filter((item) => item.label && item.value)
+    }))
+    .filter((group) => group.title && group.items.length);
+
+  await query("DELETE FROM product_spec_groups WHERE product_id = ?", [productId]);
+
+  for (const [groupIndex, group] of groups.entries()) {
+    const result = await query(
+      "INSERT INTO product_spec_groups (product_id, group_name, sort_order) VALUES (?, ?, ?)",
+      [productId, group.title, groupIndex]
+    );
+
+    for (const [itemIndex, item] of group.items.entries()) {
+      await query(
+        "INSERT INTO product_spec_items (spec_group_id, spec_label, spec_value, sort_order) VALUES (?, ?, ?, ?)",
+        [result.insertId, item.label, item.value, itemIndex]
+      );
+    }
+  }
+}
+
+async function replaceProductFaqsFromPayload(productId, faqs) {
+  if (!Array.isArray(faqs)) return;
+  await ensureInventoryRelationshipTables();
+
+  const rows = faqs
+    .map((faq) => ({
+      question: cleanText(faq?.question),
+      answer: cleanText(faq?.answer)
+    }))
+    .filter((faq) => faq.question && faq.answer);
+
+  await query("DELETE FROM product_faqs WHERE product_id = ?", [productId]);
+
+  for (const [index, faq] of rows.entries()) {
+    await query(
+      "INSERT INTO product_faqs (product_id, question, answer, sort_order) VALUES (?, ?, ?, ?)",
+      [productId, faq.question, faq.answer, index]
+    );
+  }
+}
+
+async function replaceProductPoliciesFromPayload(productId, policies) {
+  if (!Array.isArray(policies)) return;
+  await ensureInventoryRelationshipTables();
+
+  const rows = policies
+    .map((policy) => ({
+      title: cleanText(policy?.title),
+      body: cleanText(policy?.body || policy?.content)
+    }))
+    .filter((policy) => policy.title && policy.body);
+
+  await query("DELETE FROM product_policy_items WHERE product_id = ?", [productId]);
+
+  for (const [index, policy] of rows.entries()) {
+    await query(
+      "INSERT INTO product_policy_items (product_id, policy_title, policy_body, sort_order) VALUES (?, ?, ?, ?)",
+      [productId, policy.title, policy.body, index]
+    );
+  }
+}
+
+async function replaceProductDetailsFromPayload(productId, payload = {}) {
+  await replaceProductHighlightsFromPayload(productId, payload.highlights);
+  await replaceProductSpecificationsFromPayload(productId, payload.specGroups);
+  await replaceProductFaqsFromPayload(productId, payload.faqs);
+  await replaceProductPoliciesFromPayload(productId, payload.policies);
 }
 
 function getProductMasterKey(payload = {}) {
@@ -942,10 +1045,9 @@ async function upsertProductVariantGroup(productId, row) {
 
 async function findProductByMasterKey({ asin, sku }) {
   const rows = await query(
-    `SELECT id, asin, sku, name, category_id AS categoryId
+    `SELECT id, asin, sku, name, category_id AS categoryId, is_deleted AS isDeleted
      FROM products
-     WHERE is_deleted = 0
-       AND (LOWER(asin) = LOWER(?) OR LOWER(sku) = LOWER(?))
+     WHERE LOWER(asin) = LOWER(?) OR LOWER(sku) = LOWER(?)
      ORDER BY
        CASE
         WHEN LOWER(asin) = LOWER(?) THEN 1
@@ -1326,7 +1428,11 @@ async function processInventoryRow(row, updateControls = {}) {
   if (!existing && updateControls.importType === "update-only") return "skipped";
 
   if (existing) {
-    const assignments = [];
+    const assignments = [
+      "is_deleted = 0",
+      "is_visible = 1",
+      "deleted_at = NULL"
+    ];
     const values = [];
     const normalizedAsin = String(existing.asin || "").toLowerCase();
     const normalizedSku = String(existing.sku || "").toLowerCase();
@@ -1360,6 +1466,10 @@ async function processInventoryRow(row, updateControls = {}) {
         assignments.push("status = ?");
         values.push(normalizeInventoryDbStatus(status));
       }
+    }
+
+    if (existing.isDeleted) {
+      assignments.push("status = 'active'");
     }
 
     if (updateControls.stock && statusFromStock) {
@@ -2875,6 +2985,10 @@ export async function createProduct(request, response) {
     imageUrl = "",
     imageUrls = [],
     videoUrls = [],
+    highlights = [],
+    specGroups = [],
+    faqs = [],
+    policies = [],
     status = "draft",
     sortOrder = 0
   } = request.body || {};
@@ -2923,6 +3037,7 @@ export async function createProduct(request, response) {
     );
 
     await replaceProductMediaAssets(result.insertId, normalizeImageUrls(imageUrls, imageUrl), videoUrls, name);
+    await replaceProductDetailsFromPayload(result.insertId, { highlights, specGroups, faqs, policies });
 
     const created = await attachProductMedia(await query("SELECT * FROM products WHERE id = ? LIMIT 1", [result.insertId]));
 
@@ -2965,6 +3080,10 @@ export async function updateProduct(request, response) {
     imageUrl,
     imageUrls,
     videoUrls,
+    highlights,
+    specGroups,
+    faqs,
+    policies,
     status,
     sortOrder
   } = request.body || {};
@@ -3030,6 +3149,12 @@ export async function updateProduct(request, response) {
     if ((Array.isArray(imageUrls) && imageUrls.length) || (Array.isArray(videoUrls) && videoUrls.length)) {
       await replaceProductMediaAssets(Number(request.params.id), normalizeImageUrls(imageUrls || [], imageUrl), videoUrls || [], nextName);
     }
+    await replaceProductDetailsFromPayload(Number(request.params.id), {
+      highlights,
+      specGroups,
+      faqs,
+      policies
+    });
 
     const updated = await attachProductMedia(await query("SELECT * FROM products WHERE id = ? LIMIT 1", [Number(request.params.id)]));
 
@@ -3067,6 +3192,10 @@ export async function updateProduct(request, response) {
       rating: rating ?? current.rating,
       reviewCount: reviewCount ?? current.reviewCount,
       imageUrl: imageUrl ?? current.imageUrl,
+      highlights: Array.isArray(highlights) ? highlights : current.highlights,
+      specs: Array.isArray(specGroups) ? specGroups : current.specs,
+      faqs: Array.isArray(faqs) ? faqs : current.faqs,
+      policies: Array.isArray(policies) ? policies : current.policies,
       sortOrder: sortOrder ?? current.sortOrder,
       status: status ?? current.status,
       updatedAt: new Date().toISOString()
@@ -3101,6 +3230,17 @@ export async function upsertProductByAsinSku(request, response) {
     const existingProduct = await findProductByMasterKey(masterKey);
 
     if (existingProduct) {
+      if (existingProduct.isDeleted) {
+        await query(
+          `UPDATE products
+           SET is_deleted = 0,
+               is_visible = 1,
+               deleted_at = NULL,
+               status = 'active'
+           WHERE id = ?`,
+          [existingProduct.id]
+        );
+      }
       request.params = {
         ...(request.params || {}),
         id: existingProduct.id
@@ -3115,7 +3255,6 @@ export async function upsertProductByAsinSku(request, response) {
 
     const products = await readLocalProducts();
     const existingIndex = products.findIndex((product) => {
-      if (product.isDeleted) return false;
       const productAsin = String(product.asin || "").toLowerCase();
       const productSku = String(product.sku || "").toLowerCase();
       const asin = String(masterKey.asin || "").toLowerCase();
@@ -3149,6 +3288,10 @@ export async function upsertProductByAsinSku(request, response) {
         asin: masterKey.asin,
         sku: masterKey.sku,
         slug: request.body.slug ? slugify(request.body.slug) : current.slug || slugify(nextName),
+        isDeleted: false,
+        isVisible: true,
+        deletedAt: null,
+        status: current.isDeleted ? "active" : request.body.status ?? current.status,
         updatedAt: new Date().toISOString()
       };
       const nextProducts = [...products];

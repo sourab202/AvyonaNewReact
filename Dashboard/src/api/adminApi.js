@@ -472,6 +472,10 @@ export function updateCategory(categoryId, payload) {
   return adminApi.put(`/categories/${categoryId}`, payload);
 }
 
+export function updateCategoryCod(categoryId, codEnabled) {
+  return adminApi.patch(`/categories/${categoryId}/cod`, { codEnabled });
+}
+
 export function deleteCategory(categoryId) {
   return adminApi.delete(`/categories/${categoryId}`);
 }
@@ -494,6 +498,18 @@ export function deleteContactEnquiry(enquiryId) {
 
 export function fetchOrders() {
   return adminApi.get("/orders");
+}
+
+export function fetchAbandonedCheckouts(params) {
+  return adminApi.get("/admin/abandoned-checkouts", { params });
+}
+
+export function fetchAbandonedCheckout(checkoutId) {
+  return adminApi.get(`/admin/abandoned-checkouts/${checkoutId}`);
+}
+
+export function updateAbandonedCheckoutStatus(checkoutId, status) {
+  return adminApi.patch(`/admin/abandoned-checkouts/${checkoutId}/status`, { status });
 }
 
 export function fetchOrder(orderId) {

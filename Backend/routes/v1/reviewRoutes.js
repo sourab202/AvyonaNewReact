@@ -12,7 +12,7 @@ import {
   submitGuestReview,
   uploadCustomerReviewMedia
 } from "../../controllers/reviewController.js";
-import { requireAdminAuth } from "../../middlewares/authMiddleware.js";
+import { optionalCustomerAuth, requireAdminAuth } from "../../middlewares/authMiddleware.js";
 import { uploadMedia } from "../../middlewares/upload.js";
 import { requireAdminPermission } from "../../utils/accessControl.js";
 import { asyncHandler } from "../../utils/asyncHandler.js";
@@ -20,8 +20,8 @@ import { asyncHandler } from "../../utils/asyncHandler.js";
 const router = Router();
 
 router.get("/product/:productId/summary", asyncHandler(getStorefrontProductReviewSummary));
-router.get("/product/:productId/media", asyncHandler(getStorefrontProductReviewMedia));
-router.get("/product/:productId", asyncHandler(getStorefrontProductReviews));
+router.get("/product/:productId/media", asyncHandler(optionalCustomerAuth), asyncHandler(getStorefrontProductReviewMedia));
+router.get("/product/:productId", asyncHandler(optionalCustomerAuth), asyncHandler(getStorefrontProductReviews));
 router.post("/media", uploadMedia.single("media"), asyncHandler(uploadCustomerReviewMedia));
 router.post("/guest", asyncHandler(submitGuestReview));
 router.get("/", asyncHandler(requireAdminAuth), asyncHandler(requireAdminPermission("reviews", "view")), asyncHandler(getReviews));

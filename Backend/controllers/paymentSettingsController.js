@@ -20,6 +20,7 @@ export async function getAdminPaymentSettings(_request, response) {
 
 export async function getPublicPaymentSettings(_request, response) {
   const credentials = await getActiveRazorpayCredentials();
+  const settings = await getPaymentSettings();
 
   response.json({
     success: true,
@@ -30,7 +31,8 @@ export async function getPublicPaymentSettings(_request, response) {
       keyId: credentials.keyId,
       currency: credentials.currency,
       buttonText: credentials.buttonText,
-      description: credentials.description
+      description: credentials.description,
+      codEnabled: settings.codEnabled
     }
   });
 }

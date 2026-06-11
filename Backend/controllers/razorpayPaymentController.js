@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { pool, query } from "../config/db.js";
 import { getActiveRazorpayCredentials } from "../services/paymentSettings.js";
 import { ApiError } from "../utils/apiError.js";
+import { markAbandonedCheckoutRecoveredByOrder } from "../services/abandonedCheckoutService.js";
 
 const razorpayApiBaseUrl = "https://api.razorpay.com/v1";
 let paymentStorageReady = false;
@@ -480,6 +481,7 @@ export async function verifyRazorpayPayment(request, response) {
         order.id
       ]
     );
+    await markAbandonedCheckoutRecoveredByOrder(connection, order.id);
     await connection.commit();
 
     response.json({

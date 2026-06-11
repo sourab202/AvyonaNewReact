@@ -205,6 +205,36 @@ function normalizeBackendProduct(product) {
   const gallery = resolveMediaList(product.galleryUrls);
   const videoUrls = resolveMediaList(product.videoUrls);
   const primaryImage = gallery[0] || resolveMediaUrl(product.imageUrl);
+  const highlights = (Array.isArray(product.highlights) ? product.highlights : [product.shortDescription])
+    .map((item) => String(item || "").trim())
+    .filter(Boolean);
+  const description = String(product.description || "")
+    .split(/\n+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+  const specGroups = (Array.isArray(product.specs) ? product.specs : [])
+    .map((group) => ({
+      title: String(group?.title || "").trim(),
+      items: (Array.isArray(group?.items) ? group.items : [])
+        .map((item) => [
+          String(Array.isArray(item) ? item[0] : item?.label || "").trim(),
+          String(Array.isArray(item) ? item[1] : item?.value || "").trim()
+        ])
+        .filter(([label, value]) => label && value)
+    }))
+    .filter((group) => group.title && group.items.length);
+  const faqs = (Array.isArray(product.faqs) ? product.faqs : [])
+    .map((faq) => ({
+      question: String(faq?.question || "").trim(),
+      answer: String(faq?.answer || "").trim()
+    }))
+    .filter((faq) => faq.question && faq.answer);
+  const policies = (Array.isArray(product.policies) ? product.policies : [])
+    .map((policy) => ({
+      title: String(policy?.title || "").trim(),
+      body: String(policy?.body || "").trim()
+    }))
+    .filter((policy) => policy.title && policy.body);
 
   return {
     id: product.id,
@@ -223,8 +253,8 @@ function normalizeBackendProduct(product) {
     video: videoUrls[0] || "",
     videoUrls,
     videoPoster: primaryImage,
-    highlights: [product.shortDescription].filter(Boolean),
-    description: product.description ? String(product.description).split(/\n+/).filter(Boolean) : [product.shortDescription].filter(Boolean),
+    highlights,
+    description,
     rating: Number(product.rating || 0),
     reviewCount: Number(product.reviewCount || 0),
     availableStock: stockQuantity,
@@ -235,9 +265,10 @@ function normalizeBackendProduct(product) {
     variantType: product.variantType || "",
     variantValue: product.variantValue || product.name,
     variants: [],
-    specGroups: [],
+    specGroups,
     reviews: [],
-    faqs: [],
+    faqs,
+    policies,
     warrantySummary: "",
     returnSummary: ""
   };
@@ -372,7 +403,6 @@ function App() {
   const [hasLoadedCustomerSession, setHasLoadedCustomerSession] = useState(false);
   const [hasHydratedCustomerData, setHasHydratedCustomerData] = useState(false);
   const customerHydrationInFlightRef = useRef(false);
-  const abandonedCartKeyRef = useRef("");
 
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
@@ -637,10 +667,11 @@ function App() {
       if (isRefreshing) return;
       isRefreshing = true;
 
-      const [settingsResult, generalResult, themeResult, productsResult, categoriesResult, couponsResult] = await Promise.allSettled([
+      const [settingsResult, generalResult, themeResult, paymentResult, productsResult, categoriesResult, couponsResult] = await Promise.allSettled([
         fetchPublicSettings(),
         fetchGeneralSettings(),
         fetchPublicThemeSettings(),
+        fetchPublicPaymentSettings(),
         fetchStorefrontProducts({ status: "active", limit: 36 }),
         fetchCategoryTree(),
         fetchStorefrontCoupons({ status: "active" })
@@ -655,12 +686,18 @@ function App() {
             ? (generalResult.value.data?.data || generalResult.value.data || {})
             : GENERAL_SETTINGS_FALLBACK
         );
-        setSiteSettings(mergeThemeIntoSiteSettings(
+        const refreshedSettings = mergeThemeIntoSiteSettings(
           settingsWithGeneral,
           themeResult.status === "fulfilled"
             ? (themeResult.value.data?.data || themeResult.value.data || {})
             : DEFAULT_APP_SETTINGS.theme
-        ));
+        );
+        setSiteSettings({
+          ...refreshedSettings,
+          razorpayPayment: paymentResult.status === "fulfilled"
+            ? (paymentResult.value.data || {})
+            : { enabled: false, codEnabled: false }
+        });
       }
 
       if (productsResult.status === "fulfilled") {
@@ -849,45 +886,6 @@ function App() {
       });
     }
   };
-
-  useEffect(() => {
-    if (!cart.length) {
-      abandonedCartKeyRef.current = "";
-      return undefined;
-    }
-
-    const cartValue = cart.reduce((sum, item) => sum + Number(item.price || 0) * Number(item.quantity || 1), 0);
-    const itemCount = cart.reduce((sum, item) => sum + Number(item.quantity || 1), 0);
-    const cartKey = cart
-      .map((item) => `${item.slug || item.asin || "item"}:${item.variantLabel || ""}:${item.quantity || 1}`)
-      .sort()
-      .join("|");
-
-    const sendAbandonedCart = () => {
-      if (location.pathname.startsWith("/checkout") || location.pathname.startsWith("/order-confirmation")) return;
-      if (abandonedCartKeyRef.current === cartKey) return;
-      abandonedCartKeyRef.current = cartKey;
-      trackAnalyticsEvent({
-        eventType: "abandoned_cart",
-        cartValue,
-        metadata: {
-          itemCount,
-          path: `${location.pathname}${location.search || ""}`
-        }
-      });
-    };
-
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "hidden") sendAbandonedCart();
-    };
-
-    window.addEventListener("pagehide", sendAbandonedCart);
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    return () => {
-      window.removeEventListener("pagehide", sendAbandonedCart);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-    };
-  }, [cart, location.pathname, location.search]);
 
   const toggleWishlist = (product, variant) => {
     const variantLabel = variant?.label || "";

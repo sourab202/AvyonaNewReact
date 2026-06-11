@@ -333,11 +333,6 @@ export default function Orders() {
                 <td style={tableCellStyle}>
                   <input type="checkbox" checked={selectedOrderIds.includes(String(order.id))} onChange={() => toggleSelectedOrder(order.id)} aria-label={`Select order ${order.orderNumber}`} />
                 </td>
-                <td style={tableCellStyle}>{formatPaymentGateway(order.payment.gateway)}</td>
-                <td style={tableCellStyle}>{order.payment.paidAt ? formatOrderDate(order.payment.paidAt) : "-"}</td>
-                <td style={tableCellStyle}>
-                  <span style={{ ...mutedTextStyle, overflowWrap: "anywhere" }}>{order.payment.razorpayPaymentId || "-"}</span>
-                </td>
                 <td style={tableCellStyle}>
                   <div style={{ display: "grid", gap: "4px" }}>
                     <strong>{order.orderNumber}</strong>
@@ -365,6 +360,11 @@ export default function Orders() {
                   >
                     {getPaymentBadgeLabel(order.paymentStatus)}
                   </span>
+                </td>
+                <td style={tableCellStyle}>{formatPaymentGateway(order.payment.gateway)}</td>
+                <td style={tableCellStyle}>{order.payment.paidAt ? formatOrderDate(order.payment.paidAt) : "-"}</td>
+                <td style={tableCellStyle}>
+                  <span style={{ ...mutedTextStyle, overflowWrap: "anywhere" }}>{order.payment.razorpayPaymentId || "-"}</span>
                 </td>
                 <td style={tableCellStyle}>
                   <span

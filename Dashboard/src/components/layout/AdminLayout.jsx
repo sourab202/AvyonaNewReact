@@ -51,6 +51,11 @@ const pageMeta = [
     subtitle: "Manage reusable storefront images, media placement, and uploaded assets."
   },
   {
+    path: "/dashboard/orders/abandoned-checkouts",
+    title: "Abandoned Checkouts",
+    subtitle: "Review incomplete checkouts, recovery activity, and recovered revenue."
+  },
+  {
     path: "/dashboard/orders",
     title: "Orders",
     subtitle: "Track purchases, update order status, and manage fulfillment flow."

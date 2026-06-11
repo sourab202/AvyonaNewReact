@@ -81,29 +81,6 @@ function formatOfferDiscount(offer) {
   return `${Number(offer.discountValue || 0).toLocaleString("en-IN")}% off`;
 }
 
-const POLICY_SECTIONS = [
-  {
-    key: "shipping",
-    title: "Shipping Information"
-  },
-  {
-    key: "returns",
-    title: "Return & Refund",
-    getBody: () => "Eligible orders can be returned or replaced as per policy terms for the selected category."
-  },
-  {
-    key: "warranty",
-    title: "Warranty Support",
-    getBody: (product) => product.warrantySummary
-      ? `${product.warrantySummary}. Support is available according to the brand and product-type coverage listed in the specifications section.`
-      : "Support is available according to the brand and product-type coverage listed in the specifications section."
-  },
-  {
-    key: "cod",
-    title: "COD Information"
-  }
-];
-
 function normalizeBackendProduct(product) {
   const price = Number(product.price || 0);
   const mrp = Number(product.mrp || price || 0);
@@ -112,6 +89,36 @@ function normalizeBackendProduct(product) {
   const gallery = resolveMediaList(product.galleryUrls).filter(hasMediaUrl);
   const videoUrls = resolveMediaList(product.videoUrls).filter(hasMediaUrl);
   const primaryImage = gallery[0] || resolveMediaUrl(product.imageUrl);
+  const highlights = (Array.isArray(product.highlights) ? product.highlights : [product.shortDescription])
+    .map((item) => String(item || "").trim())
+    .filter(Boolean);
+  const description = String(product.description || "")
+    .split(/\n+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+  const specGroups = (Array.isArray(product.specs) ? product.specs : [])
+    .map((group) => ({
+      title: String(group?.title || "").trim(),
+      items: (Array.isArray(group?.items) ? group.items : [])
+        .map((item) => [
+          String(Array.isArray(item) ? item[0] : item?.label || "").trim(),
+          String(Array.isArray(item) ? item[1] : item?.value || "").trim()
+        ])
+        .filter(([label, value]) => label && value)
+    }))
+    .filter((group) => group.title && group.items.length);
+  const faqs = (Array.isArray(product.faqs) ? product.faqs : [])
+    .map((faq) => ({
+      question: String(faq?.question || "").trim(),
+      answer: String(faq?.answer || "").trim()
+    }))
+    .filter((faq) => faq.question && faq.answer);
+  const policies = (Array.isArray(product.policies) ? product.policies : [])
+    .map((policy) => ({
+      title: String(policy?.title || "").trim(),
+      body: String(policy?.body || "").trim()
+    }))
+    .filter((policy) => policy.title && policy.body);
 
   return {
     id: product.id,
@@ -130,8 +137,8 @@ function normalizeBackendProduct(product) {
     video: videoUrls[0] || "",
     videoUrls,
     videoPoster: primaryImage,
-    highlights: [product.shortDescription].filter(Boolean),
-    description: product.description ? String(product.description).split(/\n+/).filter(Boolean) : [product.shortDescription].filter(Boolean),
+    highlights,
+    description,
     rating: Number(product.rating || 0),
     reviewCount: Number(product.reviewCount || 0),
     availableStock: stockQuantity,
@@ -142,9 +149,10 @@ function normalizeBackendProduct(product) {
     variantType: product.variantType || "",
     variantValue: product.variantValue || product.name,
     variants: [],
-    specGroups: [],
+    specGroups,
     reviews: [],
-    faqs: [],
+    faqs,
+    policies,
     warrantySummary: "",
     returnSummary: ""
   };
@@ -818,6 +826,36 @@ export default function ProductPage({ context }) {
   const related = productCatalog
     .filter((item) => item.slug !== product.slug && (item.brand === product.brand || item.collectionSlug === product.collectionSlug))
     .slice(0, 4);
+  const productHighlights = (Array.isArray(product.highlights) ? product.highlights : [product.highlights])
+    .map((item) => String(item || "").trim())
+    .filter(Boolean);
+  const productDescription = (Array.isArray(product.description) ? product.description : String(product.description || "").split(/\n+/))
+    .map((item) => String(item || "").trim())
+    .filter(Boolean);
+  const productSpecGroups = (product.specGroups || [])
+    .map((group) => ({
+      title: String(group?.title || "").trim(),
+      items: (Array.isArray(group?.items) ? group.items : [])
+        .map((item) => [
+          String(Array.isArray(item) ? item[0] : item?.label || "").trim(),
+          String(Array.isArray(item) ? item[1] : item?.value || "").trim()
+        ])
+        .filter(([label, value]) => label && value)
+    }))
+    .filter((group) => group.title && group.items.length);
+  const productFaqs = (product.faqs || [])
+    .map((faq) => ({
+      question: String(faq?.question || "").trim(),
+      answer: String(faq?.answer || "").trim()
+    }))
+    .filter((faq) => faq.question && faq.answer);
+  const productPolicies = (product.policies || [])
+    .map((policy) => ({
+      title: String(policy?.title || "").trim(),
+      body: String(policy?.body || policy?.content || "").trim()
+    }))
+    .filter((policy) => policy.title && policy.body);
+  const hasWarrantyPolicy = productPolicies.some((policy) => /warranty/i.test(policy.title));
   const visibleStoredReviews = storedReviews.filter(isPublicReview);
   const visibleLocalProductReviews = (product.reviews || []).filter(isPublicReview);
   const combinedReviews = [...visibleStoredReviews, ...backendReviews, ...visibleLocalProductReviews];
@@ -834,7 +872,7 @@ export default function ProductPage({ context }) {
   const activeReviewMedia = reviewMediaPreviewIndex === null || !customerMedia.length
     ? null
     : customerMedia[((reviewMediaPreviewIndex % customerMedia.length) + customerMedia.length) % customerMedia.length];
-  const descriptionPreview = descriptionExpanded ? product.description || [] : (product.description || []).slice(0, 2);
+  const descriptionPreview = descriptionExpanded ? productDescription : productDescription.slice(0, 2);
   const reviewerDisplayName = context.authUser?.fullName || context.customerProfile?.firstName || context.authUser?.email || "Avyona Customer";
 
   const addSelectedQuantityToCart = (triggerElement = null) => {
@@ -1601,14 +1639,16 @@ export default function ProductPage({ context }) {
               </div>
             </div>
 
-            <div className="avy-block">
-              <h2 className="avy-block-title">Product Details</h2>
-              <ul className="avy-bullet-list">
-                {(product.highlights || []).slice(0, 6).map((item) => (
-                  <li key={item}>{item}</li>
-                ))}
-              </ul>
-            </div>
+            {productHighlights.length ? (
+              <div className="avy-block">
+                <h2 className="avy-block-title">Product Details</h2>
+                <ul className="avy-bullet-list">
+                  {productHighlights.slice(0, 6).map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
 
             <details className="avy-accordion" open>
               <summary>Delivery Information</summary>
@@ -1650,7 +1690,7 @@ export default function ProductPage({ context }) {
             <div className="avy-quick-assurance">
               <span>{paymentSettings.codEnabled ? "Cash on Delivery Available" : "Prepaid Checkout Enabled"}</span>
               <span>Secure Payments Supported</span>
-              <span>Warranty Available</span>
+              {hasWarrantyPolicy || product.warrantySummary ? <span>Warranty Available</span> : null}
             </div>
 
             {paymentSectionVisible ? (
@@ -1701,76 +1741,73 @@ export default function ProductPage({ context }) {
               {TRUST_POINTS.map((item) => <span key={item}>{item}</span>)}
             </div>
 
-            <div className="avy-meta-strip">
-              {product.warrantySummary ? <span>{product.warrantySummary}</span> : null}
-            </div>
+            {product.warrantySummary ? (
+              <div className="avy-meta-strip">
+                <span>{product.warrantySummary}</span>
+              </div>
+            ) : null}
           </div>
         </div>
       </section>
 
-      <section className="avy-product-section">
-        <div className="avy-section-heading">
-          <h2>Product Description</h2>
-        </div>
-        <div className="avy-surface-card avy-copy-card">
-          {descriptionPreview.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
-          {(product.description || []).length > 2 ? (
-            <button type="button" className="avy-inline-button" onClick={() => setDescriptionExpanded((current) => !current)}>
-              {descriptionExpanded ? "Read Less" : "Read More"}
-            </button>
-          ) : null}
-        </div>
-      </section>
+      {productDescription.length ? (
+        <section className="avy-product-section">
+          <div className="avy-section-heading">
+            <h2>Product Description</h2>
+          </div>
+          <div className="avy-surface-card avy-copy-card">
+            {descriptionPreview.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
+            {productDescription.length > 2 ? (
+              <button type="button" className="avy-inline-button" onClick={() => setDescriptionExpanded((current) => !current)}>
+                {descriptionExpanded ? "Read Less" : "Read More"}
+              </button>
+            ) : null}
+          </div>
+        </section>
+      ) : null}
 
-      <section className="avy-product-section avy-product-section-narrow">
-        <div className="avy-section-heading">
-          <h2>Product Specifications</h2>
-        </div>
-        <div className="avy-spec-stack">
-          {(product.specGroups || []).map((group) => (
-            <details key={group.title} className="avy-accordion">
-              <summary>{group.title}</summary>
-              <div className="avy-accordion-body">
-                <div className="avy-spec-grid">
-                  {group.items.map((item) => (
-                    <div key={item[0]} className="avy-spec-row">
-                      <span>{item[0]}</span>
-                      <strong>{item[1]}</strong>
-                    </div>
-                  ))}
+      {productSpecGroups.length ? (
+        <section className="avy-product-section avy-product-section-narrow">
+          <div className="avy-section-heading">
+            <h2>Product Specifications</h2>
+          </div>
+          <div className="avy-spec-stack">
+            {productSpecGroups.map((group) => (
+              <details key={group.title} className="avy-accordion">
+                <summary>{group.title}</summary>
+                <div className="avy-accordion-body">
+                  <div className="avy-spec-grid">
+                    {group.items.map((item) => (
+                      <div key={`${group.title}:${item[0]}`} className="avy-spec-row">
+                        <span>{item[0]}</span>
+                        <strong>{item[1]}</strong>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            </details>
-          ))}
-        </div>
-      </section>
+              </details>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
-      <section className="avy-product-section avy-product-section-narrow">
-        <div className="avy-section-heading">
-          <h2>Delivery, Return & Warranty</h2>
-        </div>
-        <div className="avy-spec-stack">
-          {POLICY_SECTIONS.map((section) => (
-            <details key={section.key} className="avy-accordion">
-              <summary>{section.title}</summary>
-              <div className="avy-accordion-body">
-                <p>
-                  {section.key === "shipping"
-                    ? `${dynamicDispatchText}. ${dynamicDeliveryText}. ${dynamicShippingText}.`
-                    : section.key === "cod"
-                      ? `${dynamicCodText}. Availability depends on serviceability and order value for your delivery location.`
-                      : section.key === "returns"
-                        ? "Eligible orders can be returned or replaced as per policy terms for the selected category."
-                        : (product.warrantySummary
-                          ? `${product.warrantySummary}. Support is available according to the brand and product-type coverage listed in the specifications section.`
-                          : "Support is available according to the brand and product-type coverage listed in the specifications section.")}
-                </p>
-                {section.key === "returns" ? <p>{product.returnSummary}</p> : null}
-              </div>
-            </details>
-          ))}
-        </div>
-      </section>
+      {productPolicies.length ? (
+        <section className="avy-product-section avy-product-section-narrow">
+          <div className="avy-section-heading">
+            <h2>Delivery, Return & Warranty</h2>
+          </div>
+          <div className="avy-spec-stack">
+            {productPolicies.map((policy) => (
+              <details key={policy.title} className="avy-accordion">
+                <summary>{policy.title}</summary>
+                <div className="avy-accordion-body">
+                  <p>{policy.body}</p>
+                </div>
+              </details>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       <section id="customer-reviews" className="avy-product-section">
         <div className="avy-section-heading">
@@ -1835,6 +1872,7 @@ export default function ProductPage({ context }) {
               </div>
             </div>
 
+            {customerMedia.length ? (
             <div id="customer-media" className="avy-surface-card">
               <div className="avy-section-heading compact avy-section-heading-centered avy-media-section-head">
                 <div>
@@ -1860,9 +1898,9 @@ export default function ProductPage({ context }) {
                     )}
                   </button>
                 ))}
-                {!customerMedia.length ? <p className="avy-helper-note">No public review photos or videos yet.</p> : null}
               </div>
             </div>
+            ) : null}
 
             <div className="avy-review-list">
               {displayedReviews.map((review, index) => {
@@ -1918,30 +1956,34 @@ export default function ProductPage({ context }) {
         </div>
       </section>
 
-      <section className="avy-product-section">
-        <div className="avy-section-heading">
-          <h2>Frequently Asked Questions</h2>
-        </div>
-        <div className="avy-spec-stack">
-          {(product.faqs || []).map((faq) => (
-            <details key={faq.question} className="avy-accordion">
-              <summary>{faq.question}</summary>
-              <div className="avy-accordion-body">
-                <p>{faq.answer}</p>
-              </div>
-            </details>
-          ))}
-        </div>
-      </section>
+      {productFaqs.length ? (
+        <section className="avy-product-section">
+          <div className="avy-section-heading">
+            <h2>Frequently Asked Questions</h2>
+          </div>
+          <div className="avy-spec-stack">
+            {productFaqs.map((faq) => (
+              <details key={faq.question} className="avy-accordion">
+                <summary>{faq.question}</summary>
+                <div className="avy-accordion-body">
+                  <p>{faq.answer}</p>
+                </div>
+              </details>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
-      <section className="avy-product-section">
-        <div className="avy-section-heading">
-          <h2>You Might Also Like</h2>
-        </div>
-        <div className="product-grid">
-          {related.map((item) => <ProductCard key={item.slug} product={item} context={context} actionLabel="Explore" actionMode="link" />)}
-        </div>
-      </section>
+      {related.length ? (
+        <section className="avy-product-section">
+          <div className="avy-section-heading">
+            <h2>You Might Also Like</h2>
+          </div>
+          <div className="product-grid">
+            {related.map((item) => <ProductCard key={item.slug} product={item} context={context} actionLabel="Explore" actionMode="link" />)}
+          </div>
+        </section>
+      ) : null}
 
       <div className="avy-mobile-sticky-bar">
         <div>

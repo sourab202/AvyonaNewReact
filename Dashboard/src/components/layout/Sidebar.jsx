@@ -28,7 +28,16 @@ const navItems = [
   { label: "Coupons", to: "/dashboard/coupons", icon: FaPercent, module: "coupons" },
   { label: "Categories", to: "/dashboard/categories", icon: FaList, module: "categories" },
   { label: "Website Images", to: "/dashboard/website-images", icon: FaImages, module: "homepage" },
-  { label: "Orders", to: "/dashboard/orders", icon: FaShoppingCart, module: "orders" },
+  {
+    label: "Orders",
+    to: "/dashboard/orders",
+    icon: FaShoppingCart,
+    module: "orders",
+    children: [
+      { label: "All Orders", to: "/dashboard/orders", module: "orders" },
+      { label: "Abandoned Checkouts", to: "/dashboard/orders/abandoned-checkouts", module: "orders" }
+    ]
+  },
   { label: "Customers", to: "/dashboard/customers", icon: FaUsers, module: "customers" },
   { label: "Contact Enquiries", to: "/dashboard/contact-enquiries", icon: FaEnvelope, module: "contact_enquiries" },
   {
@@ -50,7 +59,8 @@ export default function Sidebar({ isCollapsed = false, onToggleCollapse }) {
   const navigate = useNavigate();
   const location = useLocation();
   const [openDropdowns, setOpenDropdowns] = React.useState(() => ({
-    settings: location.pathname.startsWith("/dashboard/settings")
+    settings: location.pathname.startsWith("/dashboard/settings"),
+    orders: location.pathname.startsWith("/dashboard/orders")
   }));
 
   const handleLogout = () => {
@@ -61,6 +71,9 @@ export default function Sidebar({ isCollapsed = false, onToggleCollapse }) {
   React.useEffect(() => {
     if (location.pathname.startsWith("/dashboard/settings")) {
       setOpenDropdowns((current) => ({ ...current, settings: true }));
+    }
+    if (location.pathname.startsWith("/dashboard/orders")) {
+      setOpenDropdowns((current) => ({ ...current, orders: true }));
     }
   }, [location.pathname]);
 
@@ -120,6 +133,7 @@ export default function Sidebar({ isCollapsed = false, onToggleCollapse }) {
                     <NavLink
                       key={child.to}
                       to={child.to}
+                      end={child.to === "/dashboard/orders"}
                       className={({ isActive }) => `dashboard-nav-sublink${isActive ? " is-active" : ""}`}
                     >
                       <span className="dashboard-nav-label">{child.label}</span>

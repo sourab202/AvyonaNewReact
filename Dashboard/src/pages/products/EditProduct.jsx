@@ -23,14 +23,15 @@ function normalizeBackendProduct(product) {
     mrp: Number(product.mrp || product.price || 0),
     image: gallery[0] || imageUrl,
     gallery,
-    highlights: [product.shortDescription].filter(Boolean),
-    description: product.description || product.shortDescription || "",
+    highlights: Array.isArray(product.highlights) ? product.highlights : [product.shortDescription].filter(Boolean),
+    description: product.description || "",
     availableStock: Number(product.stockQuantity || 0),
     stockTone: Number(product.stockQuantity || 0) > 0 ? "in-stock" : "out-of-stock",
     stockNote: Number(product.stockQuantity || 0) > 0 ? "In stock" : "Out of stock",
     variants: [],
-    specGroups: [],
-    faqs: []
+    specGroups: Array.isArray(product.specs) ? product.specs : [],
+    faqs: Array.isArray(product.faqs) ? product.faqs : [],
+    policies: Array.isArray(product.policies) ? product.policies : []
   };
 }
 

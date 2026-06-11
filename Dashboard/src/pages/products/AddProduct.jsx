@@ -188,6 +188,15 @@ function getStockStatus(product, totalStock) {
 }
 
 function mapPolicyItems(product) {
+  if (Array.isArray(product.policies) && product.policies.length) {
+    return product.policies
+      .filter((policy) => !["delivery estimate", "dispatch time"].includes(String(policy.title || "").trim().toLowerCase()))
+      .map((policy) => ({
+        ...createPolicyItem(policy.title || ""),
+        content: policy.body || policy.content || ""
+      }));
+  }
+
   return [
     createPolicyItem("Shipping Information"),
     createPolicyItem("Return & Refund"),
@@ -297,8 +306,8 @@ export function buildProductFormDataFromStorefrontProduct(product) {
         }))
       : base.specifications,
     policies: {
-      deliveryEstimate: product.deliveryText || "",
-      dispatchTime: product.dispatchText || "",
+      deliveryEstimate: product.policies?.find((policy) => String(policy.title || "").trim().toLowerCase() === "delivery estimate")?.body || product.deliveryText || "",
+      dispatchTime: product.policies?.find((policy) => String(policy.title || "").trim().toLowerCase() === "dispatch time")?.body || product.dispatchText || "",
       items: mapPolicyItems(product)
     },
     faqs: Array.isArray(product.faqs) && product.faqs.length
@@ -678,6 +687,35 @@ export default function AddProduct({ initialProductData = null, mode = "add" }) 
     const cleanedHighlights = highlights.map((item) => String(item || "").trim()).filter(Boolean);
     const descriptionText = String(descriptionData.content || "").trim();
     const shortDescription = cleanedHighlights[0] || descriptionText.split(/\n+/)[0] || "";
+    const cleanedSpecGroups = specGroups
+      .map((group) => ({
+        title: String(group.name || "").trim(),
+        items: (Array.isArray(group.items) ? group.items : [])
+          .map((item) => ({
+            label: String(item.label || "").trim(),
+            value: String(item.value || "").trim()
+          }))
+          .filter((item) => item.label && item.value)
+      }))
+      .filter((group) => group.title && group.items.length);
+    const cleanedFaqs = faqs
+      .map((faq) => ({
+        question: String(faq.question || "").trim(),
+        answer: String(faq.answer || "").trim()
+      }))
+      .filter((faq) => faq.question && faq.answer);
+    const cleanedPolicies = [
+      policyDetails.deliveryEstimate
+        ? { title: "Delivery Estimate", body: String(policyDetails.deliveryEstimate).trim() }
+        : null,
+      policyDetails.dispatchTime
+        ? { title: "Dispatch Time", body: String(policyDetails.dispatchTime).trim() }
+        : null,
+      ...(Array.isArray(policyDetails.items) ? policyDetails.items : []).map((item) => ({
+        title: String(item.title || "").trim(),
+        body: String(item.content || "").trim()
+      }))
+    ].filter((policy) => policy?.title && policy.body);
 
     return {
       categoryId: categoryRecord?.id || undefined,
@@ -696,6 +734,10 @@ export default function AddProduct({ initialProductData = null, mode = "add" }) 
       imageUrl: primaryImageUrl,
       imageUrls: productImageUrls,
       videoUrls: productVideoUrls,
+      highlights: cleanedHighlights,
+      specGroups: cleanedSpecGroups,
+      faqs: cleanedFaqs,
+      policies: cleanedPolicies,
       status: publishStatus
     };
   };

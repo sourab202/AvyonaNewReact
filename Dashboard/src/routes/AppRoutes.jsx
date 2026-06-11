@@ -20,6 +20,7 @@ const InvoiceDesigner = React.lazy(() => import("../pages/homepage/InvoiceDesign
 const DeliveryPincodes = React.lazy(() => import("../pages/homepage/DeliveryPincodes"));
 const OrderDetails = React.lazy(() => import("../pages/orders/OrderDetails"));
 const Orders = React.lazy(() => import("../pages/orders/Orders"));
+const AbandonedCheckouts = React.lazy(() => import("../pages/orders/AbandonedCheckouts"));
 const AddProduct = React.lazy(() => import("../pages/products/AddProduct"));
 const EditProduct = React.lazy(() => import("../pages/products/EditProduct"));
 const InventoryManager = React.lazy(() => import("../pages/products/InventoryManager"));
@@ -92,6 +93,7 @@ export default function AppRoutes({ context, allProducts }) {
           <Route path="categories/:categoryId/edit" element={<AddCategory />} />
           <Route path="website-images" element={<WebsiteImages />} />
           <Route path="orders" element={<Orders />} />
+          <Route path="orders/abandoned-checkouts" element={<AbandonedCheckouts />} />
           <Route path="orders/:orderId" element={<OrderDetails />} />
           <Route path="customers" element={<Customers />} />
           <Route path="customers/:customerId" element={<CustomerDetails />} />

@@ -3,6 +3,98 @@ import { REVIEW_TYPES, REVIEW_VISIBILITY_STATUSES, isValidReviewType, isValidRev
 import { ApiError } from "../utils/apiError.js";
 import { resolveVerifiedPurchaseStatus } from "./reviewVerificationService.js";
 
+let reviewSchemaPromise = null;
+
+async function createReviewSchema() {
+  const [existingReviewTables] = await pool.query("SHOW TABLES LIKE 'reviews'");
+  const shouldMigrateLegacyReviews = existingReviewTables.length === 0;
+
+  await pool.query(
+    `CREATE TABLE IF NOT EXISTS reviews (
+      review_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      product_id INT UNSIGNED NOT NULL,
+      customer_id INT UNSIGNED NULL,
+      order_id INT UNSIGNED NULL,
+      reviewer_name VARCHAR(160) NOT NULL,
+      reviewer_email VARCHAR(190) NULL,
+      rating TINYINT UNSIGNED NOT NULL,
+      review_title VARCHAR(180) NOT NULL,
+      review_text TEXT NOT NULL,
+      review_type ENUM('customer_review', 'guest_review', 'admin_review') NOT NULL DEFAULT 'guest_review',
+      is_verified_purchase TINYINT(1) NOT NULL DEFAULT 0,
+      is_anonymous TINYINT(1) NOT NULL DEFAULT 0,
+      visibility_status ENUM('public', 'hidden', 'private_to_reviewer', 'deleted') NOT NULL DEFAULT 'hidden',
+      admin_reply TEXT NULL,
+      admin_reply_at DATETIME NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_reviews_product_visibility (product_id, visibility_status),
+      INDEX idx_reviews_customer_created (customer_id, created_at),
+      INDEX idx_reviews_order (order_id),
+      CONSTRAINT fk_reviews_product FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,
+      CONSTRAINT fk_reviews_customer FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE SET NULL,
+      CONSTRAINT fk_reviews_order FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE SET NULL
+    )`
+  );
+
+  await pool.query(
+    `CREATE TABLE IF NOT EXISTS review_media (
+      media_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      review_id BIGINT UNSIGNED NOT NULL,
+      media_type ENUM('image', 'video') NOT NULL,
+      media_url VARCHAR(500) NOT NULL,
+      sort_order INT UNSIGNED NOT NULL DEFAULT 1,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_review_media_review_sort (review_id, sort_order),
+      CONSTRAINT fk_review_media_review FOREIGN KEY (review_id) REFERENCES reviews(review_id) ON DELETE CASCADE
+    )`
+  );
+
+  const [legacyTables] = shouldMigrateLegacyReviews
+    ? await pool.query("SHOW TABLES LIKE 'product_reviews'")
+    : [[]];
+  if (shouldMigrateLegacyReviews && legacyTables.length) {
+    await pool.query(
+      `INSERT IGNORE INTO reviews
+        (review_id, product_id, customer_id, reviewer_name, reviewer_email, rating, review_title, review_text,
+         review_type, is_verified_purchase, is_anonymous, visibility_status, admin_reply, created_at, updated_at)
+       SELECT
+         pr.id,
+         pr.product_id,
+         pr.customer_id,
+         COALESCE(NULLIF(c.full_name, ''), 'Avyona Customer'),
+         NULLIF(c.email, ''),
+         pr.rating,
+         COALESCE(NULLIF(pr.title, ''), CONCAT(pr.rating, ' star review')),
+         COALESCE(NULLIF(pr.review_text, ''), 'Customer review'),
+         CASE WHEN pr.customer_id IS NULL THEN 'admin_review' ELSE 'customer_review' END,
+         pr.is_verified_purchase,
+         0,
+         CASE
+           WHEN pr.status = 'approved' THEN 'public'
+           WHEN pr.status = 'rejected' THEN 'deleted'
+           ELSE 'hidden'
+         END,
+         pr.admin_reply,
+         pr.created_at,
+         pr.updated_at
+       FROM product_reviews pr
+       LEFT JOIN customers c ON c.id = pr.customer_id`
+    );
+  }
+}
+
+export async function ensureReviewSchema() {
+  if (!reviewSchemaPromise) {
+    reviewSchemaPromise = createReviewSchema().catch((error) => {
+      reviewSchemaPromise = null;
+      throw error;
+    });
+  }
+
+  await reviewSchemaPromise;
+}
+
 function normalizeOptionalId(value) {
   const id = Number(value || 0);
   return id > 0 ? id : null;
@@ -33,7 +125,7 @@ function normalizePaginationOptions(options = {}) {
 function getStorefrontReviewOrderSql(sort) {
   if (sort === "highest") return "r.rating DESC, r.created_at DESC";
   if (sort === "lowest") return "r.rating ASC, r.created_at DESC";
-  if (sort === "media") return "MAX(CASE WHEN rm.media_id IS NULL THEN 0 ELSE 1 END) DESC, r.created_at DESC";
+  if (sort === "media") return "(SELECT COUNT(*) FROM review_media rm_sort WHERE rm_sort.review_id = r.review_id) DESC, r.created_at DESC";
   if (sort === "verified") return "r.is_verified_purchase DESC, r.created_at DESC";
   return "r.created_at DESC";
 }
@@ -151,7 +243,39 @@ function mapMediaRows(row) {
   };
 }
 
+async function attachMediaToReviews(rows = []) {
+  const reviewIds = rows.map((row) => Number(row.reviewId || 0)).filter(Boolean);
+  if (!reviewIds.length) return rows.map((row) => mapMediaRows({ ...row, media: [] }));
+
+  const placeholders = reviewIds.map(() => "?").join(",");
+  const [mediaRows] = await pool.query(
+    `SELECT
+      media_id AS mediaId,
+      review_id AS reviewId,
+      media_type AS mediaType,
+      media_url AS mediaUrl,
+      sort_order AS sortOrder
+     FROM review_media
+     WHERE review_id IN (${placeholders})
+     ORDER BY review_id ASC, sort_order ASC, media_id ASC`,
+    reviewIds
+  );
+  const mediaByReviewId = new Map();
+
+  mediaRows.forEach((media) => {
+    const list = mediaByReviewId.get(Number(media.reviewId)) || [];
+    list.push(media);
+    mediaByReviewId.set(Number(media.reviewId), list);
+  });
+
+  return rows.map((row) => mapMediaRows({
+    ...row,
+    media: mediaByReviewId.get(Number(row.reviewId)) || []
+  }));
+}
+
 export async function createReview(payload) {
+  await ensureReviewSchema();
   const review = normalizeReviewPayload(payload);
   review.productId = await resolveReviewProductId(review);
 
@@ -184,9 +308,7 @@ export async function createReview(payload) {
       productId: review.productId,
       orderId: review.orderId
     });
-  const visibilityStatus = review.reviewType === REVIEW_TYPES.ADMIN
-    ? REVIEW_VISIBILITY_STATUSES.PUBLIC
-    : review.visibilityStatus;
+  const visibilityStatus = review.visibilityStatus;
 
   const connection = await pool.getConnection();
 
@@ -322,6 +444,7 @@ export async function createGuestReview(payload = {}) {
 }
 
 export async function listReviews() {
+  await ensureReviewSchema();
   const [rows] = await pool.query(
     `SELECT
       r.review_id AS reviewId,
@@ -358,6 +481,7 @@ export async function listReviews() {
 }
 
 export async function listStorefrontReviewsPage(productIdentifier, customerId = null, options = {}) {
+  await ensureReviewSchema();
   const identifier = String(productIdentifier || "").trim();
   const safeCustomerId = Number(customerId || 0);
   const pagination = normalizePaginationOptions(options);
@@ -393,35 +517,18 @@ export async function listStorefrontReviewsPage(productIdentifier, customerId = 
       r.is_verified_purchase AS isVerifiedPurchase,
       r.is_anonymous AS isAnonymous,
       r.visibility_status AS visibilityStatus,
-      r.created_at AS createdAt,
-      COALESCE(
-        JSON_ARRAYAGG(
-          CASE
-            WHEN rm.media_id IS NULL THEN NULL
-            ELSE JSON_OBJECT(
-              'mediaId', rm.media_id,
-              'mediaType', rm.media_type,
-              'mediaUrl', rm.media_url,
-              'sortOrder', rm.sort_order
-            )
-          END
-        ),
-        JSON_ARRAY()
-      ) AS media
+      r.created_at AS createdAt
      FROM reviews r
      INNER JOIN products p ON p.id = r.product_id
-     LEFT JOIN review_media rm ON rm.review_id = r.review_id
      WHERE (p.id = ? OR p.slug = ? OR p.asin = ?)
        AND ${visibilitySql}
        ${filterSql ? `AND ${filterSql}` : ""}
-     GROUP BY r.review_id, r.product_id, p.name, r.customer_id, r.reviewer_name, r.rating, r.review_title,
-       r.review_text, r.admin_reply, r.admin_reply_at, r.review_type, r.is_verified_purchase, r.is_anonymous, r.visibility_status, r.created_at
       ORDER BY ${getStorefrontReviewOrderSql(pagination.sort)}
       LIMIT ${limitPlusOne} OFFSET ${pagination.offset}`,
     [identifier, identifier, identifier, ...visibilityValues, ...filterValues]
   );
 
-  const mappedRows = rows.map((row) => mapMediaRows(row));
+  const mappedRows = await attachMediaToReviews(rows);
 
   return {
     rows: mappedRows.slice(0, pagination.limit),
@@ -437,6 +544,7 @@ export async function listStorefrontReviews(productIdentifier, customerId = null
 }
 
 export async function getProductReviewSummary(productIdentifier) {
+  await ensureReviewSchema();
   const identifier = String(productIdentifier || "").trim();
   if (!identifier) throw new ApiError(400, "Product is required");
 
@@ -478,6 +586,7 @@ export async function getProductReviewSummary(productIdentifier) {
 }
 
 export async function listStorefrontReviewMedia(productIdentifier, customerId = null) {
+  await ensureReviewSchema();
   const identifier = String(productIdentifier || "").trim();
   const safeCustomerId = Number(customerId || 0);
   if (!identifier) throw new ApiError(400, "Product is required");
@@ -514,6 +623,7 @@ export async function listStorefrontReviewMedia(productIdentifier, customerId = 
 }
 
 export async function listCustomerReviews(customerId) {
+  await ensureReviewSchema();
   const safeCustomerId = Number(customerId || 0);
   if (!safeCustomerId) throw new ApiError(400, "Customer is required");
 
@@ -533,30 +643,19 @@ export async function listCustomerReviews(customerId) {
       r.is_verified_purchase AS isVerifiedPurchase,
       r.is_anonymous AS isAnonymous,
       r.visibility_status AS visibilityStatus,
-      r.created_at AS createdAt,
-      COALESCE(
-        JSON_ARRAYAGG(
-          CASE
-            WHEN rm.media_id IS NULL THEN NULL
-            ELSE JSON_OBJECT('mediaId', rm.media_id, 'mediaType', rm.media_type, 'mediaUrl', rm.media_url, 'sortOrder', rm.sort_order)
-          END
-        ),
-        JSON_ARRAY()
-      ) AS media
+      r.created_at AS createdAt
      FROM reviews r
      INNER JOIN products p ON p.id = r.product_id
-     LEFT JOIN review_media rm ON rm.review_id = r.review_id
      WHERE r.customer_id = ?
-     GROUP BY r.review_id, r.product_id, p.name, r.customer_id, r.reviewer_name, r.rating, r.review_title,
-       r.review_text, r.admin_reply, r.admin_reply_at, r.review_type, r.is_verified_purchase, r.is_anonymous, r.visibility_status, r.created_at
      ORDER BY r.created_at DESC`,
     [safeCustomerId]
   );
 
-  return rows.map(mapMediaRows);
+  return attachMediaToReviews(rows);
 }
 
 export async function updateReviewVisibility(reviewId, visibilityStatus) {
+  await ensureReviewSchema();
   if (!isValidReviewVisibilityStatus(visibilityStatus)) {
     throw new ApiError(400, "Invalid review visibility status");
   }
@@ -603,6 +702,7 @@ export async function updateReviewVisibility(reviewId, visibilityStatus) {
 }
 
 export async function updateReview(reviewId, payload = {}) {
+  await ensureReviewSchema();
   const review = normalizeReviewPayload(payload);
 
   if (!review.productId) throw new ApiError(400, "Review product is required");
@@ -661,6 +761,7 @@ export async function updateReview(reviewId, payload = {}) {
 }
 
 export async function updateReviewReply(reviewId, adminReply = "") {
+  await ensureReviewSchema();
   const replyText = String(adminReply || "").trim();
   const [result] = await pool.execute(
     `UPDATE reviews

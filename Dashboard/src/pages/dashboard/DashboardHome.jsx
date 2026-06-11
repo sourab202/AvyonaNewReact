@@ -254,10 +254,10 @@ export default function DashboardHome({ context, allProducts }) {
   }, [appliedAnalyticsParams]);
 
   const cards = [
-    { title: "Revenue", value: formatCurrency(metrics.revenue), note: "From orders in saved filter period" },
+    { title: "Paid Revenue", value: formatCurrency(metrics.revenue), note: "Paid or authorized orders in saved filter period" },
     { title: "Orders", value: metrics.orders, note: `${(orderStatusCounts.pending || 0) + (orderStatusCounts.confirmed || 0)} need review` },
-    { title: "Products", value: metrics.products, note: `${lowStockProducts.length} stock alerts` },
-    { title: "Customers", value: metrics.customers, note: "Customers in saved filter period" }
+    { title: "Products", value: metrics.products, note: `${lowStockProducts.length} current stock alerts` },
+    { title: "New Customers", value: metrics.customers, note: "Customers created in saved filter period" }
   ];
   const operationalStats = [
     { label: "Pending", value: orderStatusCounts.pending || 0 },
@@ -268,11 +268,11 @@ export default function DashboardHome({ context, allProducts }) {
   const analyticsCards = [
     { title: "Total Sessions", value: analytics.overview?.totalSessions || analytics.funnel.sessions || 0, note: "Unique visitor sessions" },
     { title: "Total Users", value: analytics.overview?.totalUsers || analytics.funnel.users || 0, note: "Logged-in tracked users" },
-    { title: "Conversion Rate", value: `${analytics.overview?.conversionRate || analytics.totals.conversionRate || 0}%`, note: `${analytics.funnel.purchases || 0} purchases from ${analytics.funnel.sessions || 0} sessions` },
-    { title: "Add to Cart Rate", value: `${analytics.rates?.addToCartRate || 0}%`, note: `${analytics.funnel.addToCart || 0} carts from ${analytics.funnel.productViews || 0} product views` },
-    { title: "Checkout Rate", value: `${analytics.rates?.checkoutRate || 0}%`, note: `${analytics.funnel.checkoutStart || 0} checkouts from ${analytics.funnel.addToCart || 0} carts` },
-    { title: "Purchase Rate", value: `${analytics.rates?.purchaseRate || 0}%`, note: `${analytics.funnel.purchases || 0} purchases from ${analytics.funnel.checkoutStart || 0} checkouts` },
-    { title: "Abandoned Cart", value: analytics.funnel.abandonedCarts || 0, note: "Cart sessions without purchase after the window" }
+    { title: "Conversion Rate", value: `${analytics.overview?.conversionRate || analytics.totals.conversionRate || 0}%`, note: `${analytics.funnel.purchases || 0} purchasing sessions from ${analytics.funnel.sessions || 0} sessions` },
+    { title: "Add to Cart Rate", value: `${analytics.rates?.addToCartRate || 0}%`, note: `${analytics.funnel.addToCart || 0} cart sessions from ${analytics.funnel.productViews || 0} product-view sessions` },
+    { title: "Checkout Rate", value: `${analytics.rates?.checkoutRate || 0}%`, note: `${analytics.funnel.checkoutStart || 0} checkout sessions from ${analytics.funnel.addToCart || 0} cart sessions` },
+    { title: "Purchase Rate", value: `${analytics.rates?.purchaseRate || 0}%`, note: `${analytics.funnel.purchases || 0} purchasing sessions from ${analytics.funnel.checkoutStart || 0} checkout sessions` },
+    { title: "Abandoned Carts", value: analytics.funnel.abandonedCarts || 0, note: "Detected cart sessions without a later purchase" }
   ];
   const productInsights = analytics.productInsights || {
     mostViewed: analytics.topViewedProducts || [],
@@ -391,7 +391,7 @@ export default function DashboardHome({ context, allProducts }) {
             ))}
           </div>
           <div style={listStyle}>
-            {fulfillmentQueue.map((order) => (
+            {fulfillmentQueue.length ? fulfillmentQueue.map((order) => (
               <div key={order.id} style={listItemStyle}>
                 <div>
                   <strong>{order.orderNumber}</strong>
@@ -399,7 +399,7 @@ export default function DashboardHome({ context, allProducts }) {
                 </div>
                 <strong>{formatCurrency(order.pricing.grandTotal)}</strong>
               </div>
-            ))}
+            )) : <div style={emptyStateStyle}>No open orders in this period.</div>}
           </div>
         </article>
 
@@ -498,9 +498,9 @@ export default function DashboardHome({ context, allProducts }) {
             </div>
             <div style={listStyle}>
               {[
-                ["Add to cart rate", `${analytics.rates?.addToCartRate || 0}%`, `${analytics.funnel.addToCart || 0} carts from ${analytics.funnel.productViews || 0} product views | ${analytics.dropOffs?.productViewToCart || 0} dropped`],
-                ["Checkout rate", `${analytics.rates?.checkoutRate || 0}%`, `${analytics.funnel.checkoutStart || 0} checkouts from ${analytics.funnel.addToCart || 0} carts | ${analytics.dropOffs?.cartToCheckout || 0} dropped`],
-                ["Purchase rate", `${analytics.rates?.purchaseRate || 0}%`, `${analytics.funnel.purchases || 0} purchases from ${analytics.funnel.checkoutStart || 0} checkouts | ${analytics.dropOffs?.checkoutToPurchase || 0} dropped`]
+                ["Add to cart rate", `${analytics.rates?.addToCartRate || 0}%`, `${analytics.funnel.addToCart || 0} cart sessions from ${analytics.funnel.productViews || 0} product-view sessions | ${analytics.dropOffs?.productViewToCart || 0} dropped`],
+                ["Checkout rate", `${analytics.rates?.checkoutRate || 0}%`, `${analytics.funnel.checkoutStart || 0} checkout sessions from ${analytics.funnel.addToCart || 0} cart sessions | ${analytics.dropOffs?.cartToCheckout || 0} dropped`],
+                ["Purchase rate", `${analytics.rates?.purchaseRate || 0}%`, `${analytics.funnel.purchases || 0} purchasing sessions from ${analytics.funnel.checkoutStart || 0} checkout sessions | ${analytics.dropOffs?.checkoutToPurchase || 0} dropped`]
               ].map(([label, value, note]) => (
                 <div key={label} style={listItemStyle}>
                   <div>
@@ -524,7 +524,10 @@ export default function DashboardHome({ context, allProducts }) {
             <div style={listStyle}>
               {productInsights.mostPurchased.length ? productInsights.mostPurchased.map((item) => (
                 <div key={`${item.slug || item.asin || item.name}-purchased`} style={listItemStyle}>
-                  <strong>{item.name}</strong>
+                  <div>
+                    <strong>{item.name}</strong>
+                    <p style={mutedTextStyle}>{`${item.orders || 0} order(s)`}</p>
+                  </div>
                   <span style={countPillStyle}>{item.purchases}</span>
                 </div>
               )) : <div style={emptyStateStyle}>No purchase events captured yet.</div>}

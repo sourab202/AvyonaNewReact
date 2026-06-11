@@ -1,5 +1,6 @@
 import { pool, query } from "../config/db.js";
 import { ApiError } from "../utils/apiError.js";
+import { linkAbandonedCheckoutToOrder } from "../services/abandonedCheckoutService.js";
 import { ORDER_STATUS_FLOW } from "../shared/orderStatusFlow.js";
 import { grantReferralBonus, grantPurchaseCashback, grantMilestoneReward } from "../services/creditPointsRewards.js";
 import {
@@ -896,9 +897,9 @@ export async function listOrders(_request, response) {
     `SELECT
       o.id,
       o.customer_id AS customerId,
-      c.full_name AS customerName,
-      c.email AS customerEmail,
-      c.phone AS customerPhone,
+      COALESCE(c.full_name, delivery.full_name) AS customerName,
+      COALESCE(c.email, delivery.email) AS customerEmail,
+      COALESCE(c.phone, delivery.phone) AS customerPhone,
       o.order_number AS orderNumber,
       o.status,
       o.payment_status AS paymentStatus,
@@ -913,7 +914,7 @@ export async function listOrders(_request, response) {
       o.shipping_fee AS shippingFee,
       o.total_amount AS totalAmount,
       (
-        SELECT COUNT(*)
+        SELECT COALESCE(SUM(item.quantity), 0)
         FROM order_items item
         WHERE item.order_id = o.id
       ) AS itemCount,
@@ -921,6 +922,9 @@ export async function listOrders(_request, response) {
       o.updated_at AS updatedAt
      FROM orders o
      LEFT JOIN customers c ON c.id = o.customer_id
+     LEFT JOIN order_addresses delivery
+       ON delivery.order_id = o.id
+       AND delivery.address_type = 'delivery'
      ORDER BY o.created_at DESC`
   );
 
@@ -990,7 +994,10 @@ export async function getAdminOrderDetails(request, response) {
         c.name AS category
        FROM order_items oi
        LEFT JOIN products p ON p.id = oi.product_id
-       LEFT JOIN categories c ON c.id = p.category_id
+       LEFT JOIN product_categories pc
+         ON pc.product_id = p.id
+         AND pc.relation_type = 'primary'
+       LEFT JOIN categories c ON c.id = pc.category_id
        WHERE oi.order_id = ?
        ORDER BY oi.id ASC`,
       [orderId]
@@ -1159,7 +1166,8 @@ export async function createOrder(request, response) {
     items = [],
     paymentMethod = "cod",
     couponCode = "",
-    creditPoints = 0
+    creditPoints = 0,
+    checkoutToken = ""
   } = request.body || {};
 
   if (!Array.isArray(items) || !items.length) {
@@ -1245,7 +1253,8 @@ export async function createOrder(request, response) {
 
     const orderNumber = createOrderNumber();
     const paymentStatus = normalizePaymentStatus(paymentMethod);
-    const paymentGateway = String(paymentMethod || "").toLowerCase() === "razorpay"
+    const normalizedPaymentMethod = String(paymentMethod || "").trim().toLowerCase();
+    const paymentGateway = normalizedPaymentMethod === "razorpay"
       ? "razorpay"
       : null;
     const reduceStock = shouldReduceStock(paymentStatus);
@@ -1260,9 +1269,12 @@ export async function createOrder(request, response) {
 
       const [productRows] = await connection.execute(
         `SELECT p.id, p.asin, p.slug, p.name, p.price, p.mrp, p.stock_quantity AS stockQuantity, p.status, p.is_visible AS isVisible, p.is_deleted AS isDeleted,
-          c.name AS category, c.slug AS categorySlug
+          c.name AS category, c.slug AS categorySlug, c.cod_enabled AS categoryCodEnabled
          FROM products p
-         LEFT JOIN categories c ON c.id = p.category_id
+         LEFT JOIN product_categories pc
+           ON pc.product_id = p.id
+           AND pc.relation_type = 'primary'
+         LEFT JOIN categories c ON c.id = pc.category_id
          WHERE p.asin = ? OR p.slug = ?
          LIMIT 1
          FOR UPDATE`,
@@ -1288,11 +1300,32 @@ export async function createOrder(request, response) {
         name: product.name,
         category: product.category,
         categorySlug: product.categorySlug,
+        categoryCodEnabled: product.categoryCodEnabled === null || product.categoryCodEnabled === undefined
+          ? true
+          : Boolean(product.categoryCodEnabled),
         quantity,
         unitPrice,
         totalPrice,
         mrp: Number(product.mrp || 0)
       });
+    }
+
+    if (normalizedPaymentMethod === "cod") {
+      const [codSettingRows] = await connection.execute(
+        "SELECT setting_value AS settingValue FROM app_settings WHERE setting_key = 'cod_enabled' LIMIT 1"
+      );
+      const codEnabled = String(codSettingRows[0]?.settingValue ?? "true").trim().toLowerCase() !== "false";
+      if (!codEnabled) {
+        throw new ApiError(400, "Cash on Delivery is currently disabled");
+      }
+
+      const blockedItem = normalizedItems.find((item) => !item.categoryCodEnabled);
+      if (blockedItem) {
+        throw new ApiError(
+          400,
+          `Cash on Delivery is not available for ${blockedItem.category || "this category"}`
+        );
+      }
     }
 
     let coupon = null;
@@ -1549,6 +1582,13 @@ export async function createOrder(request, response) {
         [totalAmount, customerId]
       );
     }
+
+    await linkAbandonedCheckoutToOrder(
+      connection,
+      checkoutToken,
+      orderId,
+      normalizedPaymentMethod === "cod"
+    );
 
     await connection.commit();
 
