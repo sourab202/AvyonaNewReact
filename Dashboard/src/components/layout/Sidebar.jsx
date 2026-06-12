@@ -17,8 +17,8 @@ import {
   FaAngleDoubleLeft,
   FaAngleDoubleRight
 } from "react-icons/fa";
-import { clearAdminToken } from "../../api/adminApi";
-import { canViewModule } from "../../utils/accessControl";
+import { clearAdminToken, logoutAdmin } from "../../api/adminApi";
+import { canViewModule, getCurrentAdminRole } from "../../utils/accessControl";
 
 const navItems = [
   { label: "Dashboard", to: "/dashboard", icon: FaTachometerAlt, module: "dashboard" },
@@ -50,7 +50,8 @@ const navItems = [
       { label: "Header", to: "/dashboard/settings/header", module: "settings" },
       { label: "Footer", to: "/dashboard/settings/footer", module: "settings" },
       { label: "Contact Page", to: "/dashboard/settings/contact-page", module: "settings" },
-      { label: "Theme", to: "/dashboard/settings/theme", module: "theme_settings" }
+      { label: "Theme", to: "/dashboard/settings/theme", module: "theme_settings" },
+      { label: "Activity History", to: "/dashboard/settings/activity-history", module: "settings", roles: ["admin", "super_admin"] }
     ]
   }
 ];
@@ -62,8 +63,14 @@ export default function Sidebar({ isCollapsed = false, onToggleCollapse }) {
     settings: location.pathname.startsWith("/dashboard/settings"),
     orders: location.pathname.startsWith("/dashboard/orders")
   }));
+  const currentRole = getCurrentAdminRole();
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await logoutAdmin();
+    } catch {
+      // The local session must still end if the audit endpoint is temporarily unavailable.
+    }
     clearAdminToken();
     navigate("/dashboard/login", { replace: true });
   };
@@ -101,7 +108,7 @@ export default function Sidebar({ isCollapsed = false, onToggleCollapse }) {
 
       <nav className="dashboard-nav" aria-label="Admin navigation">
         {navItems.filter((item) => canViewModule(item.module)).map((item) => {
-          const visibleChildren = (item.children || []).filter((child) => canViewModule(child.module));
+          const visibleChildren = (item.children || []).filter((child) => canViewModule(child.module) && (!child.roles || child.roles.includes(currentRole)));
 
           if (visibleChildren.length) {
             const dropdownKey = item.label.toLowerCase();

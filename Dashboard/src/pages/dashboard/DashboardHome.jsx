@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import * as XLSX from "xlsx";
 import { fetchDashboardAnalytics, fetchDashboardSummary } from "../../api/adminApi";
 import { resolveAdminMediaUrl } from "../../utils/media";
 import { formatCurrency } from "../../utils/storefront";
@@ -130,6 +131,8 @@ export default function DashboardHome({ context, allProducts }) {
   const [compareStartDate, setCompareStartDate] = useState(getTodayDate());
   const [compareEndDate, setCompareEndDate] = useState(getTodayDate());
   const [appliedAnalyticsParams, setAppliedAnalyticsParams] = useState({ mode: "last30", limit: 8 });
+  const [isDownloadingReport, setIsDownloadingReport] = useState(false);
+  const [reportMessage, setReportMessage] = useState("");
 
   const analyticsParams = useMemo(() => {
     const params = {
@@ -176,6 +179,89 @@ export default function DashboardHome({ context, allProducts }) {
 
   const applyAnalyticsFilters = () => {
     setAppliedAnalyticsParams(analyticsParams);
+  };
+
+  const downloadReport = async () => {
+    if (periodMode === "custom" && (!customStartDate || !customEndDate)) {
+      setReportMessage("Select both start and end dates before downloading.");
+      return;
+    }
+
+    setIsDownloadingReport(true);
+    setReportMessage("");
+    try {
+      const [summaryResponse, analyticsResponse] = await Promise.all([
+        fetchDashboardSummary(analyticsParams),
+        fetchDashboardAnalytics({ ...analyticsParams, limit: 50 })
+      ]);
+      const summary = summaryResponse.data?.data || {};
+      const reportAnalytics = analyticsResponse.data?.data || fallbackAnalytics;
+      const range = summary.range || reportAnalytics.range || {};
+      const workbook = XLSX.utils.book_new();
+      const overviewRows = [
+        { Metric: "Report start", Value: range.startDate || "Last 30 days" },
+        { Metric: "Report end", Value: range.endDate || getTodayDate() },
+        { Metric: "Paid revenue", Value: Number(summary.metrics?.revenue || 0) },
+        { Metric: "Orders", Value: Number(summary.metrics?.orders || 0) },
+        { Metric: "New customers", Value: Number(summary.metrics?.customers || 0) },
+        { Metric: "Products", Value: Number(summary.metrics?.products || 0) },
+        { Metric: "Payment health (%)", Value: Number(summary.operations?.paymentHealth || 0) },
+        { Metric: "Sessions", Value: Number(reportAnalytics.overview?.totalSessions || 0) },
+        { Metric: "Users", Value: Number(reportAnalytics.overview?.totalUsers || 0) },
+        { Metric: "Conversion rate (%)", Value: Number(reportAnalytics.overview?.conversionRate || 0) }
+      ];
+      const funnelRows = Object.entries(reportAnalytics.funnel || {}).map(([key, value]) => ({
+        Stage: formatEventLabel(key),
+        Value: Number(value || 0)
+      }));
+      const productRows = [
+        ...(reportAnalytics.productInsights?.mostViewed || []).map((item) => ({
+          Section: "Most Viewed",
+          Product: item.name,
+          ASIN: item.asin || "",
+          Slug: item.slug || "",
+          Views: Number(item.views || 0),
+          Purchases: ""
+        })),
+        ...(reportAnalytics.productInsights?.mostPurchased || []).map((item) => ({
+          Section: "Most Purchased",
+          Product: item.name,
+          ASIN: item.asin || "",
+          Slug: item.slug || "",
+          Views: "",
+          Purchases: Number(item.purchases || 0)
+        }))
+      ];
+      const searchRows = (reportAnalytics.searchInsights?.topSearches || []).map((item) => ({
+        Query: item.query,
+        Searches: Number(item.total || 0),
+        "No-result searches": Number(item.zeroResultCount || 0),
+        "Product clicks": Number(item.clickedProductCount || 0)
+      }));
+      const orderRows = (summary.latestOrders || []).map((order) => ({
+        "Order number": order.orderNumber,
+        Customer: order.customerName || "Customer",
+        Status: formatEventLabel(order.status),
+        Total: Number(order.totalAmount || 0),
+        Created: order.createdAt || ""
+      }));
+
+      XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(overviewRows), "Overview");
+      XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(funnelRows), "Funnel");
+      XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(productRows.length ? productRows : [{ Section: "No product analytics available" }]), "Products");
+      XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(searchRows.length ? searchRows : [{ Query: "No search analytics available" }]), "Searches");
+      XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(orderRows.length ? orderRows : [{ "Order number": "No orders in this period" }]), "Orders");
+
+      const startLabel = range.startDate || "last-30-days";
+      const endLabel = range.endDate || getTodayDate();
+      XLSX.writeFile(workbook, `avyona-dashboard-report-${startLabel}-to-${endLabel}.xlsx`, { bookType: "xlsx" });
+      setAppliedAnalyticsParams(analyticsParams);
+      setReportMessage("Report downloaded successfully.");
+    } catch (error) {
+      setReportMessage(error.response?.data?.message || "Unable to download the report.");
+    } finally {
+      setIsDownloadingReport(false);
+    }
   };
 
   useEffect(() => {
@@ -327,7 +413,11 @@ export default function DashboardHome({ context, allProducts }) {
           <button type="button" style={applyFilterButtonStyle} onClick={applyAnalyticsFilters}>
             Save Filter
           </button>
+          <button type="button" style={downloadReportButtonStyle} onClick={downloadReport} disabled={isDownloadingReport}>
+            {isDownloadingReport ? "Preparing Report..." : "Download Report"}
+          </button>
         </div>
+        {reportMessage ? <p style={reportMessageStyle}>{reportMessage}</p> : null}
         {compareEnabled ? (
           <div style={filterRowStyle}>
             <div style={filterGroupStyle}>
@@ -676,6 +766,19 @@ const applyFilterButtonStyle = {
   color: "#fff",
   fontWeight: 900,
   cursor: "pointer"
+};
+
+const downloadReportButtonStyle = {
+  ...applyFilterButtonStyle,
+  borderColor: "#0f172a",
+  background: "#0f172a"
+};
+
+const reportMessageStyle = {
+  margin: 0,
+  color: "#0f766e",
+  fontSize: "13px",
+  fontWeight: 800
 };
 
 const comparisonSummaryStyle = {

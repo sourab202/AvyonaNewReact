@@ -3,6 +3,7 @@ import * as XLSX from "xlsx";
 import {
   deleteWebsiteImage,
   fetchWebsiteImages,
+  restoreWebsiteImage,
   updateWebsiteImage,
   uploadAdminImage
 } from "../../api/adminApi";
@@ -82,7 +83,7 @@ export default function WebsiteImages() {
     setMessage("");
 
     try {
-      const response = await fetchWebsiteImages();
+      const response = await fetchWebsiteImages({ includeDeleted: true });
       setImages(Array.isArray(response.data?.data) ? response.data.data : []);
     } catch (error) {
       setMessage(error.response?.data?.message || "Unable to load website images.");
@@ -128,10 +129,25 @@ export default function WebsiteImages() {
 
     try {
       await deleteWebsiteImage(image.url);
-      setImages((current) => current.filter((item) => item.url !== image.url));
-      setMessage(image.protectedFile ? "Image hidden from manager. Existing website file was not removed." : "Uploaded image deleted.");
+      updateLocalImage(image.url, { status: "inactive", isDeleted: true });
+      setMessage("Image moved to Deleted. The file is retained and can be restored.");
     } catch (error) {
       setMessage(error.response?.data?.message || "Unable to delete image.");
+    } finally {
+      setSavingUrl("");
+    }
+  };
+
+  const handleRestore = async (image) => {
+    setSavingUrl(image.url);
+    setMessage("");
+
+    try {
+      await restoreWebsiteImage(image.url);
+      updateLocalImage(image.url, { status: "active", isDeleted: false });
+      setMessage("Image restored successfully.");
+    } catch (error) {
+      setMessage(error.response?.data?.message || "Unable to restore image.");
     } finally {
       setSavingUrl("");
     }
@@ -204,7 +220,11 @@ export default function WebsiteImages() {
 
   const filteredImages = images.filter((image) => {
     const query = searchTerm.trim().toLowerCase();
-    const matchesStatus = statusFilter === "all" || image.status === statusFilter;
+    const matchesStatus = statusFilter === "all"
+      ? !image.isDeleted
+      : statusFilter === "deleted"
+        ? image.isDeleted
+        : !image.isDeleted && image.status === statusFilter;
     const matchesSearch = !query || [
       image.url,
       image.altText,
@@ -235,8 +255,8 @@ export default function WebsiteImages() {
               <p style={eyebrowStyle}>{formatSource(image.source)}</p>
               <h2 style={cardTitleStyle}>{image.originalName || image.filename || "Website image"}</h2>
             </div>
-            <span style={{ ...badgeStyle, ...staticBadgeStyle, ...(image.status === "active" ? activeBadgeStyle : inactiveBadgeStyle) }}>
-              {image.status === "active" ? "Active" : "Inactive"}
+            <span style={{ ...badgeStyle, ...staticBadgeStyle, ...(image.isDeleted ? deletedBadgeStyle : image.status === "active" ? activeBadgeStyle : inactiveBadgeStyle) }}>
+              {image.isDeleted ? "Deleted" : image.status === "active" ? "Active" : "Inactive"}
             </span>
           </div>
 
@@ -300,7 +320,11 @@ export default function WebsiteImages() {
           ) : null}
 
           <div style={actionRowStyle}>
-            {isEditing ? (
+            {image.isDeleted ? (
+              <button type="button" onClick={() => handleRestore(image)} disabled={savingUrl === image.url} style={restoreButtonStyle}>
+                {savingUrl === image.url ? "Restoring..." : "Restore"}
+              </button>
+            ) : isEditing ? (
               <>
                 <button type="button" onClick={() => handleSave(image)} disabled={savingUrl === image.url} style={primaryButtonStyle}>
                   {savingUrl === image.url ? "Saving..." : "Save"}
@@ -314,9 +338,11 @@ export default function WebsiteImages() {
                 Edit
               </button>
             )}
-            <button type="button" onClick={() => handleDelete(image)} disabled={savingUrl === image.url} style={dangerButtonStyle}>
-              Delete
-            </button>
+            {!image.isDeleted ? (
+              <button type="button" onClick={() => handleDelete(image)} disabled={savingUrl === image.url} style={dangerButtonStyle}>
+                Delete
+              </button>
+            ) : null}
           </div>
         </div>
       </div>
@@ -409,6 +435,7 @@ export default function WebsiteImages() {
           <option value="all">All Status</option>
           <option value="active">Active</option>
           <option value="inactive">Inactive</option>
+          <option value="deleted">Deleted / Recoverable</option>
         </select>
         <div style={viewToggleStyle}>
           <button type="button" onClick={() => setViewMode("visual")} style={viewMode === "visual" ? activeViewButtonStyle : viewButtonStyle}>Images</button>
@@ -420,7 +447,8 @@ export default function WebsiteImages() {
       {message ? <div style={messageStyle}>{message}</div> : null}
 
       <section style={summaryStyle}>
-        <span style={pillStyle}>{`Total Images: ${images.length}`}</span>
+        <span style={pillStyle}>{`Active Images: ${images.filter((image) => !image.isDeleted).length}`}</span>
+        <span style={pillStyle}>{`Deleted: ${images.filter((image) => image.isDeleted).length}`}</span>
         <span style={pillStyle}>{`Showing: ${filteredImages.length}`}</span>
         <span style={pillStyle}>{`Selected: ${selectedUrls.size}`}</span>
         <span style={pillStyle}>Existing page controls are unchanged</span>
@@ -442,8 +470,8 @@ export default function WebsiteImages() {
                     <button type="button" onClick={() => setActiveImageUrl(image.url)} style={visualImageButtonStyle}>
                       <img src={getPreviewUrl(image.url)} alt={image.altText || image.originalName || "Website image"} style={imageStyle} />
                     </button>
-                    <span style={{ ...badgeStyle, ...(image.status === "active" ? activeBadgeStyle : inactiveBadgeStyle) }}>
-                      {image.status === "active" ? "Active" : "Inactive"}
+                    <span style={{ ...badgeStyle, ...(image.isDeleted ? deletedBadgeStyle : image.status === "active" ? activeBadgeStyle : inactiveBadgeStyle) }}>
+                      {image.isDeleted ? "Deleted" : image.status === "active" ? "Active" : "Inactive"}
                     </span>
                   </article>
                 ))}
@@ -466,12 +494,12 @@ export default function WebsiteImages() {
                     <span>{image.url}</span>
                     <small>{getLinkedProductText(image, "asin") || "No ASIN"} / {getLinkedProductText(image, "sku") || "No SKU"}</small>
                   </div>
-                  <span style={{ ...listBadgeStyle, ...(image.status === "active" ? activeBadgeStyle : inactiveBadgeStyle) }}>
-                    {image.status === "active" ? "Active" : "Inactive"}
+                  <span style={{ ...listBadgeStyle, ...(image.isDeleted ? deletedBadgeStyle : image.status === "active" ? activeBadgeStyle : inactiveBadgeStyle) }}>
+                    {image.isDeleted ? "Deleted" : image.status === "active" ? "Active" : "Inactive"}
                   </span>
                   <div style={listActionsStyle}>
                     <button type="button" onClick={() => setActiveImageUrl(image.url)} style={secondaryButtonStyle}>Details</button>
-                    <button
+                    {!image.isDeleted ? <button
                       type="button"
                       onClick={() => {
                         setActiveImageUrl(image.url);
@@ -480,8 +508,10 @@ export default function WebsiteImages() {
                       style={primaryButtonStyle}
                     >
                       Edit
-                    </button>
-                    <button type="button" onClick={() => handleDelete(image)} disabled={savingUrl === image.url} style={dangerButtonStyle}>Delete</button>
+                    </button> : null}
+                    {image.isDeleted
+                      ? <button type="button" onClick={() => handleRestore(image)} disabled={savingUrl === image.url} style={restoreButtonStyle}>Restore</button>
+                      : <button type="button" onClick={() => handleDelete(image)} disabled={savingUrl === image.url} style={dangerButtonStyle}>Delete</button>}
                   </div>
                 </article>
               ))}
@@ -797,6 +827,11 @@ const inactiveBadgeStyle = {
   background: "#fef3c7"
 };
 
+const deletedBadgeStyle = {
+  color: "#991b1b",
+  background: "#fee2e2"
+};
+
 const contentStyle = {
   display: "grid",
   gridTemplateRows: "auto auto 1fr auto",
@@ -1107,6 +1142,11 @@ const dangerButtonStyle = {
   color: "#b91c1c",
   fontWeight: 800,
   cursor: "pointer"
+};
+
+const restoreButtonStyle = {
+  ...primaryButtonStyle,
+  background: "#0f766e"
 };
 
 const pillStyle = {

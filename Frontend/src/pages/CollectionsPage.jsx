@@ -1,12 +1,8 @@
 import React from "react";
 import { Link } from "react-router-dom";
+import CategoryArtwork from "../components/common/CategoryArtwork";
 import { flattenCategoryTree } from "../data/category-data";
 import { resolveMediaUrl } from "../utils/media";
-
-function handleCategoryImageError(event) {
-  event.currentTarget.closest(".category-art")?.classList.add("category-art-missing");
-  event.currentTarget.remove();
-}
 
 export default function CollectionsPage({ context }) {
   const categories = flattenCategoryTree(Array.isArray(context?.siteCategories) ? context.siteCategories : [])
@@ -29,7 +25,7 @@ export default function CollectionsPage({ context }) {
 
             return (
               <Link key={category.slug} className="category-card category-card-link" to={`/category/${category.slug}`}>
-                {categoryImage ? <div className="category-art"><img src={categoryImage} alt={category.name} loading="lazy" decoding="async" onError={handleCategoryImageError} /></div> : null}
+                <CategoryArtwork src={categoryImage} alt={category.name} />
                 <div className="category-copy">
                   <h3>{category.name}</h3>
                   <p>{category.description}</p>

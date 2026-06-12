@@ -2,6 +2,7 @@ import bcrypt from "bcryptjs";
 import { query } from "../config/db.js";
 import { ApiError } from "../utils/apiError.js";
 import { signAdminToken } from "../utils/jwt.js";
+import { safelyLogActivity } from "../services/activityLogger.js";
 
 export async function bootstrapAdmin(request, response) {
   const { fullName, email, password } = request.body || {};
@@ -50,15 +51,50 @@ export async function loginAdmin(request, response) {
   const admin = admins[0];
 
   if (!admin || !admin.isActive || admin.status !== "active") {
+    await safelyLogActivity({
+      request,
+      action: "login_failed",
+      module: "users_access",
+      entityType: "admin_user",
+      entityName: String(email).toLowerCase(),
+      adminEmail: String(email).toLowerCase(),
+      description: "Admin login failed"
+    });
     throw new ApiError(401, "Invalid email or password");
   }
 
   const isValidPassword = await bcrypt.compare(password, admin.passwordHash);
   if (!isValidPassword) {
+    await safelyLogActivity({
+      request,
+      action: "login_failed",
+      module: "users_access",
+      entityType: "admin_user",
+      entityId: admin.id,
+      entityName: admin.email,
+      adminId: admin.id,
+      adminName: admin.fullName,
+      adminEmail: admin.email,
+      roleName: admin.role,
+      description: "Admin login failed"
+    });
     throw new ApiError(401, "Invalid email or password");
   }
 
   await query("UPDATE admins SET last_login_at = NOW() WHERE id = ?", [admin.id]);
+  await safelyLogActivity({
+    request,
+    action: "login_success",
+    module: "users_access",
+    entityType: "admin_user",
+    entityId: admin.id,
+    entityName: admin.email,
+    adminId: admin.id,
+    adminName: admin.fullName,
+    adminEmail: admin.email,
+    roleName: admin.role,
+    description: "Admin logged in successfully"
+  });
 
   response.json({
     success: true,
@@ -72,6 +108,19 @@ export async function loginAdmin(request, response) {
       token: signAdminToken(admin)
     }
   });
+}
+
+export async function logoutAdmin(request, response) {
+  await safelyLogActivity({
+    request,
+    action: "logout",
+    module: "users_access",
+    entityType: "admin_user",
+    entityId: request.admin?.id,
+    entityName: request.admin?.email,
+    description: "Admin logged out"
+  });
+  response.json({ success: true, message: "Logged out successfully" });
 }
 
 export async function getCurrentAdmin(request, response) {

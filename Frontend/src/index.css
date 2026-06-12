@@ -1061,7 +1061,7 @@ body.checkout-page {
 
   .product-card,
   .mini-card {
-    padding: 10px;
+    padding: 0;
   }
 
   .homepage-dynamic-grid,
@@ -1076,17 +1076,17 @@ body.checkout-page {
     aspect-ratio: var(--product-image-ratio, 1 / 1);
     max-height: none;
     padding: 0;
-    margin-bottom: 6px;
-    border-radius: 10px;
+    margin-bottom: 0;
+    border-radius: 0;
   }
 
   .product-art img,
   .mini-art img,
   .collection-results-content .product-art img {
-    width: auto;
-    height: auto;
-    max-width: 112%;
-    max-height: 112%;
+    width: 100%;
+    height: 100%;
+    max-width: 100%;
+    max-height: 100%;
   }
 
   .product-topline {
@@ -1109,7 +1109,7 @@ body.checkout-page {
   .product-card-footer,
   .mini-card-footer {
     gap: 8px;
-    padding-top: 10px;
+    padding: 10px;
   }
 
   .card-price-line strong,
@@ -1231,7 +1231,7 @@ body.checkout-page {
 
   .product-card,
   .mini-card {
-    padding: 8px;
+    padding: 0;
   }
 
   .homepage-dynamic-grid,
@@ -1245,6 +1245,6 @@ body.checkout-page {
     min-height: 0;
     aspect-ratio: var(--product-image-ratio, 1 / 1);
     padding: 0;
-    margin-bottom: 6px;
+    margin-bottom: 0;
   }
 }

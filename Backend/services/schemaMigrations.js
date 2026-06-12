@@ -28,6 +28,57 @@ async function indexExists(tableName, indexName) {
 
 export async function runSchemaMigrations() {
   await query(
+    `CREATE TABLE IF NOT EXISTS activity_logs (
+      id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      admin_id INT UNSIGNED NULL,
+      admin_name VARCHAR(180) NULL,
+      admin_email VARCHAR(180) NULL,
+      role_name VARCHAR(80) NULL,
+      action VARCHAR(120) NOT NULL,
+      module VARCHAR(120) NOT NULL,
+      entity_type VARCHAR(120) NULL,
+      entity_id VARCHAR(120) NULL,
+      entity_name VARCHAR(255) NULL,
+      old_values JSON NULL,
+      new_values JSON NULL,
+      changes JSON NULL,
+      description TEXT NULL,
+      ip_address VARCHAR(80) NULL,
+      user_agent TEXT NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_activity_logs_admin_id (admin_id),
+      INDEX idx_activity_logs_action (action),
+      INDEX idx_activity_logs_module (module),
+      INDEX idx_activity_logs_entity_type (entity_type),
+      INDEX idx_activity_logs_entity_id (entity_id),
+      INDEX idx_activity_logs_created_at (created_at)
+    )`
+  );
+
+  await query(
+    `CREATE TABLE IF NOT EXISTS audit_logs (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      admin_id INT UNSIGNED NULL,
+      admin_name VARCHAR(120) NULL,
+      admin_role VARCHAR(80) NULL,
+      action VARCHAR(120) NOT NULL,
+      module_name VARCHAR(80) NULL,
+      entity_type VARCHAR(80) NOT NULL,
+      entity_id VARCHAR(80) NULL,
+      record_name VARCHAR(180) NULL,
+      ip_address VARCHAR(64) NULL,
+      device_label VARCHAR(180) NULL,
+      status ENUM('success', 'failed') NOT NULL DEFAULT 'success',
+      metadata_json JSON NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_audit_logs_admin_created (admin_id, created_at),
+      INDEX idx_audit_logs_module_created (module_name, created_at),
+      CONSTRAINT fk_audit_logs_admin
+        FOREIGN KEY (admin_id) REFERENCES admins(id) ON DELETE SET NULL
+    )`
+  );
+
+  await query(
     `CREATE TABLE IF NOT EXISTS abandoned_checkouts (
       id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
       checkout_token VARCHAR(120) NOT NULL UNIQUE,

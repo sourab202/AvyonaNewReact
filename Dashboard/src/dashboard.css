@@ -901,8 +901,12 @@ body {
 .dashboard-product-thumb.is-empty {
   display: grid;
   place-items: center;
+  padding: 3px;
   color: #64748b;
-  font-weight: 900;
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 1.1;
+  text-align: center;
 }
 
 .dashboard-product-copy {
@@ -3945,3 +3949,48 @@ body,
     break-inside: avoid;
   }
 }
+
+.activity-history-page { display: grid; gap: 18px; min-width: 0; }
+.activity-history-hero { display: flex; align-items: center; gap: 16px; padding: 22px; border: 1px solid #dbe5ee; border-radius: 20px; background: linear-gradient(135deg, #fff, #eef9f4); }
+.activity-history-hero h2 { margin: 3px 0 5px; font-size: clamp(24px, 3vw, 34px); color: #0f172a; }
+.activity-history-hero p, .activity-history-hero span { margin: 0; color: #64748b; }
+.activity-history-hero > strong { margin-left: auto; padding: 8px 12px; border-radius: 999px; background: #dff7ea; color: #087a52; white-space: nowrap; }
+.activity-history-icon { display: grid; place-items: center; width: 48px; height: 48px; flex: 0 0 auto; border-radius: 14px; background: #123f34; color: #fff; font-size: 20px; }
+.activity-filters { display: grid; grid-template-columns: minmax(240px, 1.7fr) repeat(5, minmax(130px, 1fr)) auto auto; gap: 10px; padding: 16px; border: 1px solid #dbe5ee; border-radius: 18px; background: #fff; }
+.activity-filters input, .activity-filters select { width: 100%; min-width: 0; height: 42px; padding: 0 12px; border: 1px solid #cbd8e6; border-radius: 10px; background: #fff; color: #172033; }
+.activity-search { display: flex; align-items: center; gap: 9px; padding-left: 12px; border: 1px solid #cbd8e6; border-radius: 10px; color: #718096; }
+.activity-search input { padding-left: 0; border: 0; outline: 0; }
+.activity-filters button, .activity-pagination button { min-height: 42px; padding: 0 16px; border: 0; border-radius: 10px; background: #0f806f; color: #fff; font-weight: 800; cursor: pointer; }
+.activity-filters button.secondary, .activity-pagination button { border: 1px solid #cbd8e6; background: #fff; color: #334155; }
+.activity-table-card { min-width: 0; overflow: hidden; border: 1px solid #dbe5ee; border-radius: 18px; background: #fff; }
+.activity-table-scroll { overflow-x: auto; }
+.activity-table-card table { width: 100%; min-width: 1180px; border-collapse: collapse; }
+.activity-table-card th { padding: 13px 14px; background: #f7fafc; color: #475569; text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+.activity-table-card td { padding: 14px; border-top: 1px solid #e5edf4; color: #334155; vertical-align: top; font-size: 13px; }
+.activity-table-card td small { display: block; margin-top: 3px; color: #7b8798; }
+.activity-nowrap { white-space: nowrap; }
+.activity-role, .activity-action { display: inline-block; padding: 5px 8px; border-radius: 999px; background: #edf6f3; color: #12634f; font-weight: 800; text-transform: capitalize; white-space: nowrap; }
+.activity-action { background: #eef4ff; color: #315c9a; }
+.activity-view { display: inline-flex; align-items: center; gap: 6px; border: 0; background: transparent; color: #087a62; font-weight: 800; cursor: pointer; }
+.activity-empty { padding: 36px !important; text-align: center; color: #64748b !important; }
+.activity-pagination { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-top: 1px solid #e5edf4; color: #64748b; }
+.activity-pagination div { display: flex; gap: 8px; }
+.activity-pagination button:disabled { opacity: .45; cursor: not-allowed; }
+.activity-error { padding: 12px 14px; border: 1px solid #fecaca; border-radius: 12px; background: #fff1f2; color: #b42318; }
+.activity-modal-backdrop { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 20px; background: rgba(15, 23, 42, .58); }
+.activity-modal { width: min(1080px, 100%); max-height: 90vh; overflow: auto; border-radius: 20px; background: #fff; box-shadow: 0 24px 80px rgba(15, 23, 42, .28); }
+.activity-modal > header { position: sticky; top: 0; z-index: 1; display: flex; justify-content: space-between; padding: 20px 22px; border-bottom: 1px solid #e5edf4; background: #fff; }
+.activity-modal header span { color: #087a62; font-weight: 800; text-transform: capitalize; }
+.activity-modal h3 { margin: 4px 0 0; color: #0f172a; text-transform: capitalize; }
+.activity-modal header button { width: 38px; height: 38px; border: 1px solid #dbe5ee; border-radius: 10px; background: #fff; cursor: pointer; }
+.activity-detail-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; padding: 20px 22px; }
+.activity-detail-grid > div { display: grid; gap: 4px; padding: 13px; border: 1px solid #e2eaf1; border-radius: 12px; overflow-wrap: anywhere; }
+.activity-detail-grid small { color: #7b8798; }
+.activity-description { margin: 0 22px 18px; padding: 13px; border-radius: 12px; background: #f2f8f6; color: #334155; }
+.activity-json-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; padding: 0 22px 22px; }
+.activity-json-panel { min-width: 0; overflow: hidden; border: 1px solid #e2eaf1; border-radius: 12px; }
+.activity-json-panel h4 { margin: 0; padding: 12px; background: #f7fafc; color: #334155; }
+.activity-json-panel pre { max-height: 360px; margin: 0; overflow: auto; padding: 12px; background: #101827; color: #d7e3ef; font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+@media (max-width: 1250px) { .activity-filters { grid-template-columns: repeat(3, minmax(0, 1fr)); } .activity-search { grid-column: span 2; } }
+@media (max-width: 760px) { .activity-history-hero { align-items: flex-start; flex-wrap: wrap; } .activity-history-hero > strong { margin-left: 0; } .activity-filters { grid-template-columns: 1fr 1fr; } .activity-search { grid-column: 1 / -1; } .activity-detail-grid, .activity-json-grid { grid-template-columns: 1fr; } }
+@media (max-width: 480px) { .activity-filters { grid-template-columns: 1fr; } .activity-search { grid-column: auto; } .activity-pagination { align-items: stretch; flex-direction: column; gap: 10px; } .activity-pagination div button { flex: 1; } }

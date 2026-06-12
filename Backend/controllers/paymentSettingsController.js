@@ -4,6 +4,7 @@ import {
   getPaymentSettings,
   savePaymentSettings
 } from "../services/paymentSettings.js";
+import { safelyLogActivity } from "../services/activityLogger.js";
 
 const razorpayApiBaseUrl = "https://api.razorpay.com/v1";
 
@@ -44,7 +45,16 @@ export async function updateAdminPaymentSettings(request, response) {
     throw new ApiError(400, "A valid payment settings object is required");
   }
 
+  const previous = await getPaymentSettings();
   const settings = await savePaymentSettings(incomingSettings);
+  const action = previous.codEnabled !== settings.codEnabled
+    ? "cod_global_changed"
+    : "razorpay_settings_updated";
+  await safelyLogActivity({
+    request, action, module: "settings", entityType: "payment_settings",
+    entityId: "payment", entityName: "Payment Settings",
+    oldValues: previous, newValues: settings, description: "Payment settings updated"
+  });
 
   response.json({
     success: true,

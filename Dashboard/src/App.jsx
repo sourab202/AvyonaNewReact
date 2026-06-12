@@ -2,6 +2,7 @@ import React from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import AppRoutes from "./routes/AppRoutes";
 import Login from "./pages/auth/Login";
+import AcceptInvite from "./pages/auth/AcceptInvite";
 import { fetchCurrentAdmin, getAdminToken, subscribeAdminAuth } from "./api/adminApi";
 
 function ProtectedDashboard({ isAuthenticated }) {
@@ -49,6 +50,7 @@ function App() {
     <Routes>
       <Route path="/login" element={<Login isAuthenticated={isAuthenticated} />} />
       <Route path="/dashboard/login" element={<Login isAuthenticated={isAuthenticated} />} />
+      <Route path="/dashboard/accept-invite" element={<AcceptInvite />} />
       <Route path="/dashboard/*" element={<ProtectedDashboard isAuthenticated={isAuthenticated} />} />
       <Route path="/homepage/hero-banner" element={<Navigate to="/dashboard/homepage/hero-banner" replace />} />
       <Route path="/homepage/browse-categories" element={<Navigate to="/dashboard/homepage/browse-categories" replace />} />

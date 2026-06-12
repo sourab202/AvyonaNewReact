@@ -101,6 +101,11 @@ const pageMeta = [
     subtitle: "Control website colors, buttons, cards, spacing, and global design style."
   },
   {
+    path: "/dashboard/settings/activity-history",
+    title: "Activity History",
+    subtitle: "Review protected dashboard actions and record-level changes."
+  },
+  {
     path: "/dashboard",
     title: "Dashboard",
     subtitle: "Monitor revenue, orders, customers, and product activity from the admin backend."

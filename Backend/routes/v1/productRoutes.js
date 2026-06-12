@@ -14,8 +14,10 @@ import {
   getProductById,
   listInventoryImportFailedRows,
   listInventoryImportHistory,
+  listDeletedProducts,
   retryInventoryImportFailedRows,
   listProducts,
+  restoreProduct,
   startInventoryImportJob,
   updateProduct,
   validateInventoryImport,
@@ -45,9 +47,11 @@ router.post("/inventory/jobs/:jobId/start", asyncHandler(requireAdminAuth), asyn
 router.post("/inventory/jobs/:jobId/cancel", asyncHandler(requireAdminAuth), asyncHandler(requireAdminPermission("products", "edit")), asyncHandler(cancelInventoryImportJob));
 router.post("/inventory/jobs/:jobId/retry-failed", asyncHandler(requireAdminAuth), asyncHandler(requireAdminPermission("products", "edit")), asyncHandler(retryInventoryImportFailedRows));
 router.post("/inventory/upsert", asyncHandler(requireAdminAuth), asyncHandler(requireAdminPermission("products", "edit")), asyncHandler(upsertProductByAsinSku));
+router.get("/deleted/list", asyncHandler(requireAdminAuth), asyncHandler(requireAdminPermission("products", "view")), asyncHandler(listDeletedProducts));
 router.get("/:id", asyncHandler(getProductById));
 router.post("/", asyncHandler(requireAdminAuth), asyncHandler(requireAdminPermission("products", "create")), asyncHandler(createProduct));
 router.patch("/:id", asyncHandler(requireAdminAuth), asyncHandler(requireAdminPermission("products", "edit")), asyncHandler(updateProduct));
+router.patch("/:id/restore", asyncHandler(requireAdminAuth), asyncHandler(requireAdminPermission("products", "edit")), asyncHandler(restoreProduct));
 router.delete("/:id", asyncHandler(requireAdminAuth), asyncHandler(requireAdminPermission("products", "delete")), asyncHandler(deleteProduct));
 
 export default router;

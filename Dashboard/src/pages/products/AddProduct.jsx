@@ -12,7 +12,7 @@ import {
 } from "../../data/productFormData";
 import { flattenCategoryTree, fallbackCategoryTree } from "../../data/category-data";
 import { allProducts, featuredProducts } from "../../data/storefront-content";
-import { toStoredUploadUrl } from "../../utils/media";
+import { resolveAdminMediaUrl, toStoredUploadUrl } from "../../utils/media";
 
 const sectionCardStyle = {
   background: "#fff",
@@ -76,30 +76,71 @@ const actionButtonStyle = {
 };
 
 const uploadDropzoneStyle = {
-  minHeight: "160px",
-  borderRadius: "14px",
-  border: "2px dashed #cbd5e1",
+  minHeight: "104px",
+  borderRadius: "10px",
+  border: "1px dashed #b8c7d9",
   background: "#f8fafc",
   display: "grid",
   placeItems: "center",
-  gap: "8px",
+  gap: "4px",
   textAlign: "center",
-  padding: "20px",
+  padding: "14px",
   cursor: "pointer",
   color: "#334155"
 };
 
-const fileListStyle = {
+const mediaColumnStyle = {
   display: "grid",
-  gap: "10px"
+  alignContent: "start",
+  gap: "8px",
+  minWidth: 0,
+  color: "#334155",
+  fontWeight: 600
+};
+
+const mediaUrlRowStyle = {
+  display: "grid",
+  gridTemplateColumns: "minmax(0, 1fr) auto",
+  gap: "8px"
+};
+
+const mediaUrlInputStyle = {
+  ...inputStyle,
+  minHeight: "38px",
+  fontSize: "13px"
+};
+
+const mediaUrlButtonStyle = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: "6px",
+  minHeight: "38px",
+  padding: "0 14px",
+  border: "1px solid #166534",
+  borderRadius: "8px",
+  background: "#166534",
+  color: "#fff",
+  fontWeight: 800,
+  cursor: "pointer"
+};
+
+const fileListStyle = {
+  display: "flex",
+  gap: "10px",
+  maxWidth: "100%",
+  paddingBottom: "4px",
+  overflowX: "auto"
 };
 
 const fileChipStyle = {
   display: "grid",
-  gridTemplateColumns: "72px minmax(0, 1fr) auto",
-  alignItems: "center",
-  gap: "14px",
-  padding: "10px 12px",
+  gridTemplateRows: "92px minmax(34px, auto) auto",
+  alignContent: "start",
+  gap: "8px",
+  flex: "0 0 132px",
+  width: "132px",
+  padding: "8px",
   borderRadius: "10px",
   border: "1px solid #e2e8f0",
   background: "#ffffff",
@@ -107,9 +148,9 @@ const fileChipStyle = {
 };
 
 const filePreviewFrameStyle = {
-  width: "72px",
-  height: "72px",
-  borderRadius: "12px",
+  width: "100%",
+  height: "92px",
+  borderRadius: "9px",
   overflow: "hidden",
   border: "1px solid #e2e8f0",
   background: "#f8fafc",
@@ -120,7 +161,7 @@ const filePreviewFrameStyle = {
 const imagePreviewStyle = {
   width: "100%",
   height: "100%",
-  objectFit: "cover",
+  objectFit: "contain",
   display: "block"
 };
 
@@ -136,11 +177,18 @@ const fileNameStyle = {
   minWidth: 0,
   fontWeight: 600,
   color: "#0f172a",
-  wordBreak: "break-word"
+  fontSize: "12px",
+  lineHeight: 1.3,
+  wordBreak: "break-word",
+  display: "-webkit-box",
+  overflow: "hidden",
+  WebkitBoxOrient: "vertical",
+  WebkitLineClamp: 2
 };
 
 const fileRemoveButtonStyle = {
   minHeight: "30px",
+  width: "100%",
   padding: "0 10px",
   borderRadius: "999px",
   border: "1px solid #fecaca",
@@ -156,6 +204,10 @@ function createPseudoUpload(name, url = "") {
     url,
     type: ""
   };
+}
+
+function isSupportedMediaUrl(value) {
+  return /^(https?:\/\/|\/(?:uploads|images)\/)/i.test(String(value || "").trim());
 }
 
 function normalizeSelectedFiles(files) {
@@ -353,6 +405,8 @@ export default function AddProduct({ initialProductData = null, mode = "add" }) 
   const videoInputRef = React.useRef(null);
   const mediaRef = React.useRef({ images: [], videos: [] });
   const [productData, setProductData] = React.useState(() => initialProductData || createInitialProductData());
+  const [mediaUrlDrafts, setMediaUrlDrafts] = React.useState({ images: "", videos: "" });
+  const [mediaUrlErrors, setMediaUrlErrors] = React.useState({ images: "", videos: "" });
   const [isSavingProduct, setIsSavingProduct] = React.useState(false);
   const [saveMessage, setSaveMessage] = React.useState("");
   const [saveTone, setSaveTone] = React.useState("success");
@@ -405,6 +459,29 @@ export default function AddProduct({ initialProductData = null, mode = "add" }) 
       };
     });
   }, []);
+  const appendMediaUrl = React.useCallback((key) => {
+    const rawUrl = String(mediaUrlDrafts[key] || "").trim();
+    if (!isSupportedMediaUrl(rawUrl)) {
+      setMediaUrlErrors((current) => ({ ...current, [key]: "Enter a valid http(s), /uploads, or /images URL." }));
+      return;
+    }
+
+    const storedUrl = toStoredUploadUrl(rawUrl);
+    setProductData((current) => {
+      const existingFiles = Array.isArray(current.media[key]) ? current.media[key] : [];
+      if (existingFiles.some((item) => toStoredUploadUrl(item.url) === storedUrl)) return current;
+      const label = key === "images" ? `Image URL ${existingFiles.length + 1}` : `Video URL ${existingFiles.length + 1}`;
+      return {
+        ...current,
+        media: {
+          ...current.media,
+          [key]: [...existingFiles, createPseudoUpload(label, storedUrl)]
+        }
+      };
+    });
+    setMediaUrlDrafts((current) => ({ ...current, [key]: "" }));
+    setMediaUrlErrors((current) => ({ ...current, [key]: "" }));
+  }, [mediaUrlDrafts]);
   const removeMediaFile = React.useCallback((key, indexToRemove) => {
     setProductData((current) => {
       const removedFile = (current.media[key] || [])[indexToRemove];
@@ -758,7 +835,13 @@ export default function AddProduct({ initialProductData = null, mode = "add" }) 
       if (mode === "edit" && initialProductData?.id) {
         await updateProduct(initialProductData.id, payload);
       } else {
-        await createProduct(payload);
+        const response = await createProduct(payload);
+        if (response.data?.action === "restored") {
+          setSaveTone("success");
+          setSaveMessage("A previously deleted product with the same ASIN, SKU, or slug was restored and updated.");
+          window.setTimeout(() => navigate("/dashboard/products"), 900);
+          return;
+        }
       }
 
       setSaveTone("success");
@@ -1138,11 +1221,34 @@ export default function AddProduct({ initialProductData = null, mode = "add" }) 
 
       <SectionCard
         title="Media"
-        description="Upload product images and videos with drag and drop or click to upload."
+        description="Add product images and videos by file upload or direct URL."
       >
         <div style={fieldGridStyle}>
-          <div style={fieldStyle}>
+          <div style={mediaColumnStyle}>
             <span>Images</span>
+            <div style={mediaUrlRowStyle}>
+              <input
+                type="url"
+                value={mediaUrlDrafts.images}
+                onChange={(event) => {
+                  setMediaUrlDrafts((current) => ({ ...current, images: event.target.value }));
+                  setMediaUrlErrors((current) => ({ ...current, images: "" }));
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    appendMediaUrl("images");
+                  }
+                }}
+                placeholder="Paste product image URL"
+                aria-label="Product image URL"
+                style={mediaUrlInputStyle}
+              />
+              <button type="button" onClick={() => appendMediaUrl("images")} style={mediaUrlButtonStyle}>
+                <FaPlus aria-hidden="true" /> Add
+              </button>
+            </div>
+            {mediaUrlErrors.images ? <small style={{ ...helperTextStyle, color: "#b91c1c" }}>{mediaUrlErrors.images}</small> : null}
             <input
               ref={imageInputRef}
               type="file"
@@ -1168,8 +1274,8 @@ export default function AddProduct({ initialProductData = null, mode = "add" }) 
               onDrop={(event) => handleDropzoneDrop(event, "images", { multiple: true })}
               style={uploadDropzoneStyle}
             >
-              <strong>Drag images here</strong>
-              <span style={helperTextStyle}>or click to upload image files</span>
+              <strong>Drop images or browse</strong>
+              <span style={helperTextStyle}>JPG, PNG, WebP, GIF, or SVG</span>
             </div>
             <small style={helperTextStyle}>
               {media.images.length ? `${media.images.length} image file(s) selected` : "No images selected yet"}
@@ -1180,7 +1286,7 @@ export default function AddProduct({ initialProductData = null, mode = "add" }) 
                   <div key={`${file.name}-${index}`} style={fileChipStyle}>
                     <div style={filePreviewFrameStyle}>
                       {file.url ? (
-                        <img src={file.url} alt={file.name} style={imagePreviewStyle} />
+                        <img src={resolveAdminMediaUrl(file.url)} alt={file.name} style={imagePreviewStyle} />
                       ) : (
                         <span style={helperTextStyle}>Image</span>
                       )}
@@ -1193,8 +1299,31 @@ export default function AddProduct({ initialProductData = null, mode = "add" }) 
             ) : null}
           </div>
 
-          <div style={fieldStyle}>
+          <div style={mediaColumnStyle}>
             <span>Videos</span>
+            <div style={mediaUrlRowStyle}>
+              <input
+                type="url"
+                value={mediaUrlDrafts.videos}
+                onChange={(event) => {
+                  setMediaUrlDrafts((current) => ({ ...current, videos: event.target.value }));
+                  setMediaUrlErrors((current) => ({ ...current, videos: "" }));
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    appendMediaUrl("videos");
+                  }
+                }}
+                placeholder="Paste product video URL"
+                aria-label="Product video URL"
+                style={mediaUrlInputStyle}
+              />
+              <button type="button" onClick={() => appendMediaUrl("videos")} style={mediaUrlButtonStyle}>
+                <FaPlus aria-hidden="true" /> Add
+              </button>
+            </div>
+            {mediaUrlErrors.videos ? <small style={{ ...helperTextStyle, color: "#b91c1c" }}>{mediaUrlErrors.videos}</small> : null}
             <input
               ref={videoInputRef}
               type="file"
@@ -1220,8 +1349,8 @@ export default function AddProduct({ initialProductData = null, mode = "add" }) 
               onDrop={(event) => handleDropzoneDrop(event, "videos", { multiple: true })}
               style={uploadDropzoneStyle}
             >
-              <strong>Drag videos here</strong>
-              <span style={helperTextStyle}>or click to upload video files</span>
+              <strong>Drop videos or browse</strong>
+              <span style={helperTextStyle}>MP4, WebM, MOV, or compatible video</span>
             </div>
             <small style={helperTextStyle}>
               {media.videos.length ? `${media.videos.length} video file(s) selected` : "No videos selected yet"}
@@ -1232,7 +1361,7 @@ export default function AddProduct({ initialProductData = null, mode = "add" }) 
                   <div key={`${file.name}-${index}`} style={fileChipStyle}>
                     <div style={filePreviewFrameStyle}>
                       {file.url ? (
-                        <video src={file.url} style={videoPreviewStyle} muted playsInline preload="metadata" />
+                        <video src={resolveAdminMediaUrl(file.url)} style={videoPreviewStyle} muted playsInline preload="metadata" />
                       ) : (
                         <span style={helperTextStyle}>Video</span>
                       )}

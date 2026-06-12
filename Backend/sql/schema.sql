@@ -1349,6 +1349,8 @@ CREATE TABLE IF NOT EXISTS uploaded_assets (
   uploaded_by INT UNSIGNED NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_uploaded_assets_url (url),
+  KEY idx_uploaded_assets_type_deleted (asset_type, is_deleted),
   CONSTRAINT fk_uploaded_assets_admin FOREIGN KEY (uploaded_by) REFERENCES admins(id) ON DELETE SET NULL
 );
 
@@ -1808,4 +1810,30 @@ CREATE TABLE IF NOT EXISTS delivery_pincodes (
   INDEX idx_delivery_pincodes_status_cod (status, cod_available),
   CONSTRAINT fk_delivery_pincodes_created_by FOREIGN KEY (created_by) REFERENCES admins(id) ON DELETE SET NULL,
   CONSTRAINT fk_delivery_pincodes_updated_by FOREIGN KEY (updated_by) REFERENCES admins(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS activity_logs (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  admin_id INT UNSIGNED NULL,
+  admin_name VARCHAR(180) NULL,
+  admin_email VARCHAR(180) NULL,
+  role_name VARCHAR(80) NULL,
+  action VARCHAR(120) NOT NULL,
+  module VARCHAR(120) NOT NULL,
+  entity_type VARCHAR(120) NULL,
+  entity_id VARCHAR(120) NULL,
+  entity_name VARCHAR(255) NULL,
+  old_values JSON NULL,
+  new_values JSON NULL,
+  changes JSON NULL,
+  description TEXT NULL,
+  ip_address VARCHAR(80) NULL,
+  user_agent TEXT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_activity_logs_admin_id (admin_id),
+  INDEX idx_activity_logs_action (action),
+  INDEX idx_activity_logs_module (module),
+  INDEX idx_activity_logs_entity_type (entity_type),
+  INDEX idx_activity_logs_entity_id (entity_id),
+  INDEX idx_activity_logs_created_at (created_at)
 );

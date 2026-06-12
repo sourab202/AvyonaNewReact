@@ -1,6 +1,7 @@
 import { query } from "../config/db.js";
 import { ApiError } from "../utils/apiError.js";
 import { DEFAULT_APP_SETTINGS, getPublicSettings, mergeSettings } from "../shared/appSettings.js";
+import { safelyLogActivity } from "../services/activityLogger.js";
 
 const settingsTableName = "app_settings";
 const legacySettingsTableName = "app_settings_legacy_json";
@@ -835,7 +836,22 @@ async function seedDefaultProductPaymentIconRows() {
 async function ensureProductPaymentIconTables() {
   if (productPaymentIconTablesReady) return;
   await createProductPaymentIconTables();
-  await seedDefaultProductPaymentIconRows();
+  await query(
+    `INSERT IGNORE INTO ${productPaymentIconSettingsTableName}
+      (id, section_enabled, section_title, section_subtitle, icons_per_row, mobile_icons_per_row, sort_order, background_color, text_color, custom_css)
+     VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      DEFAULT_APP_SETTINGS.homepage.productPaymentIconsSettings.enabled ? 1 : 0,
+      DEFAULT_APP_SETTINGS.homepage.productPaymentIconsSettings.title,
+      DEFAULT_APP_SETTINGS.homepage.productPaymentIconsSettings.subtitle,
+      DEFAULT_APP_SETTINGS.homepage.productPaymentIconsSettings.cardsPerRow,
+      DEFAULT_APP_SETTINGS.homepage.productPaymentIconsSettings.mobileCardsPerRow,
+      DEFAULT_APP_SETTINGS.homepage.productPaymentIconsSettings.sortOrder,
+      DEFAULT_APP_SETTINGS.homepage.productPaymentIconsSettings.backgroundColor,
+      DEFAULT_APP_SETTINGS.homepage.productPaymentIconsSettings.textColor,
+      DEFAULT_APP_SETTINGS.homepage.productPaymentIconsSettings.customCss || null
+    ]
+  );
   productPaymentIconTablesReady = true;
 }
 
@@ -1210,10 +1226,6 @@ async function readProductPaymentIcons({ includeDeleted = false } = {}) {
      ORDER BY sort_order ASC, created_at ASC`
   );
 
-  if (!rows.length && !includeDeleted) {
-    return DEFAULT_APP_SETTINGS.homepage.productPaymentIcons.map(normalizeProductPaymentIconPayload);
-  }
-
   return rows.map(mapProductPaymentIconRow);
 }
 
@@ -1256,6 +1268,7 @@ async function writeProductPaymentIconSettings(settings = DEFAULT_APP_SETTINGS.h
 async function replaceProductPaymentIcons(items = DEFAULT_APP_SETTINGS.homepage.productPaymentIcons) {
   await ensureProductPaymentIconTables();
   const sourceItems = Array.isArray(items) ? items : DEFAULT_APP_SETTINGS.homepage.productPaymentIcons;
+  if (sourceItems.length > 10) throw new ApiError(400, "A maximum of 10 product payment icons is allowed");
   const normalizedItems = sourceItems
     .map(normalizeProductPaymentIconPayload)
     .sort((left, right) => Number(left.sortOrder || 0) - Number(right.sortOrder || 0))
@@ -1358,6 +1371,7 @@ export async function updateAdminProductPaymentIconSettings(request, response) {
 
 export async function createAdminProductPaymentIconItem(request, response) {
   const currentItems = await readProductPaymentIcons();
+  if (currentItems.length >= 10) throw new ApiError(400, "A maximum of 10 product payment icons is allowed");
   const sortOrder = Number(request.body?.sortOrder || 0) || Math.max(0, ...currentItems.map((item) => Number(item.sortOrder || 0))) + 1;
   const item = normalizeProductPaymentIconPayload({
     ...request.body,
@@ -1986,9 +2000,20 @@ export async function updateAdminSettings(request, response) {
     throw new ApiError(400, "A valid settings object is required");
   }
 
+  const previous = mergeSettings(DEFAULT_APP_SETTINGS, await readStoredSettings() || {});
   const settings = mergeSettings(DEFAULT_APP_SETTINGS, incomingSettings);
 
   await writeStoredSettings(settings);
+  const action = JSON.stringify(previous.footer) !== JSON.stringify(settings.footer)
+    ? "footer_updated"
+    : JSON.stringify(previous.header) !== JSON.stringify(settings.header)
+      ? "header_updated"
+      : "homepage_section_updated";
+  await safelyLogActivity({
+    request, action, module: "settings", entityType: "app_settings",
+    entityId: "main", entityName: "Application Settings",
+    oldValues: previous, newValues: settings, description: "Application settings updated"
+  });
 
   response.json({
     success: true,
@@ -2060,6 +2085,13 @@ export async function updateAdminGeneralSettings(request, response) {
   const settings = mergeSettings(currentSettings, { general });
 
   await writeStoredSettings(settings);
+  await safelyLogActivity({
+    request, action: "header_updated", module: "settings",
+    entityType: "general_settings", entityId: "general",
+    entityName: "General Settings",
+    oldValues: currentSettings.general, newValues: general,
+    description: "General and header settings updated"
+  });
 
   response.json({
     success: true,
@@ -2137,6 +2169,13 @@ export async function updateAdminHomepageSectionSettings(request, response) {
   });
 
   await writeStoredSettings(settings);
+  await safelyLogActivity({
+    request, action: "homepage_section_updated", module: "settings",
+    entityType: "homepage_section", entityId: request.params.sectionKey,
+    entityName: request.params.sectionKey,
+    oldValues: currentSettings.homepage?.[settingsKey], newValues: sectionSettings,
+    description: `Homepage section ${request.params.sectionKey} updated`
+  });
 
   response.json({
     success: true,

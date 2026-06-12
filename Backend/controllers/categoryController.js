@@ -2,6 +2,7 @@ import fs from "fs/promises";
 import path from "path";
 import { query } from "../config/db.js";
 import { ApiError } from "../utils/apiError.js";
+import { safelyLogActivity } from "../services/activityLogger.js";
 
 const localCategoriesPath = path.resolve(process.cwd(), "data", "local-categories.json");
 const SYSTEM_FALLBACK_CATEGORY_SLUGS = new Set([
@@ -479,6 +480,11 @@ export async function createCategory(request, response) {
     );
 
     const category = await getCategoryRowById(result.insertId);
+    await safelyLogActivity({
+      request, action: "category_created", module: "categories", entityType: "category",
+      entityId: result.insertId, entityName: category?.name, newValues: category,
+      description: "Category created"
+    });
 
     response.status(201).json({
       success: true,
@@ -575,6 +581,11 @@ export async function getCategoryById(request, response) {
   try {
     categoryId = parseCategoryId(request.params.id);
     const category = await getCategoryRowById(categoryId);
+    await safelyLogActivity({
+      request, action: "category_updated", module: "categories", entityType: "category",
+      entityId: categoryId, entityName: category?.name, oldValues: existingCategory,
+      newValues: category, description: "Category updated"
+    });
 
     if (!category) {
       throw new ApiError(404, "Category not found");
@@ -695,6 +706,7 @@ export async function updateCategory(request, response) {
 
 export async function updateCategoryCod(request, response) {
   const categoryId = parseCategoryId(request.params.id);
+  const existing = await getCategoryRowById(categoryId);
   const codEnabled = parseBoolean(request.body?.codEnabled, true);
   const result = await query(
     "UPDATE categories SET cod_enabled = ? WHERE id = ? LIMIT 1",
@@ -705,10 +717,16 @@ export async function updateCategoryCod(request, response) {
     throw new ApiError(404, "Category not found");
   }
 
+  const updated = await getCategoryRowById(categoryId);
+  await safelyLogActivity({
+    request, action: "category_cod_changed", module: "categories", entityType: "category",
+    entityId: categoryId, entityName: updated?.name, oldValues: { codEnabled: existing?.codEnabled },
+    newValues: { codEnabled: updated?.codEnabled }, description: "Category COD availability changed"
+  });
   response.json({
     success: true,
     message: "Category COD setting updated successfully",
-    data: await getCategoryRowById(categoryId)
+    data: updated
   });
 }
 
@@ -741,6 +759,11 @@ export async function deleteCategory(request, response) {
     }
 
     await query("DELETE FROM categories WHERE id = ? LIMIT 1", [categoryId]);
+    await safelyLogActivity({
+      request, action: "category_deleted", module: "categories", entityType: "category",
+      entityId: categoryId, entityName: existingCategory.name, oldValues: existingCategory,
+      description: "Category deleted"
+    });
 
     response.json({
       success: true,

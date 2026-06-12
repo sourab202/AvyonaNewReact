@@ -1048,6 +1048,27 @@ export default function ProductPage({ context }) {
     setImageZoomActive(false);
   };
 
+  const getActiveMediaUrl = () => {
+    if (!activeMedia?.src || typeof window === "undefined") return "";
+    try {
+      return new URL(activeMedia.src, window.location.origin).href;
+    } catch {
+      return String(activeMedia.src || "");
+    }
+  };
+
+  const copyActiveImageUrl = () => {
+    const imageUrl = getActiveMediaUrl();
+    if (!imageUrl) return;
+    copyText(imageUrl, () => context.notify("Image URL copied"));
+  };
+
+  const openActiveImageInNewTab = () => {
+    const imageUrl = getActiveMediaUrl();
+    if (!imageUrl) return;
+    window.open(imageUrl, "_blank", "noopener,noreferrer");
+  };
+
   const handleStageTouchStart = (event) => {
     if (activeMedia.type !== "image") return;
 
@@ -1352,9 +1373,9 @@ export default function ProductPage({ context }) {
             <div
               className={`avy-gallery-stage ${product.collectionSlug === "digital-photo-frames" ? "is-frame-product" : ""} ${activeMedia.type === "image" ? "is-image-stage" : ""} ${imageZoomActive ? "is-zoom-active" : ""} ${mobileZoomActive ? "is-mobile-zoom-active" : ""}`}
               ref={stageRef}
-              onContextMenu={(event) => {
-                if (activeMedia.type === "image") {
-                  event.preventDefault();
+              onClick={() => {
+                if (activeMedia.type === "image" && !mobileZoomActive) {
+                  setLightboxOpen(true);
                 }
               }}
               onMouseEnter={() => {
@@ -1389,7 +1410,6 @@ export default function ProductPage({ context }) {
                   src={activeMedia.src}
                   alt={activeMedia.alt}
                   draggable="false"
-                  onContextMenu={(event) => event.preventDefault()}
                   onDragStart={(event) => event.preventDefault()}
                   onLoad={() => updateZoomMetrics()}
                 />
@@ -1408,8 +1428,8 @@ export default function ProductPage({ context }) {
                     "Release to close zoom"
                   ) : (
                     <>
-                      <span className="avy-gallery-zoom-hint-desktop">Hover to zoom</span>
-                      <span className="avy-gallery-zoom-hint-mobile">Press and hold to zoom</span>
+                      <span className="avy-gallery-zoom-hint-desktop">Hover to zoom · Click to enlarge</span>
+                      <span className="avy-gallery-zoom-hint-mobile">Tap to enlarge · Hold to zoom</span>
                     </>
                   )}
                 </span>
@@ -2175,37 +2195,78 @@ export default function ProductPage({ context }) {
       ) : null}
 
       {lightboxOpen ? (
-        <div className="avy-lightbox" onClick={() => setLightboxOpen(false)}>
-          <button type="button" className="avy-lightbox-close" onClick={() => setLightboxOpen(false)}>Close</button>
-          <button
-            type="button"
-            className="avy-lightbox-nav previous"
-            onClick={(event) => {
-              event.stopPropagation();
-              setGalleryIndex((current) => current - 1);
-            }}
-          >
-            Prev
-          </button>
-          <div className="avy-lightbox-stage" onClick={(event) => event.stopPropagation()}>
-            {activeMedia.type === "placeholder" ? (
-              <ProductMediaFallback />
-            ) : activeMedia.type === "video" ? (
-              <video controls autoPlay poster={resolveMediaUrl(product.videoPoster || product.image)} src={activeMedia.src} />
-            ) : (
-              <img src={activeMedia.src} alt={activeMedia.alt} />
-            )}
+        <div className="avy-lightbox avy-product-lightbox" role="presentation" onMouseDown={() => setLightboxOpen(false)}>
+          <div className="avy-lightbox-dialog" role="dialog" aria-modal="true" aria-label={`${product.name} image viewer`} onMouseDown={(event) => event.stopPropagation()}>
+            <header className="avy-lightbox-header">
+              <div>
+                <span>Product media</span>
+                <strong>{product.name}</strong>
+              </div>
+              <div className="avy-lightbox-actions">
+                {activeMedia.type === "image" ? (
+                  <>
+                    <button type="button" onClick={copyActiveImageUrl}>Copy Image URL</button>
+                    <button type="button" onClick={openActiveImageInNewTab}>Open in New Tab</button>
+                  </>
+                ) : null}
+                <button type="button" className="avy-lightbox-close" onClick={() => setLightboxOpen(false)}>Close</button>
+              </div>
+            </header>
+
+            <div className="avy-lightbox-main">
+              {galleryItems.length > 1 ? (
+                <button
+                  type="button"
+                  className="avy-lightbox-nav previous"
+                  aria-label="Previous product image"
+                  onClick={() => setGalleryIndex((current) => current - 1)}
+                >
+                  Prev
+                </button>
+              ) : null}
+              <div className="avy-lightbox-stage">
+                {activeMedia.type === "placeholder" ? (
+                  <ProductMediaFallback />
+                ) : activeMedia.type === "video" ? (
+                  <video controls autoPlay poster={resolveMediaUrl(product.videoPoster || product.image)} src={activeMedia.src} />
+                ) : (
+                  <img src={activeMedia.src} alt={activeMedia.alt} />
+                )}
+              </div>
+              {galleryItems.length > 1 ? (
+                <button
+                  type="button"
+                  className="avy-lightbox-nav next"
+                  aria-label="Next product image"
+                  onClick={() => setGalleryIndex((current) => current + 1)}
+                >
+                  Next
+                </button>
+              ) : null}
+            </div>
+
+            <footer className="avy-lightbox-footer">
+              <span>{safeGalleryIndex + 1} of {galleryItems.length}</span>
+              <div className="avy-lightbox-thumbnails" aria-label="Product media thumbnails">
+                {galleryItems.map((item, index) => (
+                  <button
+                    key={`lightbox-${item.src}:${index}`}
+                    type="button"
+                    className={`avy-lightbox-thumb ${safeGalleryIndex === index ? "is-active" : ""}`}
+                    onClick={() => setGalleryIndex(index)}
+                    aria-label={`View ${item.alt}`}
+                  >
+                    {item.type === "placeholder" ? (
+                      <ProductMediaFallback compact />
+                    ) : (
+                      <img src={resolveMediaUrl(item.thumb || item.src)} alt="" />
+                    )}
+                    {item.type === "video" ? <span>Video</span> : null}
+                  </button>
+                ))}
+              </div>
+            </footer>
           </div>
-          <button
-            type="button"
-            className="avy-lightbox-nav next"
-            onClick={(event) => {
-              event.stopPropagation();
-              setGalleryIndex((current) => current + 1);
-            }}
-          >
-            Next
-          </button>
         </div>
       ) : null}
     </main>

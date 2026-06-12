@@ -1,6 +1,8 @@
 import { Router } from "express";
 import { pingDatabase } from "../../config/db.js";
 import adminAuthRoutes from "./adminAuthRoutes.js";
+import adminAccessRoutes from "./adminAccessRoutes.js";
+import activityLogRoutes from "./activityLogRoutes.js";
 import adminFooterItemsRoutes from "./adminFooterItemsRoutes.js";
 import adminFooterRoutes from "./adminFooterRoutes.js";
 import adminFooterSettingsRoutes from "./adminFooterSettingsRoutes.js";
@@ -66,6 +68,8 @@ router.get("/health", async (_request, response) => {
 });
 
 router.use("/admin/auth", adminAuthRoutes);
+router.use("/admin/access", adminAccessRoutes);
+router.use("/admin/activity-logs", activityLogRoutes);
 router.use("/admin/footer", adminFooterRoutes);
 router.use("/admin/footer-settings", adminFooterSettingsRoutes);
 router.use("/admin/footer-items", adminFooterItemsRoutes);

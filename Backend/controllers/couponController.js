@@ -1,5 +1,6 @@
 import { query } from "../config/db.js";
 import { ApiError } from "../utils/apiError.js";
+import { safelyLogActivity } from "../services/activityLogger.js";
 
 let schemaReady = false;
 
@@ -604,6 +605,11 @@ export async function createCoupon(request, response) {
   await replaceCouponCategories(result.insertId, payload.eligibleCategories);
 
   const [created] = await getCouponsWithCategories("WHERE id = ?", [result.insertId]);
+  await safelyLogActivity({
+    request, action: "coupon_created", module: "coupons", entityType: "coupon",
+    entityId: result.insertId, entityName: created?.code, newValues: created,
+    description: "Coupon created"
+  });
   response.status(201).json({ success: true, message: "Coupon created successfully", data: created });
 }
 
@@ -612,7 +618,8 @@ export async function updateCoupon(request, response) {
   const couponId = Number(request.params.id);
   if (!Number.isInteger(couponId) || couponId <= 0) throw new ApiError(400, "Invalid coupon id");
 
-  const existing = await query("SELECT id FROM coupons WHERE id = ? LIMIT 1", [couponId]);
+  const [existingCoupon] = await getCouponsWithCategories("WHERE id = ?", [couponId]);
+  const existing = existingCoupon ? [existingCoupon] : [];
   if (!existing.length) throw new ApiError(404, "Coupon not found");
 
   const payload = validateCouponPayload(request.body || {}, couponId);
@@ -682,6 +689,11 @@ export async function updateCoupon(request, response) {
   await replaceCouponCategories(couponId, payload.eligibleCategories);
 
   const [updated] = await getCouponsWithCategories("WHERE id = ?", [couponId]);
+  await safelyLogActivity({
+    request, action: "coupon_updated", module: "coupons", entityType: "coupon",
+    entityId: couponId, entityName: updated?.code, oldValues: existingCoupon,
+    newValues: updated, description: "Coupon updated"
+  });
   response.json({ success: true, message: "Coupon updated successfully", data: updated });
 }
 
@@ -690,10 +702,16 @@ export async function updateCouponStatus(request, response) {
   const couponId = Number(request.params.id);
   const status = normalizeStatus(request.body?.status);
 
+  const [existing] = await getCouponsWithCategories("WHERE id = ?", [couponId]);
   const result = await query("UPDATE coupons SET status = ? WHERE id = ?", [status, couponId]);
   if (!result.affectedRows) throw new ApiError(404, "Coupon not found");
 
   const [updated] = await getCouponsWithCategories("WHERE id = ?", [couponId]);
+  await safelyLogActivity({
+    request, action: "coupon_status_changed", module: "coupons", entityType: "coupon",
+    entityId: couponId, entityName: updated?.code, oldValues: { status: existing?.status },
+    newValues: { status: updated?.status }, description: "Coupon status changed"
+  });
   response.json({ success: true, message: "Coupon status updated", data: updated });
 }
 
@@ -727,7 +745,13 @@ export async function uploadCouponBackgroundImage(request, response) {
 export async function deleteCoupon(request, response) {
   await ensureCouponSchema();
   const couponId = Number(request.params.id);
+  const [existing] = await getCouponsWithCategories("WHERE id = ?", [couponId]);
   const result = await query("DELETE FROM coupons WHERE id = ?", [couponId]);
   if (!result.affectedRows) throw new ApiError(404, "Coupon not found");
+  await safelyLogActivity({
+    request, action: "coupon_deleted", module: "coupons", entityType: "coupon",
+    entityId: couponId, entityName: existing?.code, oldValues: existing,
+    description: "Coupon deleted"
+  });
   response.json({ success: true, message: "Coupon deleted successfully" });
 }

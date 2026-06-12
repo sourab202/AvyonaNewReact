@@ -3,6 +3,7 @@ import { pool } from "../config/db.js";
 import { ensureRazorpayPaymentStorage } from "./razorpayPaymentController.js";
 import { getActiveRazorpayCredentials } from "../services/paymentSettings.js";
 import { ApiError } from "../utils/apiError.js";
+import { safelyLogActivity } from "../services/activityLogger.js";
 
 const supportedEvents = new Set([
   "payment.captured",
@@ -336,6 +337,23 @@ export async function handleRazorpayWebhook(request, response) {
       [eventId]
     );
     await connection.commit();
+    const nextPaymentStatus = eventType === "payment.failed"
+      ? "failed"
+      : eventType === "refund.processed"
+        ? (Number(references.refund?.amount || 0) < Math.round(Number(order.totalAmount || 0) * 100) ? "partially_refunded" : "refunded")
+        : "paid";
+    await safelyLogActivity({
+      request,
+      action: "payment_status_updated",
+      module: "orders",
+      entityType: "order",
+      entityId: order.id,
+      entityName: order.orderNumber,
+      oldValues: { paymentStatus: order.paymentStatus },
+      newValues: { paymentStatus: nextPaymentStatus },
+      roleName: "system",
+      description: `Razorpay ${eventType} updated the order payment status`
+    });
 
     response.json({
       success: true,

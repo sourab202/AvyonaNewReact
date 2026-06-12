@@ -13,6 +13,7 @@ import {
 import fs from "fs";
 import path from "path";
 import PDFDocument from "pdfkit";
+import { safelyLogActivity } from "../services/activityLogger.js";
 
 // ── Invoice helpers ──────────────────────────────────────────────
 
@@ -1831,6 +1832,25 @@ export async function updateOrderStatus(request, response) {
   } finally {
     connection.release();
   }
+
+  const action = normalizedStatus === "cancelled" ? "order_cancelled"
+    : currentOrder.status !== normalizedStatus ? "order_status_changed"
+      : "tracking_updated";
+  await safelyLogActivity({
+    request, action, module: "orders", entityType: "order", entityId: orderId,
+    entityName: currentOrder.orderNumber,
+    oldValues: {
+      status: currentOrder.status,
+      courierName: currentOrder.courierName,
+      expectedDeliveryDate: currentOrder.expectedDeliveryDate
+    },
+    newValues: {
+      status: updatedOrder.status,
+      courierName: updatedOrder.courierName,
+      expectedDeliveryDate: updatedOrder.expectedDeliveryDate
+    },
+    description: action === "tracking_updated" ? "Order tracking updated" : "Order status changed"
+  });
 
   response.json({
     success: true,

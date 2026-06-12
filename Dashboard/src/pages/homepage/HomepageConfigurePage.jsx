@@ -2607,6 +2607,7 @@ function ProductPaymentIconsConfigure({ section, refreshToken = 0 }) {
   const [isLoading, setIsLoading] = React.useState(true);
   const [isSaving, setIsSaving] = React.useState(false);
   const [uploadingItemId, setUploadingItemId] = React.useState("");
+  const [editingItemId, setEditingItemId] = React.useState("");
   const [persistedItemIds, setPersistedItemIds] = React.useState(() => new Set(DEFAULT_APP_SETTINGS.homepage.productPaymentIcons.map((item) => item.id)));
   const [message, setMessage] = React.useState("");
   const [messageTone, setMessageTone] = React.useState("success");
@@ -2671,13 +2672,23 @@ function ProductPaymentIconsConfigure({ section, refreshToken = 0 }) {
   };
 
   const addItem = () => {
+    if (items.length >= 10) {
+      setMessage("You can add up to 10 payment icons.");
+      setMessageTone("warning");
+      return;
+    }
     const nextSort = Math.max(0, ...items.map((item) => Number(item.sortOrder || 0))) + 1;
-    setItems((current) => [...current, createEmptyProductPaymentIcon(nextSort)]);
+    const item = createEmptyProductPaymentIcon(nextSort);
+    setItems((current) => [...current, item]);
+    setEditingItemId(item.id);
     setMessage("");
   };
 
   const removeItem = (itemId) => {
-    setItems((current) => current.filter((item) => item.id !== itemId));
+    setItems((current) => current
+      .filter((item) => item.id !== itemId)
+      .map((item, index) => ({ ...item, sortOrder: index + 1 })));
+    if (editingItemId === itemId) setEditingItemId("");
     setMessage("Payment icon removed from this draft. Save changes to publish it.");
     setMessageTone("success");
   };
@@ -2762,7 +2773,7 @@ function ProductPaymentIconsConfigure({ section, refreshToken = 0 }) {
       }) } };
       const savedSettings = mergeSettings(DEFAULT_APP_SETTINGS, settingsResponse.data?.data || nextSettings);
       setSettings(savedSettings);
-      setSectionSettings(normalizeHomepageSectionSettings(data.settings || sectionResponse.data?.data || cleanSectionSettings, DEFAULT_APP_SETTINGS.homepage[settingsKey]));
+      setSectionSettings(normalizeHomepageSectionSettings(data.settings || cleanSectionSettings, DEFAULT_APP_SETTINGS.homepage[settingsKey]));
       const refreshedItems = Array.isArray(data.items) ? data.items.map(normalizeProductPaymentIcon) : normalizeProductPaymentIcons(savedSettings);
       setItems(refreshedItems);
       setPersistedItemIds(new Set(refreshedItems.map((item) => item.id)));
@@ -2777,6 +2788,8 @@ function ProductPaymentIconsConfigure({ section, refreshToken = 0 }) {
   };
 
   const activeItems = items.filter((item) => item.status === "active").sort((left, right) => Number(left.sortOrder || 0) - Number(right.sortOrder || 0));
+  const orderedItems = [...items].sort((left, right) => Number(left.sortOrder || 0) - Number(right.sortOrder || 0));
+  const editingItem = items.find((item) => item.id === editingItemId) || null;
   const customCssError = getScopedCssValidationError(sectionSettings.customCss, ".avyona-product-payment-icons");
   const previewCustomCss = customCssError ? "" : String(sectionSettings.customCss || "");
   const renderPaymentPreviewItems = () => activeItems.length ? activeItems.map((item) => (
@@ -2856,70 +2869,39 @@ function ProductPaymentIconsConfigure({ section, refreshToken = 0 }) {
             <h3 style={panelTitleStyle}>Manage icon items</h3>
             <p style={panelCopyStyle}>Add, edit, reorder, activate, or remove payment options shown on product detail pages.</p>
           </div>
-          <button type="button" onClick={addItem} style={secondaryButtonStyle}>Add Icon</button>
+          <button type="button" onClick={addItem} disabled={items.length >= 10} style={items.length >= 10 ? disabledActionButtonStyle : secondaryButtonStyle}>
+            Add Icon ({items.length}/10)
+          </button>
         </div>
 
-        <div style={whyShopMiddleLayoutStyle}>
+        <div className="payment-icons-workspace" style={whyShopMiddleLayoutStyle}>
           <div style={whyShopItemsColumnStyle}>
-            <div style={paymentIconGridStyle}>
-              {items.map((item, index) => (
-                <div key={item.id} style={whyShopEditorCardStyle}>
-                  <div style={whyShopItemActionBarStyle}>
-                    <span style={whyShopStatusPillStyle}>{item.status === "active" ? "Active" : "Inactive"}</span>
-                    <a href={`#payment-icon-editor-fields-${item.id}`} style={secondaryLinkButtonStyle}>Edit Icon</a>
-                    <a href="#product-payment-icons-preview" style={secondaryLinkButtonStyle}>Preview</a>
-                    <button type="button" onClick={() => toggleItemStatus(item.id)} style={secondaryButtonStyle}>{item.status === "active" ? "Set Inactive" : "Set Active"}</button>
-                    <button type="button" onClick={() => moveItem(item.id, -1)} disabled={index === 0} style={index === 0 ? disabledActionButtonStyle : secondaryButtonStyle}>Move Up</button>
-                    <button type="button" onClick={() => moveItem(item.id, 1)} disabled={index === items.length - 1} style={index === items.length - 1 ? disabledActionButtonStyle : secondaryButtonStyle}>Move Down</button>
-                    <button type="button" onClick={() => removeItem(item.id)} style={dangerButtonStyle}>Delete</button>
+            <div className="payment-icon-manager">
+              <div className="payment-icon-manager-head">
+                <span>Order</span><span>Payment option</span><span>Status</span><span>Actions</span>
+              </div>
+              {orderedItems.length ? orderedItems.map((item, index) => (
+                <article key={item.id} className="payment-icon-manager-row">
+                  <strong className="payment-icon-order">{index + 1}</strong>
+                  <div className="payment-icon-summary">
+                    <div className="payment-icon-summary-preview" style={{ background: item.iconBackgroundColor, borderColor: item.iconBorderColor, borderRadius: `${item.iconRadius}px` }}>
+                      {item.iconUrl
+                        ? <img src={resolveAdminMediaUrl(item.iconUrl)} alt={item.altText || item.paymentName} />
+                        : <span>{item.paymentName.slice(0, 2).toUpperCase()}</span>}
+                    </div>
+                    <div><strong>{item.paymentName}</strong><small>{item.iconUrl ? "Uploaded icon" : "Text fallback"}</small></div>
                   </div>
-
-                  <PaymentIconUploadDropzone
-                    item={item}
-                    isUploading={uploadingItemId === item.id}
-                    onUpload={(file) => uploadIcon(item.id, file)}
-                    onRemove={() => removeIcon(item.id)}
-                  />
-
-                  <div id={`payment-icon-editor-fields-${item.id}`} style={whyShopControlsStyle}>
-                    <label style={fieldStyle}>
-                      <span style={labelStyle}>Payment Name</span>
-                      <input value={item.paymentName} onChange={(event) => updateItem(item.id, { paymentName: event.target.value })} style={inputStyle} />
-                    </label>
-                    <label style={fieldStyle}>
-                      <span style={labelStyle}>Icon Alt Text</span>
-                      <input value={item.altText} onChange={(event) => updateItem(item.id, { altText: event.target.value })} style={inputStyle} />
-                    </label>
-                    <label style={fieldStyle}>
-                      <span style={labelStyle}>Icon Size</span>
-                      <input type="number" min="16" max="120" value={item.iconSize} onChange={(event) => updateItem(item.id, { iconSize: event.target.value })} style={inputStyle} />
-                    </label>
-                    <label style={fieldStyle}>
-                      <span style={labelStyle}>Icon Background Color</span>
-                      <input type="color" value={item.iconBackgroundColor} onChange={(event) => updateItem(item.id, { iconBackgroundColor: event.target.value })} style={colorInputStyle} />
-                    </label>
-                    <label style={fieldStyle}>
-                      <span style={labelStyle}>Icon Border Color</span>
-                      <input type="color" value={item.iconBorderColor} onChange={(event) => updateItem(item.id, { iconBorderColor: event.target.value })} style={colorInputStyle} />
-                    </label>
-                    <label style={fieldStyle}>
-                      <span style={labelStyle}>Icon Radius</span>
-                      <input type="number" min="0" max="48" value={item.iconRadius} onChange={(event) => updateItem(item.id, { iconRadius: event.target.value })} style={inputStyle} />
-                    </label>
-                    <label style={fieldStyle}>
-                      <span style={labelStyle}>Sort Order</span>
-                      <input type="number" value={item.sortOrder} onChange={(event) => updateItem(item.id, { sortOrder: event.target.value })} style={inputStyle} />
-                    </label>
-                    <label style={fieldStyle}>
-                      <span style={labelStyle}>Status</span>
-                      <select value={item.status} onChange={(event) => updateItem(item.id, { status: event.target.value })} style={inputStyle}>
-                        <option value="active">Active</option>
-                        <option value="inactive">Inactive</option>
-                      </select>
-                    </label>
+                  <button type="button" className={`payment-icon-status ${item.status}`} onClick={() => toggleItemStatus(item.id)}>
+                    {item.status === "active" ? "Active" : "Hidden"}
+                  </button>
+                  <div className="payment-icon-row-actions">
+                    <button type="button" aria-label={`Move ${item.paymentName} up`} onClick={() => moveItem(item.id, -1)} disabled={index === 0}>Up</button>
+                    <button type="button" aria-label={`Move ${item.paymentName} down`} onClick={() => moveItem(item.id, 1)} disabled={index === orderedItems.length - 1}>Down</button>
+                    <button type="button" className="edit" onClick={() => setEditingItemId(item.id)}>Edit</button>
+                    <button type="button" className="delete" onClick={() => removeItem(item.id)}>Delete</button>
                   </div>
-                </div>
-              ))}
+                </article>
+              )) : <div className="payment-icon-empty"><strong>No payment icons saved</strong><span>Add between 1 and 10 icons. Only active saved icons appear on product pages.</span></div>}
             </div>
           </div>
 
@@ -2959,6 +2941,37 @@ function ProductPaymentIconsConfigure({ section, refreshToken = 0 }) {
             </div>
           </aside>
         </div>
+
+        {editingItem ? (
+          <div className="payment-icon-modal-backdrop" role="presentation" onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setEditingItemId("");
+          }}>
+            <section className="payment-icon-modal" role="dialog" aria-modal="true" aria-labelledby="payment-icon-modal-title">
+              <div className="payment-icon-modal-head">
+                <div><span style={eyebrowStyle}>Payment Option</span><h3 id="payment-icon-modal-title">Edit icon</h3></div>
+                <button type="button" onClick={() => setEditingItemId("")}>Close</button>
+              </div>
+              <PaymentIconUploadDropzone
+                item={editingItem}
+                isUploading={uploadingItemId === editingItem.id}
+                onUpload={(file) => uploadIcon(editingItem.id, file)}
+                onRemove={() => removeIcon(editingItem.id)}
+              />
+              <div className="payment-icon-modal-fields">
+                <label><span>Payment Name</span><input value={editingItem.paymentName} onChange={(event) => updateItem(editingItem.id, { paymentName: event.target.value })} /></label>
+                <label><span>Icon Alt Text</span><input value={editingItem.altText} onChange={(event) => updateItem(editingItem.id, { altText: event.target.value })} /></label>
+                <label><span>Icon Size</span><input type="number" min="16" max="120" value={editingItem.iconSize} onChange={(event) => updateItem(editingItem.id, { iconSize: event.target.value })} /></label>
+                <label><span>Corner Radius</span><input type="number" min="0" max="48" value={editingItem.iconRadius} onChange={(event) => updateItem(editingItem.id, { iconRadius: event.target.value })} /></label>
+                <label><span>Background</span><input type="color" value={editingItem.iconBackgroundColor} onChange={(event) => updateItem(editingItem.id, { iconBackgroundColor: event.target.value })} /></label>
+                <label><span>Border</span><input type="color" value={editingItem.iconBorderColor} onChange={(event) => updateItem(editingItem.id, { iconBorderColor: event.target.value })} /></label>
+                <label><span>Status</span><select value={editingItem.status} onChange={(event) => updateItem(editingItem.id, { status: event.target.value })}><option value="active">Active</option><option value="inactive">Hidden</option></select></label>
+              </div>
+              <div className="payment-icon-modal-actions">
+                <button type="button" onClick={() => setEditingItemId("")}>Done</button>
+              </div>
+            </section>
+          </div>
+        ) : null}
 
         <div style={whyShopCssPanelStyle}>
           <div>

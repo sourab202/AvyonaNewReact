@@ -21,6 +21,7 @@ import {
   setSettingValue
 } from "../../../../shared/appSettings";
 import { ManageAccessPanel } from "./ManageAccess";
+import { canAccess } from "../../utils/accessControl";
 
 const MANAGE_ACCESS_SECTION = {
   id: "manage-access",
@@ -778,7 +779,15 @@ function ImageUploadSetting({ label, value, onChange, onUpload, onRemove, upload
 }
 
 export default function Settings({ initialSection = SETTINGS_SECTIONS[0].id }) {
-  const [activeSection, setActiveSection] = React.useState(initialSection);
+  const canManageAccess = canAccess("sensitive_access", "manage_admin_users");
+  const availableSections = React.useMemo(
+    () => canManageAccess ? SETTINGS_NAV_SECTIONS : SETTINGS_SECTIONS,
+    [canManageAccess]
+  );
+  const safeInitialSection = canManageAccess || initialSection !== MANAGE_ACCESS_SECTION.id
+    ? initialSection
+    : SETTINGS_SECTIONS[0].id;
+  const [activeSection, setActiveSection] = React.useState(safeInitialSection);
   const [settings, setSettings] = React.useState(() => cloneSettings(DEFAULT_APP_SETTINGS));
   const [isLoading, setIsLoading] = React.useState(true);
   const [isSaving, setIsSaving] = React.useState(false);
@@ -790,10 +799,10 @@ export default function Settings({ initialSection = SETTINGS_SECTIONS[0].id }) {
   const [isTestingPayment, setIsTestingPayment] = React.useState(false);
 
   const currentSection = React.useMemo(
-    () => SETTINGS_NAV_SECTIONS.find((section) => section.id === activeSection) || SETTINGS_SECTIONS[0],
-    [activeSection]
+    () => availableSections.find((section) => section.id === activeSection) || SETTINGS_SECTIONS[0],
+    [activeSection, availableSections]
   );
-  const isManageAccessSection = activeSection === MANAGE_ACCESS_SECTION.id;
+  const isManageAccessSection = canManageAccess && activeSection === MANAGE_ACCESS_SECTION.id;
 
   const currentStatusMessage = statusMessage
     ? {
@@ -982,13 +991,13 @@ export default function Settings({ initialSection = SETTINGS_SECTIONS[0].id }) {
         </div>
       </div>
 
-      <section style={settingsShellStyle}>
-        <aside style={settingsTabsStyle} aria-label="Settings modules">
+      <section className="settings-page-shell">
+        <aside className="settings-page-tabs" aria-label="Settings modules">
           <div style={sidebarHeaderStyle}>
             <span style={eyebrowStyle}>Sidebar</span>
             <strong style={{ color: "#0f172a", fontSize: "18px" }}>Settings</strong>
           </div>
-          {SETTINGS_NAV_SECTIONS.map((section) => (
+          {availableSections.map((section) => (
             <button
               key={section.id}
               type="button"
@@ -1004,7 +1013,7 @@ export default function Settings({ initialSection = SETTINGS_SECTIONS[0].id }) {
           ))}
         </aside>
 
-        <div style={settingsContentStyle}>
+        <div className="settings-page-content">
           {isManageAccessSection ? (
             <ManageAccessPanel />
           ) : (
@@ -1177,27 +1186,10 @@ const feedbackWarningStyle = {
   borderColor: "#fdba74"
 };
 
-const settingsShellStyle = {
-  display: "grid",
-  gridTemplateColumns: "300px minmax(0, 1fr)",
-  gap: "20px",
-  alignItems: "start"
-};
-
-const settingsTabsStyle = {
-  display: "grid",
-  gap: "12px"
-};
-
 const sidebarHeaderStyle = {
   display: "grid",
   gap: "4px",
   padding: "8px 4px 2px"
-};
-
-const settingsContentStyle = {
-  display: "grid",
-  gap: "20px"
 };
 
 const sectionActionBarStyle = {

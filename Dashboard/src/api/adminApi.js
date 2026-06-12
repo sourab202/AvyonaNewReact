@@ -107,6 +107,66 @@ export function fetchBackendHealth() {
   return adminApi.get("/health");
 }
 
+export function fetchAccessRoles() {
+  return adminApi.get("/admin/access/roles");
+}
+
+export function fetchAccessUsers() {
+  return adminApi.get("/admin/access/users");
+}
+
+export function createAccessUser(payload) {
+  return adminApi.post("/admin/access/users", payload);
+}
+
+export function updateAccessUser(userId, payload) {
+  return adminApi.patch(`/admin/access/users/${userId}`, payload);
+}
+
+export function deleteAccessUser(userId) {
+  return adminApi.delete(`/admin/access/users/${userId}`);
+}
+
+export function resetAccessUserPassword(userId, password) {
+  return adminApi.post(`/admin/access/users/${userId}/reset-password`, { password });
+}
+
+export function fetchRolePermissions(role) {
+  return adminApi.get(`/admin/access/roles/${role}/permissions`);
+}
+
+export function updateRolePermissions(role, modules) {
+  return adminApi.put(`/admin/access/roles/${role}/permissions`, { modules });
+}
+
+export function fetchAccessLogs() {
+  return adminApi.get("/admin/access/logs");
+}
+
+export function fetchActivityLogs(params) {
+  return adminApi.get("/admin/activity-logs", { params });
+}
+
+export function fetchActivityLog(id) {
+  return adminApi.get(`/admin/activity-logs/${id}`);
+}
+
+export function logoutAdmin() {
+  return adminApi.post("/admin/auth/logout");
+}
+
+export function fetchAccessSecurityRules() {
+  return adminApi.get("/admin/access/security-rules");
+}
+
+export function updateAccessSecurityRules(payload) {
+  return adminApi.put("/admin/access/security-rules", payload);
+}
+
+export function acceptAdminInvite(payload) {
+  return adminApi.post("/admin/access/invitations/accept", payload);
+}
+
 export function fetchDeliveryPincodes(params) {
   return adminApi.get("/delivery-pincodes/admin", { params });
 }
@@ -352,12 +412,20 @@ export function fetchProducts(params) {
   return adminApi.get("/products", { params });
 }
 
+export function fetchDeletedProducts(params) {
+  return adminApi.get("/products/deleted/list", { params });
+}
+
 export function fetchProduct(productId) {
   return adminApi.get(`/products/${productId}`);
 }
 
 export function createProduct(payload) {
   return adminApi.post("/products", payload);
+}
+
+export function restoreProduct(productId) {
+  return adminApi.patch(`/products/${productId}/restore`);
 }
 
 export function upsertInventoryProduct(payload) {
@@ -642,8 +710,8 @@ export function uploadFooterImage(file, assetType) {
   });
 }
 
-export function fetchWebsiteImages() {
-  return adminApi.get("/uploads/images");
+export function fetchWebsiteImages(params = {}) {
+  return adminApi.get("/uploads/images", { params });
 }
 
 export function updateWebsiteImage(payload) {
@@ -652,6 +720,10 @@ export function updateWebsiteImage(payload) {
 
 export function deleteWebsiteImage(url) {
   return adminApi.delete("/uploads/images", { data: { url } });
+}
+
+export function restoreWebsiteImage(url) {
+  return adminApi.patch("/uploads/images/restore", { url });
 }
 
 export function uploadAdminMedia(file) {

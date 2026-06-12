@@ -1,5 +1,7 @@
 import React from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
+import AccessRoute from "../components/access/AccessRoute";
+import { getCurrentAdminRole } from "../utils/accessControl";
 import AdminLayout from "../components/layout/AdminLayout";
 import { allProducts as storefrontProducts } from "../data/storefront-content";
 
@@ -32,6 +34,21 @@ const FooterSettings = React.lazy(() => import("../pages/settings/FooterSettings
 const ThemeSettings = React.lazy(() => import("../pages/settings/ThemeSettings"));
 const Variations = React.lazy(() => import("../pages/variations/Variations"));
 const WebsiteImages = React.lazy(() => import("../pages/images/WebsiteImages"));
+const ActivityHistory = React.lazy(() => import("../pages/settings/ActivityHistory"));
+
+function protectedPage(module, element, action = "view") {
+  return (
+    <AccessRoute module={module} action={action}>
+      {element}
+    </AccessRoute>
+  );
+}
+
+function activityHistoryPage(element) {
+  return ["admin", "super_admin"].includes(getCurrentAdminRole())
+    ? element
+    : <Navigate to="/dashboard" replace />;
+}
 
 const previewContext = {
   cart: [],
@@ -62,51 +79,52 @@ export default function AppRoutes({ context, allProducts }) {
     <React.Suspense fallback={<div style={{ padding: "24px", color: "#475569", fontWeight: 700 }}>Loading dashboard...</div>}>
       <Routes>
         <Route element={<AdminLayout />}>
-          <Route index element={<DashboardHome context={resolvedContext} allProducts={resolvedProducts} />} />
-          <Route path="homepage" element={<Homepage />} />
+          <Route index element={protectedPage("dashboard", <DashboardHome context={resolvedContext} allProducts={resolvedProducts} />)} />
+          <Route path="homepage" element={protectedPage("homepage", <Homepage />)} />
           <Route path="credit-points" element={<Navigate to="/dashboard/homepage/credit-points" replace />} />
-          <Route path="homepage/credit-points" element={<CreditPoints />} />
+          <Route path="homepage/credit-points" element={protectedPage("credit_points", <CreditPoints />)} />
           <Route path="homepage/credit-points-section" element={<Navigate to="/dashboard/homepage/credit-points" replace />} />
-          <Route path="homepage/hero-banner" element={<HomepageConfigurePage sectionKey="hero-banner" />} />
-          <Route path="homepage/browse-categories" element={<HomepageConfigurePage sectionKey="browse-categories" />} />
-          <Route path="homepage/our-products" element={<HomepageConfigurePage sectionKey="our-products" />} />
-          <Route path="homepage/best-sellers" element={<HomepageConfigurePage sectionKey="best-sellers" />} />
-          <Route path="homepage/new-arrivals" element={<HomepageConfigurePage sectionKey="new-arrivals" />} />
-          <Route path="homepage/featured-brands" element={<HomepageConfigurePage sectionKey="featured-brands" />} />
-          <Route path="homepage/why-shop" element={<HomepageConfigurePage sectionKey="why-shop" />} />
-          <Route path="homepage/product-payment-icons" element={<HomepageConfigurePage sectionKey="product-payment-icons" />} />
-          <Route path="homepage/delivery-pincodes" element={<DeliveryPincodes />} />
-          <Route path="homepage/pages" element={<CustomPages />} />
-          <Route path="homepage/newsletter" element={<HomepageConfigurePage sectionKey="newsletter" />} />
-          <Route path="homepage/blog-posts" element={<BlogPosts />} />
-          <Route path="homepage/thank-you-page" element={<ThankYouPageSettings />} />
-          <Route path="homepage/thank-you-page/invoice-designer" element={<InvoiceDesigner />} />
+          <Route path="homepage/hero-banner" element={protectedPage("homepage", <HomepageConfigurePage sectionKey="hero-banner" />, "edit")} />
+          <Route path="homepage/browse-categories" element={protectedPage("homepage", <HomepageConfigurePage sectionKey="browse-categories" />, "edit")} />
+          <Route path="homepage/our-products" element={protectedPage("homepage", <HomepageConfigurePage sectionKey="our-products" />, "edit")} />
+          <Route path="homepage/best-sellers" element={protectedPage("homepage", <HomepageConfigurePage sectionKey="best-sellers" />, "edit")} />
+          <Route path="homepage/new-arrivals" element={protectedPage("homepage", <HomepageConfigurePage sectionKey="new-arrivals" />, "edit")} />
+          <Route path="homepage/featured-brands" element={protectedPage("homepage", <HomepageConfigurePage sectionKey="featured-brands" />, "edit")} />
+          <Route path="homepage/why-shop" element={protectedPage("homepage", <HomepageConfigurePage sectionKey="why-shop" />, "edit")} />
+          <Route path="homepage/product-payment-icons" element={protectedPage("homepage", <HomepageConfigurePage sectionKey="product-payment-icons" />, "edit")} />
+          <Route path="homepage/delivery-pincodes" element={protectedPage("homepage", <DeliveryPincodes />)} />
+          <Route path="homepage/pages" element={protectedPage("pages", <CustomPages />)} />
+          <Route path="homepage/newsletter" element={protectedPage("homepage", <HomepageConfigurePage sectionKey="newsletter" />, "edit")} />
+          <Route path="homepage/blog-posts" element={protectedPage("blogs", <BlogPosts />)} />
+          <Route path="homepage/thank-you-page" element={protectedPage("homepage", <ThankYouPageSettings />, "edit")} />
+          <Route path="homepage/thank-you-page/invoice-designer" element={protectedPage("homepage", <InvoiceDesigner />, "edit")} />
           <Route path="homepage/reviews" element={<Navigate to="/dashboard/reviews" replace />} />
-          <Route path="products" element={<Products />} />
-          <Route path="products/new" element={<AddProduct />} />
-          <Route path="products/inventory-manager" element={<InventoryManager />} />
-          <Route path="products/:productId/edit" element={<EditProduct />} />
-          <Route path="variations" element={<Variations />} />
-          <Route path="coupons" element={<Coupons />} />
-          <Route path="categories" element={<Categories />} />
-          <Route path="categories/new" element={<AddCategory />} />
-          <Route path="categories/:categoryId/edit" element={<AddCategory />} />
-          <Route path="website-images" element={<WebsiteImages />} />
-          <Route path="orders" element={<Orders />} />
-          <Route path="orders/abandoned-checkouts" element={<AbandonedCheckouts />} />
-          <Route path="orders/:orderId" element={<OrderDetails />} />
-          <Route path="customers" element={<Customers />} />
-          <Route path="customers/:customerId" element={<CustomerDetails />} />
-          <Route path="contact-enquiries" element={<ContactEnquiries />} />
-          <Route path="reviews" element={<Reviews />} />
-          <Route path="reviews/new" element={<Reviews />} />
+          <Route path="products" element={protectedPage("products", <Products />)} />
+          <Route path="products/new" element={protectedPage("products", <AddProduct />, "create")} />
+          <Route path="products/inventory-manager" element={protectedPage("products", <InventoryManager />, "edit")} />
+          <Route path="products/:productId/edit" element={protectedPage("products", <EditProduct />, "edit")} />
+          <Route path="variations" element={protectedPage("variations", <Variations />)} />
+          <Route path="coupons" element={protectedPage("coupons", <Coupons />)} />
+          <Route path="categories" element={protectedPage("categories", <Categories />)} />
+          <Route path="categories/new" element={protectedPage("categories", <AddCategory />, "create")} />
+          <Route path="categories/:categoryId/edit" element={protectedPage("categories", <AddCategory />, "edit")} />
+          <Route path="website-images" element={protectedPage("homepage", <WebsiteImages />)} />
+          <Route path="orders" element={protectedPage("orders", <Orders />)} />
+          <Route path="orders/abandoned-checkouts" element={protectedPage("orders", <AbandonedCheckouts />)} />
+          <Route path="orders/:orderId" element={protectedPage("orders", <OrderDetails />)} />
+          <Route path="customers" element={protectedPage("customers", <Customers />)} />
+          <Route path="customers/:customerId" element={protectedPage("customers", <CustomerDetails />)} />
+          <Route path="contact-enquiries" element={protectedPage("contact_enquiries", <ContactEnquiries />)} />
+          <Route path="reviews" element={protectedPage("reviews", <Reviews />)} />
+          <Route path="reviews/new" element={protectedPage("reviews", <Reviews />, "create")} />
           <Route path="settings" element={<Navigate to="/dashboard/settings/main" replace />} />
-          <Route path="settings/main" element={<Settings />} />
-          <Route path="settings/header" element={<Settings initialSection="header" />} />
-          <Route path="settings/footer" element={<FooterSettings />} />
-          <Route path="settings/contact-page" element={<ContactPageSettings />} />
-          <Route path="settings/theme" element={<ThemeSettings />} />
-          <Route path="settings/manage-access" element={<Settings initialSection="manage-access" />} />
+          <Route path="settings/main" element={protectedPage("settings", <Settings />)} />
+          <Route path="settings/header" element={protectedPage("settings", <Settings initialSection="header" />)} />
+          <Route path="settings/footer" element={protectedPage("settings", <FooterSettings />)} />
+          <Route path="settings/contact-page" element={protectedPage("settings", <ContactPageSettings />)} />
+          <Route path="settings/theme" element={protectedPage("theme_settings", <ThemeSettings />)} />
+          <Route path="settings/manage-access" element={protectedPage("sensitive_access", <Settings initialSection="manage-access" />, "manage_admin_users")} />
+          <Route path="settings/activity-history" element={activityHistoryPage(<ActivityHistory />)} />
         </Route>
       </Routes>
     </React.Suspense>

@@ -48,5 +48,10 @@
     "status": "active",
     "isDeleted": false,
     "updatedAt": "2026-05-16T05:45:04.919Z"
+  },
+  "/uploads/1779366144411-i1.png": {
+    "status": "inactive",
+    "isDeleted": true,
+    "updatedAt": "2026-06-12T10:20:16.679Z"
   }
 }

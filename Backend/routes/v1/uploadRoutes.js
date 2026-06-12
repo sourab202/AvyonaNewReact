@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { deleteImageAsset, listImageAssets, updateImageAsset, uploadImage, uploadMedia, uploadPaymentIcon, uploadWhyShopIcon } from "../../controllers/uploadController.js";
+import { deleteImageAsset, listImageAssets, restoreImageAsset, updateImageAsset, uploadImage, uploadMedia, uploadPaymentIcon, uploadWhyShopIcon } from "../../controllers/uploadController.js";
 import { requireAdminAuth } from "../../middlewares/authMiddleware.js";
 import { upload, uploadMedia as uploadMediaMiddleware, uploadPaymentIcon as uploadPaymentIconMiddleware, uploadWhyShopIcon as uploadWhyShopIconMiddleware } from "../../middlewares/upload.js";
 import { ApiError } from "../../utils/apiError.js";
@@ -25,6 +25,7 @@ async function requireMediaUploadPermission(request, _response, next) {
 
 router.get("/images", asyncHandler(requireAdminAuth), asyncHandler(requireAdminPermission("homepage", "view")), asyncHandler(listImageAssets));
 router.patch("/images", asyncHandler(requireAdminAuth), asyncHandler(requireAdminPermission("homepage", "edit")), asyncHandler(updateImageAsset));
+router.patch("/images/restore", asyncHandler(requireAdminAuth), asyncHandler(requireAdminPermission("homepage", "edit")), asyncHandler(restoreImageAsset));
 router.delete("/images", asyncHandler(requireAdminAuth), asyncHandler(requireAdminPermission("homepage", "delete")), asyncHandler(deleteImageAsset));
 router.post("/image", asyncHandler(requireAdminAuth), asyncHandler(requireAdminPermission("homepage", "create")), upload.single("image"), asyncHandler(uploadImage));
 router.post("/media", asyncHandler(requireAdminAuth), asyncHandler(requireMediaUploadPermission), uploadMediaMiddleware.single("media"), asyncHandler(uploadMedia));

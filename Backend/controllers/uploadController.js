@@ -1,6 +1,7 @@
 import fs from "fs/promises";
 import path from "path";
 import { query } from "../config/db.js";
+import { safelyLogActivity } from "../services/activityLogger.js";
 
 const imageMetadataPath = path.resolve(process.cwd(), "data", "website-image-assets.json");
 const projectRoot = path.resolve(process.cwd(), "..");
@@ -14,6 +15,7 @@ const sourceRoots = [
 
 const imageExtensions = new Set([".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif", ".svg"]);
 const sourceExtensions = new Set([".js", ".jsx", ".css", ".json"]);
+let uploadedAssetsTableReady = false;
 
 function isDatabaseUnavailable(error) {
   return ["ECONNREFUSED", "ER_NO_SUCH_TABLE", "ER_BAD_DB_ERROR", "ER_BAD_FIELD_ERROR", "PROTOCOL_CONNECTION_LOST"].includes(error?.code);
@@ -21,6 +23,32 @@ function isDatabaseUnavailable(error) {
 
 function normalizeAssetUrl(value) {
   return String(value || "").replace(/\\/g, "/");
+}
+
+async function ensureUploadedAssetsTable() {
+  if (uploadedAssetsTableReady) return;
+  await query(
+    `CREATE TABLE IF NOT EXISTS uploaded_assets (
+      id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      original_name VARCHAR(255) NOT NULL,
+      filename VARCHAR(255) NOT NULL,
+      mime_type VARCHAR(120) NOT NULL,
+      asset_type ENUM('image', 'video', 'file') NOT NULL DEFAULT 'image',
+      url VARCHAR(500) NOT NULL,
+      alt_text VARCHAR(255) NULL,
+      section_path VARCHAR(500) NULL,
+      status ENUM('active', 'inactive') NOT NULL DEFAULT 'active',
+      is_deleted TINYINT(1) NOT NULL DEFAULT 0,
+      size_bytes BIGINT UNSIGNED NOT NULL DEFAULT 0,
+      uploaded_by INT UNSIGNED NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY uq_uploaded_assets_url (url),
+      KEY idx_uploaded_assets_type_deleted (asset_type, is_deleted),
+      CONSTRAINT fk_uploaded_assets_admin FOREIGN KEY (uploaded_by) REFERENCES admins(id) ON DELETE SET NULL
+    )`
+  );
+  uploadedAssetsTableReady = true;
 }
 
 function createAssetId(url) {
@@ -86,7 +114,7 @@ async function getImageReferences() {
   return references;
 }
 
-async function getStaticImageAssets(references, metadata) {
+async function getStaticImageAssets(references, metadata, includeDeleted = false) {
   const imageFiles = (await listFilesRecursive(staticImagesRoot))
     .filter((filePath) => imageExtensions.has(path.extname(filePath).toLowerCase()));
 
@@ -114,13 +142,14 @@ async function getStaticImageAssets(references, metadata) {
       updatedAt: saved.updatedAt || null,
       protectedFile: true
     };
-  }).filter((asset) => !asset.isDeleted);
+  }).filter((asset) => includeDeleted || !asset.isDeleted);
 }
 
-async function getUploadedImageAssets(references, metadata) {
+async function getUploadedImageAssets(references, metadata, includeDeleted = false) {
   let databaseRows = [];
 
   try {
+    await ensureUploadedAssetsTable();
     databaseRows = await query(
       `SELECT
         id,
@@ -137,7 +166,7 @@ async function getUploadedImageAssets(references, metadata) {
         created_at AS createdAt,
         updated_at AS updatedAt
        FROM uploaded_assets
-       WHERE asset_type = 'image' AND is_deleted = 0
+       WHERE asset_type = 'image' ${includeDeleted ? "" : "AND is_deleted = 0"}
        ORDER BY created_at DESC`
     );
   } catch (error) {
@@ -162,7 +191,7 @@ async function getUploadedImageAssets(references, metadata) {
         isDeleted: Boolean(saved.isDeleted ?? row.isDeleted),
         protectedFile: false
       };
-    }).filter((asset) => !asset.isDeleted);
+    }).filter((asset) => includeDeleted || !asset.isDeleted);
   }
 
   const uploadedFiles = (await listFilesRecursive(uploadsRoot))
@@ -192,7 +221,7 @@ async function getUploadedImageAssets(references, metadata) {
       updatedAt: saved.updatedAt || null,
       protectedFile: false
     };
-  }).filter((asset) => !asset.isDeleted);
+  }).filter((asset) => includeDeleted || !asset.isDeleted);
 }
 
 async function getProductImageLinks() {
@@ -252,10 +281,20 @@ async function trackUploadedAsset(request, assetType) {
   const assetUrl = `/uploads/${relativeUploadPath}`;
 
   try {
+    await ensureUploadedAssetsTable();
     await query(
       `INSERT INTO uploaded_assets
         (original_name, filename, mime_type, asset_type, url, size_bytes, uploaded_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE
+        original_name = VALUES(original_name),
+        filename = VALUES(filename),
+        mime_type = VALUES(mime_type),
+        asset_type = VALUES(asset_type),
+        size_bytes = VALUES(size_bytes),
+        uploaded_by = VALUES(uploaded_by),
+        status = 'active',
+        is_deleted = 0`,
       [
         request.file.originalname,
         request.file.filename,
@@ -271,12 +310,13 @@ async function trackUploadedAsset(request, assetType) {
   }
 }
 
-export async function listImageAssets(_request, response) {
+export async function listImageAssets(request, response) {
+  const includeDeleted = String(request.query?.includeDeleted || "").toLowerCase() === "true";
   const metadata = await readImageMetadata();
   const references = await getImageReferences();
   const [uploadedAssets, staticAssets, productLinks] = await Promise.all([
-    getUploadedImageAssets(references, metadata),
-    getStaticImageAssets(references, metadata),
+    getUploadedImageAssets(references, metadata, includeDeleted),
+    getStaticImageAssets(references, metadata, includeDeleted),
     getProductImageLinks()
   ]);
   const assetsByUrl = new Map();
@@ -324,6 +364,7 @@ export async function updateImageAsset(request, response) {
   await writeImageMetadata(metadata);
 
   try {
+    await ensureUploadedAssetsTable();
     await query(
       `UPDATE uploaded_assets
        SET alt_text = ?, section_path = ?, status = ?, is_deleted = 0
@@ -364,21 +405,64 @@ export async function deleteImageAsset(request, response) {
   await writeImageMetadata(metadata);
 
   try {
+    await ensureUploadedAssetsTable();
     await query("UPDATE uploaded_assets SET status = 'inactive', is_deleted = 1 WHERE url = ?", [url]);
   } catch (error) {
     if (!isDatabaseUnavailable(error)) throw error;
   }
 
+  response.json({
+    success: true,
+    message: "Image moved to deleted items and can be restored"
+  });
+}
+
+export async function restoreImageAsset(request, response) {
+  const url = normalizeAssetUrl(request.body?.url);
+  if (!url) {
+    response.status(400).json({ success: false, message: "Image URL is required" });
+    return;
+  }
+
   if (url.startsWith("/uploads/")) {
-    const uploadPath = path.resolve(uploadsRoot, path.basename(url));
-    if (uploadPath.startsWith(uploadsRoot)) {
-      await fs.rm(uploadPath, { force: true }).catch(() => {});
+    const relativePath = url.replace(/^\/uploads\//, "");
+    const uploadPath = path.resolve(uploadsRoot, relativePath);
+    const safeRoot = `${uploadsRoot}${path.sep}`;
+    if (uploadPath !== uploadsRoot && !uploadPath.startsWith(safeRoot)) {
+      response.status(400).json({ success: false, message: "Invalid upload path" });
+      return;
     }
+    try {
+      await fs.access(uploadPath);
+    } catch {
+      response.status(409).json({
+        success: false,
+        message: "This legacy deleted image file is no longer available. Upload the image again to recover it."
+      });
+      return;
+    }
+  }
+
+  const metadata = await readImageMetadata();
+  metadata[url] = {
+    ...(metadata[url] || {}),
+    status: "active",
+    isDeleted: false,
+    updatedAt: new Date().toISOString()
+  };
+  await writeImageMetadata(metadata);
+
+  try {
+    await ensureUploadedAssetsTable();
+    await query("UPDATE uploaded_assets SET status = 'active', is_deleted = 0 WHERE url = ?", [url]);
+  } catch (error) {
+    if (!isDatabaseUnavailable(error)) throw error;
   }
 
   response.json({
     success: true,
-    message: "Image removed from website image manager"
+    message: "Image restored successfully",
+    data: { url, ...metadata[url] }
   });
 }
 
@@ -393,6 +477,12 @@ export async function uploadImage(request, response) {
 
   await trackUploadedAsset(request, "image");
 
+  await safelyLogActivity({
+    request, action: "product_image_uploaded", module: "products", entityType: "image",
+    entityName: request.file.originalname,
+    newValues: { url: `/uploads/${request.file.filename}`, mimeType: request.file.mimetype, size: request.file.size },
+    description: "Product image uploaded"
+  });
   response.status(201).json({
     success: true,
     data: {
@@ -417,6 +507,14 @@ export async function uploadMedia(request, response) {
   const assetType = request.file.mimetype.startsWith("video/") ? "video" : "image";
   await trackUploadedAsset(request, assetType);
 
+  if (request.file.mimetype?.startsWith("image/")) {
+    await safelyLogActivity({
+      request, action: "product_image_uploaded", module: "products", entityType: "image",
+      entityName: request.file.originalname,
+      newValues: { url: `/uploads/${request.file.filename}`, mimeType: request.file.mimetype, size: request.file.size },
+      description: "Product media image uploaded"
+    });
+  }
   response.status(201).json({
     success: true,
     data: {

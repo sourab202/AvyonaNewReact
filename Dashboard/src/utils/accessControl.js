@@ -103,7 +103,7 @@ export function canAccess(moduleName, action = "view", role = getCurrentAdminRol
   const normalizedAction = String(action || "view").toLowerCase();
   const permissions = rolePermissionMap[normalizedRole] || rolePermissionMap.viewer;
 
-  if (permissions["*"]?.includes(normalizedAction)) return true;
+  if (permissions["*"]) return true;
   return Boolean(permissions[normalizedModule]?.includes(normalizedAction));
 }
 

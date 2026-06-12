@@ -4,6 +4,7 @@ import { fetchCustomerById, updateCustomerBusinessDetails } from "../../api/cust
 import { formatCurrency } from "../../utils/storefront";
 import fallbackCustomers from "../../data/customers";
 import { formatOrderStatusLabel } from "../../../../shared/orderStatusFlow";
+import { canAccess } from "../../utils/accessControl";
 
 const GST_NUMBER_PATTERN = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/i;
 
@@ -103,6 +104,7 @@ function normalizeFallbackCustomer(customer) {
 
 export default function CustomerDetails() {
   const { customerId } = useParams();
+  const canEditCustomers = canAccess("customers", "edit");
   const [customer, setCustomer] = React.useState(null);
   const [isLoading, setIsLoading] = React.useState(true);
   const [errorMessage, setErrorMessage] = React.useState("");
@@ -349,14 +351,16 @@ export default function CustomerDetails() {
                 {formatStatusLabel(accountStatus)}
               </span>
             </div>
-            <div style={detailItemStyle}>
-              <span>Manage Status</span>
-              <select value={accountStatus} onChange={(event) => setAccountStatus(event.target.value)} style={inputStyle}>
-                <option value="active">Active</option>
-                <option value="inactive">Inactive</option>
-                <option value="blocked">Blocked</option>
-              </select>
-            </div>
+            {canEditCustomers ? (
+              <div style={detailItemStyle}>
+                <span>Manage Status</span>
+                <select value={accountStatus} onChange={(event) => setAccountStatus(event.target.value)} style={inputStyle}>
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                  <option value="blocked">Blocked</option>
+                </select>
+              </div>
+            ) : null}
             <div style={detailItemStyle}>
               <span>Customer Tier</span>
               <strong>{customerTier}</strong>
@@ -367,35 +371,41 @@ export default function CustomerDetails() {
             </div>
             <div style={detailItemStyle}>
               <span>Email Verified</span>
-              <label style={checkboxRowStyle}>
-                <input
-                  type="checkbox"
-                  checked={emailVerified}
-                  onChange={(event) => setEmailVerified(event.target.checked)}
-                />
-                <strong>{emailVerified ? "Verified" : "Not Verified"}</strong>
-              </label>
+              {canEditCustomers ? (
+                <label style={checkboxRowStyle}>
+                  <input
+                    type="checkbox"
+                    checked={emailVerified}
+                    onChange={(event) => setEmailVerified(event.target.checked)}
+                  />
+                  <strong>{emailVerified ? "Verified" : "Not Verified"}</strong>
+                </label>
+              ) : <strong>{emailVerified ? "Verified" : "Not Verified"}</strong>}
             </div>
             <div style={detailItemStyle}>
               <span>Phone Verified</span>
-              <label style={checkboxRowStyle}>
-                <input
-                  type="checkbox"
-                  checked={phoneVerified}
-                  onChange={(event) => setPhoneVerified(event.target.checked)}
-                />
-                <strong>{phoneVerified ? "Verified" : "Not Verified"}</strong>
-              </label>
+              {canEditCustomers ? (
+                <label style={checkboxRowStyle}>
+                  <input
+                    type="checkbox"
+                    checked={phoneVerified}
+                    onChange={(event) => setPhoneVerified(event.target.checked)}
+                  />
+                  <strong>{phoneVerified ? "Verified" : "Not Verified"}</strong>
+                </label>
+              ) : <strong>{phoneVerified ? "Verified" : "Not Verified"}</strong>}
             </div>
-            <div style={detailItemStyle}>
-              <span>Admin Action</span>
-              <div style={{ display: "grid", gap: "10px" }}>
-                <button type="button" style={primaryButtonStyle} onClick={handleAccountUpdate}>
-                  Save Account Status
-                </button>
-                <span style={mutedTextStyle}>{statusMessage || "Manage access and verification state for this customer."}</span>
+            {canEditCustomers ? (
+              <div style={detailItemStyle}>
+                <span>Admin Action</span>
+                <div style={{ display: "grid", gap: "10px" }}>
+                  <button type="button" style={primaryButtonStyle} onClick={handleAccountUpdate}>
+                    Save Account Status
+                  </button>
+                  <span style={mutedTextStyle}>{statusMessage || "Manage access and verification state for this customer."}</span>
+                </div>
               </div>
-            </div>
+            ) : null}
           </div>
         </DetailCard>
       </div>
@@ -416,7 +426,7 @@ export default function CustomerDetails() {
               <strong>{businessForm.gstNumber || "Not available"}</strong>
             </div>
           </div>
-          <div style={twoColumnGridStyle}>
+          {canEditCustomers ? <div style={twoColumnGridStyle}>
             <label style={detailItemStyle}>
               <span>Business Account</span>
               <span style={checkboxRowStyle}>
@@ -454,7 +464,7 @@ export default function CustomerDetails() {
               </div>
               <span style={mutedTextStyle}>{businessMessage || "Business fields are optional and appear on invoices only when GST is available."}</span>
             </div>
-          </div>
+          </div> : null}
         </div>
       </DetailCard>
 

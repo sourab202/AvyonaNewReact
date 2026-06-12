@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import CategoryArtwork from "../components/common/CategoryArtwork";
 import ProductCard from "../components/product/ProductCard";
 import { fetchHomepageBlogs } from "../api/blogApi";
 import { fetchHomepageOffers } from "../api/couponApi";
@@ -24,11 +25,6 @@ function getCategoryHomepageRule(category) {
 
 function resolveStorefrontMediaUrl(value, fallback = "") {
   return resolveMediaUrl(value, fallback);
-}
-
-function handleCategoryImageError(event) {
-  event.currentTarget.closest(".category-art")?.classList.add("category-art-missing");
-  event.currentTarget.remove();
 }
 
 function getHomepageBrowseEntryKey(entry) {
@@ -591,9 +587,7 @@ export default function Home({ context }) {
 
               return (
                 <Link key={category.slug} className="category-card category-card-link" to={buttonLink}>
-                  {categoryImage ? <div className="category-art">
-                    <img src={categoryImage} alt={category.name} loading="lazy" decoding="async" onError={handleCategoryImageError} />
-                  </div> : null}
+                  <CategoryArtwork src={categoryImage} alt={category.name} />
                   <div className="category-copy">
                     <h3>{category.name}</h3>
                     <p>{category.description}</p>

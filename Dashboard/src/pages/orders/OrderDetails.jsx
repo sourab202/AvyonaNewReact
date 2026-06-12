@@ -4,6 +4,7 @@ import orders, { orderStatusOptions } from "../../data/orders";
 import { formatCurrency } from "../../utils/storefront";
 import { formatOrderStatusLabel } from "../../../../shared/orderStatusFlow";
 import { fetchOrder, updateOrderTracking } from "../../api/adminApi";
+import { canAccess } from "../../utils/accessControl";
 
 function DetailCard({ title, children }) {
   return (
@@ -53,6 +54,7 @@ function getPaymentBadgeLabel(status) {
 
 export default function OrderDetails() {
   const { orderId } = useParams();
+  const canEditOrders = canAccess("orders", "edit");
   const fallbackOrder = React.useMemo(
     () => orders.find((entry) => String(entry.id) === String(orderId)),
     [orderId]
@@ -373,62 +375,64 @@ export default function OrderDetails() {
         </div>
       </DetailCard>
 
-      <DetailCard title="Tracking Controls">
-        <div style={statusUpdateCardStyle}>
-          <p style={{ margin: 0, color: "#698096" }}>
-            Update tracking details here. Status changes automatically create a new timeline entry.
-          </p>
+      {canEditOrders ? (
+        <DetailCard title="Tracking Controls">
+          <div style={statusUpdateCardStyle}>
+            <p style={{ margin: 0, color: "#698096" }}>
+              Update tracking details here. Status changes automatically create a new timeline entry.
+            </p>
 
-          <label style={fieldStyle}>
-            <span>Order Status</span>
-            <select value={orderStatus} onChange={(event) => setOrderStatus(event.target.value)} style={inputStyle}>
-              {orderStatusOptions.map((status) => (
-                <option key={status} value={status}>{formatOrderStatusLabel(status)}</option>
-              ))}
-            </select>
-          </label>
+            <label style={fieldStyle}>
+              <span>Order Status</span>
+              <select value={orderStatus} onChange={(event) => setOrderStatus(event.target.value)} style={inputStyle}>
+                {orderStatusOptions.map((status) => (
+                  <option key={status} value={status}>{formatOrderStatusLabel(status)}</option>
+                ))}
+              </select>
+            </label>
 
-          <label style={fieldStyle}>
-            <span>Courier Name</span>
-            <input
-              type="text"
-              value={courierName}
-              onChange={(event) => setCourierName(event.target.value)}
-              placeholder="Blue Dart, Delhivery, etc."
-              style={inputStyle}
-            />
-          </label>
+            <label style={fieldStyle}>
+              <span>Courier Name</span>
+              <input
+                type="text"
+                value={courierName}
+                onChange={(event) => setCourierName(event.target.value)}
+                placeholder="Blue Dart, Delhivery, etc."
+                style={inputStyle}
+              />
+            </label>
 
-          <label style={fieldStyle}>
-            <span>Expected Delivery Date</span>
-            <input
-              type="datetime-local"
-              value={expectedDeliveryDate}
-              onChange={(event) => setExpectedDeliveryDate(event.target.value)}
-              style={inputStyle}
-            />
-          </label>
+            <label style={fieldStyle}>
+              <span>Expected Delivery Date</span>
+              <input
+                type="datetime-local"
+                value={expectedDeliveryDate}
+                onChange={(event) => setExpectedDeliveryDate(event.target.value)}
+                style={inputStyle}
+              />
+            </label>
 
-          <label style={fieldStyle}>
-            <span>Tracking Note</span>
-            <textarea
-              value={trackingNote}
-              onChange={(event) => setTrackingNote(event.target.value)}
-              placeholder="Delayed due to weather, assigned to courier hub, customer requested reschedule..."
-              style={textareaStyle}
-            />
-          </label>
-        </div>
+            <label style={fieldStyle}>
+              <span>Tracking Note</span>
+              <textarea
+                value={trackingNote}
+                onChange={(event) => setTrackingNote(event.target.value)}
+                placeholder="Delayed due to weather, assigned to courier hub, customer requested reschedule..."
+                style={textareaStyle}
+              />
+            </label>
+          </div>
 
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
-          <p style={{ margin: 0, color: "#698096" }}>
-            {statusMessage || "Choose a status and update the order flow."}
-          </p>
-          <button type="button" style={primaryButtonStyle} onClick={handleOrderStatusUpdate} disabled={isSaving}>
-            {isSaving ? "Saving..." : "Save Tracking Update"}
-          </button>
-        </div>
-      </DetailCard>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+            <p style={{ margin: 0, color: "#698096" }}>
+              {statusMessage || "Choose a status and update the order flow."}
+            </p>
+            <button type="button" style={primaryButtonStyle} onClick={handleOrderStatusUpdate} disabled={isSaving}>
+              {isSaving ? "Saving..." : "Save Tracking Update"}
+            </button>
+          </div>
+        </DetailCard>
+      ) : null}
 
       <div style={twoColumnGridStyle}>
         <DetailCard title="Notes / Timeline">

@@ -1,6 +1,7 @@
 import { pool, query } from "../config/db.js";
 import { ApiError } from "../utils/apiError.js";
 import { readTabularBuffer, SUPPORTED_TABULAR_FORMAT_LABEL } from "../utils/tabularImport.js";
+import { safelyLogActivity } from "../services/activityLogger.js";
 
 const VALID_STATUSES = new Set(["active", "inactive"]);
 const VALID_IMPORT_MODES = new Set(["update", "skip", "replace"]);
@@ -375,6 +376,12 @@ export async function importDeliveryPincodes(request, response) {
     }
 
     await connection.commit();
+    await safelyLogActivity({
+      request, action: "delivery_pincodes_uploaded", module: "settings",
+      entityType: "delivery_pincode_import", entityName: request.file.originalname,
+      newValues: { total: parsed.totalRows, inserted, updated, skipped, mode },
+      description: "Delivery pincodes uploaded"
+    });
     response.json({
       success: true,
       data: {

@@ -5,6 +5,7 @@ import { query } from "../config/db.js";
 import { ApiError } from "../utils/apiError.js";
 import { slugify } from "../utils/slugify.js";
 import { readTabularBuffer, SUPPORTED_TABULAR_FORMAT_LABEL } from "../utils/tabularImport.js";
+import { safelyLogActivity } from "../services/activityLogger.js";
 
 const localProductsPath = path.resolve(process.cwd(), "data", "local-products.json");
 const inventoryImportJobs = new Map();
@@ -2294,6 +2295,62 @@ export async function listProducts(request, response) {
   }
 }
 
+export async function listDeletedProducts(request, response) {
+  const { page, limit, offset } = getPagination(request);
+  const filters = ["p.is_deleted = 1"];
+  const values = [];
+  appendSearchFilter(filters, values, request.query.search);
+  const whereClause = `WHERE ${filters.join(" AND ")}`;
+  const countRows = await query(
+    `SELECT COUNT(*) AS total
+     FROM products p
+     LEFT JOIN categories c ON c.id = p.category_id
+     ${whereClause}`,
+    values
+  );
+  const total = Number(countRows[0]?.total || 0);
+  const rows = await query(
+    `SELECT
+      p.id,
+      p.category_id AS categoryId,
+      c.name AS categoryName,
+      c.slug AS categorySlug,
+      p.asin,
+      p.sku,
+      p.name,
+      p.slug,
+      p.brand,
+      p.price,
+      p.mrp,
+      p.stock_quantity AS stockQuantity,
+      p.image_url AS imageUrl,
+      p.sort_order AS sortOrder,
+      p.status,
+      p.is_deleted AS isDeleted,
+      p.deleted_at AS deletedAt,
+      p.created_at AS createdAt,
+      p.updated_at AS updatedAt
+     FROM products p
+     LEFT JOIN categories c ON c.id = p.category_id
+     ${whereClause}
+     ORDER BY p.deleted_at DESC, p.updated_at DESC
+     LIMIT ? OFFSET ?`,
+    [...values, limit, offset]
+  );
+  const productsWithMedia = await attachProductMedia(rows);
+
+  response.json({
+    success: true,
+    data: productsWithMedia,
+    pagination: {
+      page,
+      limit,
+      total,
+      totalPages: Math.max(1, Math.ceil(total / limit))
+    }
+  });
+}
+
 export async function exportInventoryProducts(request, response) {
   const filters = ["p.is_deleted = 0"];
   const values = [];
@@ -2690,6 +2747,34 @@ export async function createInventoryImportJob(request, response) {
     ]
   );
   await saveInventoryFailedRows(job.id, validation.failedRowDetails || []);
+  await safelyLogActivity({
+    request,
+    action: "product_bulk_import",
+    module: "products",
+    entityType: "inventory_import_job",
+    entityId: job.id,
+    entityName: job.originalFileName,
+    newValues: {
+      templateType: job.templateType,
+      importType: job.importType,
+      totalRows: job.totalRows,
+      failedRows: job.failedRows,
+      status: job.status
+    },
+    description: "Product bulk import job created"
+  });
+  if (job.importType.includes("update")) {
+    await safelyLogActivity({
+      request,
+      action: "product_bulk_update",
+      module: "products",
+      entityType: "inventory_import_job",
+      entityId: job.id,
+      entityName: job.originalFileName,
+      newValues: { updateControls: job.updateControls, validRows: job.totalRows },
+      description: "Product bulk update job queued"
+    });
+  }
 
   response.status(201).json({
     success: true,
@@ -3009,6 +3094,49 @@ export async function createProduct(request, response) {
     }
 
     const productSlug = slug ? slugify(slug) : slugify(name);
+    const identityConditions = ["LOWER(asin) = LOWER(?)", "LOWER(slug) = LOWER(?)"];
+    const identityValues = [String(asin).trim(), productSlug];
+    if (sku && String(sku).trim()) {
+      identityConditions.push("LOWER(sku) = LOWER(?)");
+      identityValues.push(String(sku).trim());
+    }
+    const matchingProducts = await query(
+      `SELECT id, asin, sku, slug, is_deleted AS isDeleted
+       FROM products
+       WHERE ${identityConditions.join(" OR ")}
+       LIMIT 3`,
+      identityValues
+    );
+
+    if (matchingProducts.length > 1) {
+      throw new ApiError(409, "ASIN, SKU, or slug belongs to different existing products. Resolve the identity conflict before saving.");
+    }
+
+    if (matchingProducts[0]) {
+      if (!matchingProducts[0].isDeleted) {
+        throw new ApiError(409, "A product with this ASIN, SKU, or slug already exists.");
+      }
+
+      await query(
+        `UPDATE products
+         SET is_deleted = 0,
+             is_visible = 1,
+             deleted_at = NULL,
+             status = ?
+         WHERE id = ?`,
+        [status === "archived" ? "draft" : status, matchingProducts[0].id]
+      );
+      request.params = { ...(request.params || {}), id: matchingProducts[0].id };
+      request.body = {
+        ...(request.body || {}),
+        categoryId: resolvedCategoryId,
+        slug: productSlug,
+        status: status === "archived" ? "draft" : status
+      };
+      request.productRestoreAction = true;
+      await updateProduct(request, response);
+      return;
+    }
 
     const result = await query(
       `INSERT INTO products
@@ -3040,6 +3168,11 @@ export async function createProduct(request, response) {
     await replaceProductDetailsFromPayload(result.insertId, { highlights, specGroups, faqs, policies });
 
     const created = await attachProductMedia(await query("SELECT * FROM products WHERE id = ? LIMIT 1", [result.insertId]));
+    await safelyLogActivity({
+      request, action: "product_created", module: "products", entityType: "product",
+      entityId: result.insertId, entityName: created[0]?.name, newValues: created[0],
+      description: "Product created"
+    });
 
     response.status(201).json({
       success: true,
@@ -3089,7 +3222,7 @@ export async function updateProduct(request, response) {
   } = request.body || {};
 
   try {
-    const existing = await query("SELECT id, name FROM products WHERE id = ? LIMIT 1", [Number(request.params.id)]);
+    const existing = await query("SELECT * FROM products WHERE id = ? LIMIT 1", [Number(request.params.id)]);
     if (!existing.length) {
       throw new ApiError(404, "Product not found");
     }
@@ -3157,9 +3290,18 @@ export async function updateProduct(request, response) {
     });
 
     const updated = await attachProductMedia(await query("SELECT * FROM products WHERE id = ? LIMIT 1", [Number(request.params.id)]));
+    await safelyLogActivity({
+      request,
+      action: request.productRestoreAction ? "product_restored" : (existing[0].status !== updated[0]?.status ? "product_status_changed" : "product_updated"),
+      module: "products", entityType: "product", entityId: request.params.id,
+      entityName: updated[0]?.name, oldValues: existing[0], newValues: updated[0],
+      description: request.productRestoreAction ? "Deleted product restored and updated" : "Product updated"
+    });
 
     response.json({
       success: true,
+      action: request.productRestoreAction ? "restored" : "updated",
+      message: request.productRestoreAction ? "Deleted product restored and updated successfully" : "Product updated successfully",
       data: updated[0]
     });
   } catch (error) {
@@ -3321,6 +3463,7 @@ export async function upsertProductByAsinSku(request, response) {
 
 export async function deleteProduct(request, response) {
   try {
+    const existing = await query("SELECT * FROM products WHERE id = ? AND is_deleted = 0 LIMIT 1", [Number(request.params.id)]);
     const result = await query(
       "UPDATE products SET is_deleted = 1, is_visible = 0, status = 'archived', deleted_at = NOW() WHERE id = ? AND is_deleted = 0",
       [Number(request.params.id)]
@@ -3329,6 +3472,11 @@ export async function deleteProduct(request, response) {
     if (!result.affectedRows) {
       throw new ApiError(404, "Product not found");
     }
+    await safelyLogActivity({
+      request, action: "product_deleted", module: "products", entityType: "product",
+      entityId: request.params.id, entityName: existing[0]?.name, oldValues: existing[0],
+      newValues: { isDeleted: true, status: "archived" }, description: "Product soft deleted"
+    });
 
     response.json({
       success: true,
@@ -3360,4 +3508,36 @@ export async function deleteProduct(request, response) {
       source: "local-file"
     });
   }
+}
+
+export async function restoreProduct(request, response) {
+  const existing = await query("SELECT * FROM products WHERE id = ? AND is_deleted = 1 LIMIT 1", [Number(request.params.id)]);
+  const result = await query(
+    `UPDATE products
+     SET is_deleted = 0,
+         is_visible = 1,
+         deleted_at = NULL,
+         status = CASE WHEN status = 'archived' THEN 'draft' ELSE status END
+     WHERE id = ? AND is_deleted = 1`,
+    [Number(request.params.id)]
+  );
+
+  if (!result.affectedRows) {
+    throw new ApiError(404, "Deleted product not found");
+  }
+
+  const restored = await attachProductMedia(
+    await query("SELECT * FROM products WHERE id = ? LIMIT 1", [Number(request.params.id)])
+  );
+  await safelyLogActivity({
+    request, action: "product_restored", module: "products", entityType: "product",
+    entityId: request.params.id, entityName: restored[0]?.name,
+    oldValues: existing[0], newValues: restored[0], description: "Product restored"
+  });
+  response.json({
+    success: true,
+    action: "restored",
+    message: "Product restored successfully",
+    data: restored[0]
+  });
 }

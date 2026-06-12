@@ -449,9 +449,9 @@ body.collection-page {
   height: auto;
   min-height: 0;
   max-height: none;
-  border-radius: 1.3rem;
+  border-radius: 0;
   padding: 0;
-  margin-bottom: 8px;
+  margin-bottom: 0;
   border: 0;
   background: transparent;
   box-shadow: none;
@@ -761,15 +761,15 @@ body.collection-page {
     min-height: 0;
     aspect-ratio: 1 / 1;
     padding: 0;
-    margin-bottom: 6px;
-    border-radius: 10px;
+    margin-bottom: 0;
+    border-radius: 0;
   }
 
   .collection-results-content .product-art img {
-    width: auto;
-    height: auto;
-    max-width: 112%;
-    max-height: 112%;
+    width: 100%;
+    height: 100%;
+    max-width: 100%;
+    max-height: 100%;
   }
 
   .collection-page .filter-panel.is-open {

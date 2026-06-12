@@ -1,15 +1,23 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import { FaEdit, FaExternalLinkAlt, FaGripVertical, FaPlus, FaTasks, FaTrash, FaUndo } from "react-icons/fa";
-import { deleteProduct, fetchProducts, updateProduct } from "../../api/adminApi";
+import { deleteProduct, fetchDeletedProducts, fetchProducts, restoreProduct, updateProduct } from "../../api/adminApi";
 import { useAutoRefresh } from "../../hooks/useAutoRefresh";
 import PermissionGate from "../../components/access/PermissionGate";
 import { canAccess } from "../../utils/accessControl";
+import { resolveAdminMediaUrl } from "../../utils/media";
 import { buildStorefrontProductUrl, formatCurrency } from "../../utils/storefront";
 
 const rowsPerPageOptions = [10, 20, 50, 100];
 
 function getStatusBadgeStyle(status) {
+  if (status === "deleted") {
+    return {
+      background: "#fee2e2",
+      color: "#991b1b"
+    };
+  }
+
   if (status === "active") {
     return {
       background: "#ecfdf3",
@@ -58,7 +66,7 @@ function normalizeProductRow(product) {
   return {
     id: product.id,
     slug: product.slug,
-    image: product.imageUrl || product.image || "",
+    image: product.imageUrl || product.galleryUrls?.[0] || product.image || "",
     name: product.name,
     brand: product.brand,
     category: product.categoryName || product.category,
@@ -66,26 +74,33 @@ function normalizeProductRow(product) {
     price: Number(product.price || 0),
     stock,
     stockStatus,
-    status: product.status === "active" ? "active" : "inactive",
+    status: product.isDeleted ? "deleted" : product.status === "active" ? "active" : "inactive",
     featured: Boolean(product.featured || product.featuredProduct),
-    sortOrder: Number(product.sortOrder || 0)
+    sortOrder: Number(product.sortOrder || 0),
+    isDeleted: Boolean(product.isDeleted),
+    deletedAt: product.deletedAt || null
   };
 }
 
 function ProductThumbnail({ src, alt }) {
   const [hasError, setHasError] = React.useState(false);
+  const resolvedSrc = resolveAdminMediaUrl(src);
 
-  if (!src || hasError) {
+  React.useEffect(() => {
+    setHasError(false);
+  }, [resolvedSrc]);
+
+  if (!resolvedSrc || hasError) {
     return (
-      <span className="dashboard-product-thumb is-empty" aria-hidden="true">
-        {String(alt || "P").slice(0, 1).toUpperCase()}
+      <span className="dashboard-product-thumb is-empty" role="img" aria-label={`${alt || "Product"} has no image`}>
+        No image
       </span>
     );
   }
 
   return (
     <img
-      src={src}
+      src={resolvedSrc}
       alt={alt}
       className="dashboard-product-thumb"
       loading="lazy"
@@ -158,18 +173,34 @@ export default function Products() {
     }
   };
 
+  const handleRestore = async (product) => {
+    setUpdatingProductId(product.id);
+    try {
+      await restoreProduct(product.id);
+      setSourceMessage(`"${product.name}" restored as a draft product.`);
+      await loadProducts();
+    } catch (error) {
+      setSourceMessage(error.response?.data?.message || "Product could not be restored.");
+    } finally {
+      setUpdatingProductId("");
+    }
+  };
+
   const loadProducts = React.useCallback(async ({ showFallbackMessage = true } = {}) => {
     try {
-      const response = await fetchProducts({
+      const requestParams = {
         page: currentPage,
         limit: rowsPerPage,
         search: searchTerm,
         categorySlug: categoryFilter === "all" ? "" : categoryFilter,
         brand: brandFilter === "all" ? "" : brandFilter,
         availability: stockFilter === "all" ? "" : stockFilter === "in-stock" ? "in-stock" : stockFilter === "out-of-stock" ? "out-of-stock" : "",
-        status: statusFilter === "all" ? "" : statusFilter === "active" ? "active" : "draft",
+        status: statusFilter === "all" || statusFilter === "deleted" ? "" : statusFilter === "active" ? "active" : "draft",
         sort: "manual"
-      });
+      };
+      const response = statusFilter === "deleted"
+        ? await fetchDeletedProducts(requestParams)
+        : await fetchProducts(requestParams);
       const rows = Array.isArray(response.data?.data) ? response.data.data : [];
       setTableProducts(rows.map(normalizeProductRow));
       setPagination(response.data?.pagination || { page: currentPage, limit: rowsPerPage, total: rows.length, totalPages: 1 });
@@ -254,6 +285,18 @@ export default function Products() {
     }
   };
 
+  const handleBulkRestore = async () => {
+    if (!selectedProductIds.length) return;
+    try {
+      await Promise.all(selectedProductIds.map((productId) => restoreProduct(productId)));
+      setSourceMessage(`${selectedProductIds.length} product(s) restored as drafts.`);
+      setSelectedProductIds([]);
+      await loadProducts();
+    } catch (error) {
+      setSourceMessage(error.response?.data?.message || "Selected products could not be restored.");
+    }
+  };
+
   const handleApplyBulkProductAction = async () => {
     if (!bulkProductAction || !selectedProductIds.length || runningBulkAction) return;
 
@@ -265,6 +308,8 @@ export default function Products() {
         await handleBulkStatus("draft");
       } else if (bulkProductAction === "delete") {
         await handleBulkDelete();
+      } else if (bulkProductAction === "restore") {
+        await handleBulkRestore();
       }
       setBulkProductAction("");
     } finally {
@@ -468,6 +513,7 @@ export default function Products() {
             <option value="all">All Status</option>
             <option value="active">Active</option>
             <option value="inactive">Inactive</option>
+            <option value="deleted">Deleted / Recoverable</option>
           </select>
 
           <select value={rowsPerPage} onChange={(event) => setRowsPerPage(Number(event.target.value))} style={filterInputStyle}>
@@ -502,9 +548,10 @@ export default function Products() {
           aria-label="Bulk product action"
         >
           <option value="">Select bulk action</option>
-          {canEditProducts ? <option value="active">Mark selected active</option> : null}
-          {canEditProducts ? <option value="inactive">Mark selected inactive</option> : null}
-          {canDeleteProducts ? <option value="delete">Delete selected</option> : null}
+          {canEditProducts && statusFilter !== "deleted" ? <option value="active">Mark selected active</option> : null}
+          {canEditProducts && statusFilter !== "deleted" ? <option value="inactive">Mark selected inactive</option> : null}
+          {canEditProducts && statusFilter === "deleted" ? <option value="restore">Restore selected</option> : null}
+          {canDeleteProducts && statusFilter !== "deleted" ? <option value="delete">Delete selected</option> : null}
         </select>
         <button
           type="button"
@@ -665,11 +712,16 @@ export default function Products() {
                 </td>
                 <td>
                   <div className="dashboard-row-actions">
-                    <a href={buildStorefrontProductUrl(product.slug)} target="_blank" rel="noreferrer" className="dashboard-icon-action is-view">
+                    {!product.isDeleted ? <a href={buildStorefrontProductUrl(product.slug)} target="_blank" rel="noreferrer" className="dashboard-icon-action is-view">
                       <FaExternalLinkAlt aria-hidden="true" />
                       View
-                    </a>
-                    {canEditProducts ? (
+                    </a> : null}
+                    {product.isDeleted && canEditProducts ? (
+                      <button type="button" onClick={() => handleRestore(product)} className="dashboard-icon-action is-edit" disabled={updatingProductId === product.id}>
+                        <FaUndo aria-hidden="true" />
+                        {updatingProductId === product.id ? "Restoring..." : "Restore"}
+                      </button>
+                    ) : canEditProducts ? (
                       <>
                         <button
                           type="button"
@@ -685,7 +737,7 @@ export default function Products() {
                         </Link>
                       </>
                     ) : null}
-                    {canDeleteProducts ? (
+                    {canDeleteProducts && !product.isDeleted ? (
                       <button type="button" onClick={() => handleDelete(product)} className="dashboard-icon-action is-delete">
                         <FaTrash aria-hidden="true" />
                         Delete

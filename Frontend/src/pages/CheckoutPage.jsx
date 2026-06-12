@@ -2,11 +2,10 @@ import React, { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { trackAnalyticsEvent } from "../api/analyticsApi";
 import { captureAbandonedCheckout, recoverAbandonedCheckout } from "../api/abandonedCheckoutApi";
-import { applyCustomerCreditPoints, fetchCustomerWallet } from "../api/customerApi";
+import { applyCustomerCreditPoints, fetchCustomerAddresses, fetchCustomerWallet } from "../api/customerApi";
 import { resolveMediaUrl } from "../utils/media";
 import {
   formatCurrency,
-  getMergedProfile,
   readStorage,
   writeStorage
 } from "../utils/storefront";
@@ -87,35 +86,35 @@ export default function CheckoutPage({ context }) {
       description: "Pay when your order arrives."
     }] : [])
   ];
-  const mergedProfile = getMergedProfile(context.authUser, context.customerProfile);
-  const [savedFirstName = "", ...savedLastParts] = mergedProfile.fullName.split(/\s+/).filter(Boolean);
-  const savedLastName = savedLastParts.join(" ");
   const [form, setForm] = useState({
-    contact: context.customerProfile.contact || mergedProfile.email || "",
-    firstName: context.customerProfile.firstName || savedFirstName,
-    lastName: context.customerProfile.lastName || savedLastName,
-    address1: context.customerProfile.address || "",
+    contact: "",
+    firstName: "",
+    lastName: "",
+    address1: "",
     address2: "",
-    companyName: mergedProfile.businessName || "",
-    gstNumber: mergedProfile.gstNumber || "",
+    companyName: "",
+    gstNumber: "",
     city: "",
-    state: "Telangana",
-    pinCode: String(context.customerProfile.address || "").match(/\b(\d{6})\b/)?.[1] || "",
-    phone: mergedProfile.mobile || "",
+    state: "",
+    pinCode: "",
+    phone: "",
     paymentMethod: "razorpay",
     billingAddress: "same",
-    billingFirstName: context.customerProfile.firstName || savedFirstName,
-    billingLastName: context.customerProfile.lastName || savedLastName,
-    billingCompanyName: mergedProfile.businessName || "",
-    billingGstNumber: mergedProfile.gstNumber || "",
+    billingFirstName: "",
+    billingLastName: "",
+    billingCompanyName: "",
+    billingGstNumber: "",
     billingAddress1: "",
     billingAddress2: "",
     billingCity: "",
-    billingState: "Telangana",
+    billingState: "",
     billingPinCode: "",
-    billingPhone: mergedProfile.mobile || "",
+    billingPhone: "",
     checkoutMode: context.authUser ? "login" : "guest"
   });
+  const [savedAddresses, setSavedAddresses] = useState([]);
+  const [selectedAddressId, setSelectedAddressId] = useState("");
+  const [addressesLoading, setAddressesLoading] = useState(false);
   const [couponCode, setCouponCode] = useState(() => readStorage("avyonaPendingCoupon", ""));
   const [appliedCoupon, setAppliedCoupon] = useState(null);
   const [couponMessage, setCouponMessage] = useState("");
@@ -269,24 +268,29 @@ export default function CheckoutPage({ context }) {
   }, [context.cart, subtotal]);
 
   useEffect(() => {
-    if (!context.authUser) return;
-    setForm((current) => ({
-      ...current,
-      contact: current.contact || context.customerProfile.contact || mergedProfile.email || "",
-      firstName: current.firstName || context.customerProfile.firstName || savedFirstName,
-      lastName: current.lastName || context.customerProfile.lastName || savedLastName,
-      address1: current.address1 || context.customerProfile.address || "",
-      companyName: current.companyName || context.customerProfile.businessName || mergedProfile.businessName || "",
-      gstNumber: current.gstNumber || context.customerProfile.gstNumber || mergedProfile.gstNumber || "",
-      phone: current.phone || mergedProfile.mobile || "",
-      billingFirstName: current.billingFirstName || context.customerProfile.firstName || savedFirstName,
-      billingLastName: current.billingLastName || context.customerProfile.lastName || savedLastName,
-      billingCompanyName: current.billingCompanyName || context.customerProfile.businessName || mergedProfile.businessName || "",
-      billingGstNumber: current.billingGstNumber || context.customerProfile.gstNumber || mergedProfile.gstNumber || "",
-      billingPhone: current.billingPhone || mergedProfile.mobile || "",
-      checkoutMode: "login"
-    }));
-  }, [context.authUser, context.customerProfile, mergedProfile.businessName, mergedProfile.email, mergedProfile.gstNumber, mergedProfile.mobile, savedFirstName, savedLastName]);
+    if (!context.authUser) {
+      setSavedAddresses([]);
+      setSelectedAddressId("");
+      return;
+    }
+
+    let isMounted = true;
+    setAddressesLoading(true);
+    fetchCustomerAddresses()
+      .then((response) => {
+        if (isMounted) setSavedAddresses(Array.isArray(response.data) ? response.data : []);
+      })
+      .catch(() => {
+        if (isMounted) setSavedAddresses([]);
+      })
+      .finally(() => {
+        if (isMounted) setAddressesLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [context.authUser]);
 
   useEffect(() => {
     if (!paymentMethods.some((method) => method.id === form.paymentMethod)) {
@@ -377,6 +381,44 @@ export default function CheckoutPage({ context }) {
     setCouponCode("");
     writeStorage("avyonaPendingCoupon", "");
     setCouponMessage("Coupon removed.");
+  };
+
+  const selectSavedAddress = (address) => {
+    const nameParts = String(address.fullName || "").trim().split(/\s+/).filter(Boolean);
+    const firstName = nameParts.shift() || "";
+    const lastName = nameParts.join(" ");
+    setSelectedAddressId(String(address.id));
+    setForm((current) => ({
+      ...current,
+      contact: context.authUser?.email || context.authUser?.mobile || context.customerProfile.contact || "",
+      firstName,
+      lastName,
+      address1: address.line1 || "",
+      address2: address.line2 || "",
+      city: address.city || "",
+      state: address.state || "",
+      pinCode: address.pincode || "",
+      phone: address.phone || context.authUser?.mobile || "",
+      checkoutMode: "login"
+    }));
+  };
+
+  const useNewAddress = () => {
+    setSelectedAddressId("");
+    setForm((current) => ({
+      ...current,
+      contact: "",
+      firstName: "",
+      lastName: "",
+      address1: "",
+      address2: "",
+      companyName: "",
+      gstNumber: "",
+      city: "",
+      state: "",
+      pinCode: "",
+      phone: ""
+    }));
   };
 
   const applyPoints = async (event) => {
@@ -762,11 +804,45 @@ export default function CheckoutPage({ context }) {
                 </label>
               </div>
               {form.checkoutMode === "login" && !context.authUser ? <p className="checkout-login-note">Login is not active yet for this session. Continue as guest or <Link to="/account">open account</Link>.</p> : null}
-              {context.authUser ? <p className="checkout-login-note">Signed in as {context.authUser.email || context.authUser.mobile}. Saved details are ready to use.</p> : null}
+              {context.authUser ? <p className="checkout-login-note">Signed in as {context.authUser.email || context.authUser.mobile}. Select a saved address below or enter new details.</p> : null}
               <div className="field-group"><label className="field-label">Email or Mobile Number</label><input value={form.contact} onChange={(event) => setForm({ ...form, contact: event.target.value })} required /></div>
             </div>
             <div className="checkout-section">
               <h2>Delivery</h2>
+              {context.authUser && (addressesLoading || savedAddresses.length) ? (
+                <div className="checkout-saved-addresses">
+                  <div className="checkout-saved-addresses-head">
+                    <div>
+                      <strong>Saved addresses</strong>
+                      <span>Select an address to fill the form, or enter a new one.</span>
+                    </div>
+                    {selectedAddressId ? <button type="button" onClick={useNewAddress}>Use new address</button> : null}
+                  </div>
+                  {addressesLoading ? (
+                    <p className="checkout-address-loading">Loading saved addresses...</p>
+                  ) : (
+                    <div className="checkout-address-grid">
+                      {savedAddresses.map((address) => (
+                        <label key={address.id} className="checkout-address-card">
+                          <input
+                            type="radio"
+                            name="savedAddress"
+                            checked={selectedAddressId === String(address.id)}
+                            onChange={() => selectSavedAddress(address)}
+                          />
+                          <span className="checkout-address-card-title">
+                            <strong>{address.addressType || "Address"}</strong>
+                            {address.isDefault ? <small>Default</small> : null}
+                          </span>
+                          <span>{address.fullName}</span>
+                          <span>{address.phone}</span>
+                          <span>{`${address.line1}${address.line2 ? `, ${address.line2}` : ""}, ${address.city}, ${address.state} ${address.pincode}`}</span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : null}
               <div className="field-group"><label className="field-label">Country/Region</label><select value="India" disabled><option>India</option></select></div>
               <div className="field-grid two-col">
                 <div className="field-group"><label className="field-label">First Name</label><input value={form.firstName} onChange={(event) => setForm({ ...form, firstName: event.target.value })} required /></div>

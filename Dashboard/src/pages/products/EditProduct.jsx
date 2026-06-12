@@ -23,6 +23,8 @@ function normalizeBackendProduct(product) {
     mrp: Number(product.mrp || product.price || 0),
     image: gallery[0] || imageUrl,
     gallery,
+    video: Array.isArray(product.videoUrls) ? product.videoUrls[0] || "" : "",
+    videoUrls: Array.isArray(product.videoUrls) ? product.videoUrls : [],
     highlights: Array.isArray(product.highlights) ? product.highlights : [product.shortDescription].filter(Boolean),
     description: product.description || "",
     availableStock: Number(product.stockQuantity || 0),
